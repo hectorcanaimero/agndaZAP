@@ -1,0 +1,30 @@
+{
+  "name": "@agendazap/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AgendaZap — panel admin + página pública /agendar/[clinicSlug]",
+  "scripts": {
+    "dev": "next dev -p 3002",
+    "build": "next build",
+    "start": "next start -p 3002",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "^15.4.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "next-intl": "^3.20.0",
+    "react-hook-form": "^7.53.0",
+    "@hookform/resolvers": "^3.9.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/node": "^22.5.0",
+    "tailwindcss": "^3.4.0",
+    "postcss": "^8.4.0",
+    "autoprefixer": "^10.4.0"
+  }
+}

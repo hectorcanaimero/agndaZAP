@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "AgendaZap — Arquitetura Runtime",
+    "subtitle": "Do paciente ao agendamento: bot WhatsApp, painel web e lembretes anti no-show",
+    "output": "agendazap-arquitetura.html",
+    "quality_profile": "standard"
+  },
+  "components": [
+    { "id": "paciente-wa", "type": "external", "label": "Paciente", "sublabel": "WhatsApp", "pos": [40, 100] },
+    { "id": "paciente-web", "type": "external", "label": "Paciente", "sublabel": "Navegador", "pos": [40, 240] },
+    { "id": "recepcao", "type": "external", "label": "Recepção / Admin", "sublabel": "Navegador + JWT", "pos": [40, 360] },
+    { "id": "profissional", "type": "external", "label": "Profissional", "sublabel": "App móvel", "pos": [40, 480] },
+
+    { "id": "waha", "type": "external", "label": "WAHA", "sublabel": "WhatsApp HTTP API :3000", "pos": [280, 20], "size": [180, 60] },
+
+    { "id": "next-publico", "type": "frontend", "label": "Next.js Público", "sublabel": "/agendar/[slug]", "pos": [240, 240], "size": [160, 60] },
+    { "id": "next-painel", "type": "frontend", "label": "Next.js Painel", "sublabel": "/panel/*", "pos": [240, 360], "size": [160, 60] },
+    { "id": "flutter", "type": "frontend", "label": "App Flutter", "sublabel": "Profissional", "pos": [240, 480], "size": [160, 60] },
+
+    { "id": "nest-api", "type": "backend", "label": "NestJS API", "sublabel": ":4000 · /api/*", "pos": [480, 280], "size": [180, 100] },
+    { "id": "reminders-worker", "type": "backend", "label": "Reminders Worker", "sublabel": "BullMQ · mesmo processo", "pos": [480, 480], "size": [180, 60] },
+
+    { "id": "postgres", "type": "database", "label": "PostgreSQL", "sublabel": "pgvector · multi-tenant", "pos": [740, 200], "size": [160, 60] },
+    { "id": "redis", "type": "database", "label": "Redis", "sublabel": ":6379 · fila BullMQ", "pos": [740, 340], "size": [160, 60] },
+    { "id": "llm-router", "type": "external", "label": "LLM Router", "sublabel": "DeepSeek → Gemini · OpenAI (embeddings)", "pos": [740, 480], "size": [220, 60] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Aplicação AgendaZap (multi-tenant por clinicId)", "wraps": ["next-publico", "next-painel", "nest-api", "reminders-worker", "postgres", "redis"] }
+  ],
+  "connections": [
+    { "id": "wa-in", "from": "paciente-wa", "to": "waha", "label": "mensagem", "variant": "emphasis", "fromSide": "top", "toSide": "left", "route": "orthogonal-v" },
+    { "id": "waha-webhook", "from": "waha", "to": "nest-api", "label": "POST /webhooks/waha", "variant": "emphasis", "fromSide": "bottom", "toSide": "top", "route": "orthogonal-v" },
+
+    { "id": "web-ssr", "from": "paciente-web", "to": "next-publico", "label": "HTTPS", "variant": "emphasis" },
+    { "id": "publico-api", "from": "next-publico", "to": "nest-api", "label": "/api/public/*", "variant": "emphasis", "labelDy": -18 },
+
+    { "id": "recepcao-panel", "from": "recepcao", "to": "next-painel", "label": "HTTPS", "variant": "emphasis" },
+    { "id": "panel-api", "from": "next-painel", "to": "nest-api", "label": "/api + JWT", "variant": "emphasis", "labelDy": 18 },
+
+    { "id": "flutter-user", "from": "profissional", "to": "flutter", "label": "app", "route": "straight" },
+    { "id": "flutter-nest", "from": "flutter", "to": "nest-api", "label": "/api + JWT", "route": "orthogonal-h", "labelDy": -14 },
+
+    { "id": "api-pg", "from": "nest-api", "to": "postgres", "label": "Prisma · SQL", "variant": "emphasis", "toSide": "left", "labelDy": -14 },
+    { "id": "api-redis", "from": "nest-api", "to": "redis", "label": "enfileira job", "variant": "dashed", "toSide": "left", "labelDy": 14 },
+    { "id": "api-llm", "from": "nest-api", "to": "llm-router", "label": "chat + RAG", "variant": "dashed", "labelDy": 14 },
+
+    { "id": "worker-redis", "from": "reminders-worker", "to": "redis", "label": "consome job", "variant": "dashed", "fromSide": "top", "toSide": "bottom", "labelDy": -14 },
+    { "id": "worker-pg", "from": "reminders-worker", "to": "postgres", "label": "lê / atualiza", "variant": "dashed", "labelDy": 14 }
+  ],
+  "cards": [
+    {
+      "dot": "amber",
+      "title": "Fuso horário",
+      "items": [
+        "Sempre Luxon com a TZ da clínica (ex.: America/Caracas)",
+        "Nunca usar `Date` naive no domínio"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Isolamento multi-tenant",
+      "items": [
+        "clinicId em toda entidade e no JWT",
+        "Cada query valida o tenant antes de responder",
+        "Guarda + interceptor cortam vazamentos entre clínicas"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Segurança de borda",
+      "items": [
+        "Helmet + CORS whitelist + rate-limit por IP",
+        "Webhook WAHA fora do prefixo /api",
+        "Secretos só via env (.env nunca commitado)"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "FAQ com RAG",
+      "items": [
+        "Embeddings OpenAI armazenados em pgvector",
+        "Bot resolve intent com DeepSeek (primário)",
+        "Fallback automático para Gemini"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Lembretes anti no-show",
+      "items": [
+        "Enfileirados no Redis via BullMQ",
+        "Worker no mesmo processo Nest (main.ts)",
+        "Envia lembrete via WAHA na TZ correta"
+      ]
+    }
+  ]
+}

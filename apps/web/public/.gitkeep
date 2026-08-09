@@ -1,0 +1,3 @@
+# Directorio placeholder — necesario para que el Dockerfile pueda copiarlo
+# incondicionalmente sin `2>/dev/null || true` (sintaxis inválida en Dockerfile).
+# Cuando se agreguen assets estáticos (favicon.ico, robots.txt, etc.) van acá.

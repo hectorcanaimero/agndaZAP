@@ -1,0 +1,70 @@
+services:
+  db:
+    image: pgvector/pgvector:pg15
+    environment:
+      POSTGRES_USER: agendazap
+      POSTGRES_PASSWORD: agendazap
+      POSTGRES_DB: agendazap
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agendazap"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # WAHA — WhatsApp HTTP API (no oficial). Escanea el QR en http://localhost:3000
+  waha:
+    image: devlikeapro/waha:latest
+    # WAHA free (WEBJS/Chromium) solo publica manifest linux/amd64.
+    # En Apple Silicon corre bajo emulación QEMU.
+    platform: linux/amd64
+    ports:
+      - "3000:3000"
+    environment:
+      # token que WAHA exige en el header 'X-Api-Key'
+      WAHA_API_KEY: ${WAHA_API_KEY:-dev-waha-key}
+      # WAHA enviará los eventos entrantes a nuestro backend
+      WHATSAPP_HOOK_URL: http://backend:4000/webhooks/waha
+      WHATSAPP_HOOK_EVENTS: message,session.status
+      WHATSAPP_RESTART_ALL_SESSIONS: "true"
+    volumes:
+      - waha_sessions:/app/.sessions
+
+  backend:
+    build: ./apps/backend
+    command: sh -c "npx prisma migrate deploy && node dist/main.js"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql://agendazap:agendazap@db:5432/agendazap
+      REDIS_URL: redis://redis:6379
+      WAHA_BASE_URL: http://waha:3000
+      WAHA_API_KEY: ${WAHA_API_KEY:-dev-waha-key}
+      WEBHOOK_TOKEN: ${WEBHOOK_TOKEN:-dev-webhook-token}
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret}
+      # LLM router (reuso del patrón de Blog Condor)
+      BOT_LLM_PROVIDER: deepseek
+      BOT_LLM_FALLBACK: gemini
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}  # embeddings FAQ
+    ports:
+      - "4000:4000"
+
+volumes:
+  db_data:
+  redis_data:
+  waha_sessions:

@@ -1,0 +1,12 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Reset extra: en el flujo público queremos un canvas limpio, sin margen del user agent. */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f9fafb; /* gray-50 */
+  color: #111827; /* gray-900 */
+}

@@ -1,0 +1,62 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+.next/
+.turbo/
+
+# Env — NUNCA commitear
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Prisma
+apps/backend/prisma/*.db
+
+# Test coverage
+coverage/
+*.lcov
+
+# Runtime
+.pid
+.pid.lock
+
+# Local Claude Code state (personal por dev, no compartir)
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+.claude/skills/
+.claude/tasks/
+.claude/*.log
+
+# Mirror local de skills (gestionado fuera del repo)
+.agents/
+
+# Kiro (skill mirror local)
+.kiro/
+
+# Obsidian workspace personal
+.obsidian/workspace*.json
+.obsidian/graph.json
+
+# Skills lockfile (regenerado por herramienta local)
+skills-lock.json

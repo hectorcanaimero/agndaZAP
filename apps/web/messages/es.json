@@ -1,0 +1,341 @@
+{
+  "page": {
+    "title": "Agendá tu cita",
+    "subtitle": "Elegí servicio, profesional y horario. Te confirmamos por WhatsApp.",
+    "clinicNotFound": "Clínica no encontrada",
+    "clinicNotFoundDescription": "El enlace no corresponde a ninguna clínica activa."
+  },
+  "form": {
+    "labels": {
+      "name": "Nombre y apellido",
+      "phone": "WhatsApp (con código de país)",
+      "notes": "Motivo de la consulta (opcional)",
+      "service": "Servicio",
+      "professional": "Profesional",
+      "slot": "Horario",
+      "consent": "Autorizo el uso de mis datos para gestionar la cita.",
+      "submit": "Confirmar cita",
+      "submitting": "Confirmando..."
+    },
+    "placeholders": {
+      "name": "María González",
+      "phone": "+58 4141234567",
+      "notes": "Ej: consulta general de rutina",
+      "selectService": "Elegí un servicio",
+      "selectProfessional": "Elegí un profesional"
+    },
+    "hints": {
+      "phone": "Usá el formato internacional: +58, +55, etc.",
+      "selectServiceFirst": "Primero elegí un servicio."
+    },
+    "errors": {
+      "required": "Este campo es obligatorio.",
+      "nameMin": "Ingresá tu nombre completo (mínimo 2 caracteres).",
+      "phoneInvalid": "El teléfono no tiene formato válido (ej: +584141234567).",
+      "consent": "Necesitamos tu autorización para agendar la cita.",
+      "slotRequired": "Elegí un horario disponible.",
+      "genericError": "Algo salió mal. Intentá de nuevo.",
+      "slotTaken": "Ese horario acaba de ocuparse. Elegí otro.",
+      "rateLimit": "Demasiados intentos. Probá en un minuto."
+    },
+    "noSlots": "No hay horarios disponibles esta semana.",
+    "chooseCombination": "Elegí servicio y profesional para ver horarios."
+  },
+  "thanks": {
+    "title": "¡Listo, {name}!",
+    "subtitle": "Tu cita quedó agendada para el {date} a las {time}.",
+    "whatsappNote": "Te vamos a mandar un WhatsApp para confirmar.",
+    "backLink": "Volver a agendar"
+  },
+  "login": {
+    "title": "Iniciá sesión",
+    "subtitle": "Ingresá con tu email y contraseña.",
+    "labels": {
+      "email": "Email",
+      "password": "Contraseña"
+    },
+    "placeholders": {
+      "email": "vos@clinica.com"
+    },
+    "submit": "Entrar",
+    "submitting": "Ingresando...",
+    "errors": {
+      "email": "Email inválido.",
+      "password": "Ingresá tu contraseña (mínimo 8 caracteres).",
+      "invalidCredentials": "Credenciales inválidas.",
+      "tooManyAttempts": "Demasiados intentos. Probá en un rato.",
+      "generic": "No pudimos ingresar. Probá de nuevo."
+    }
+  },
+  "panel": {
+    "nav": {
+      "dashboard": "Dashboard",
+      "agenda": "Agenda",
+      "conversations": "Conversaciones",
+      "services": "Servicios",
+      "professionals": "Profesionales",
+      "businessHours": "Horarios",
+      "timeOff": "Bloqueos",
+      "faq": "FAQ",
+      "logout": "Cerrar sesión"
+    },
+    "dashboard": {
+      "title": "Dashboard",
+      "subtitle": "Métricas de los últimos 30 días.",
+      "errorLoading": "No se pudieron cargar las métricas.",
+      "noShow": {
+        "title": "No-show rate",
+        "hint": "% de citas cerradas que fueron no-show."
+      },
+      "byStatus": {
+        "title": "Citas por estado",
+        "total": "Total: {total}"
+      },
+      "confirmations": {
+        "title": "Tasa de confirmación",
+        "sent": "Recordatorios enviados",
+        "confirmed": "Citas confirmadas"
+      },
+      "trend": {
+        "title": "Tendencia 14 días",
+        "hint": "Verde: creadas · Rojo: no-show"
+      },
+      "status": {
+        "PENDIENTE": "Pendiente",
+        "CONFIRMADA": "Confirmada",
+        "EN_RIESGO": "En riesgo",
+        "ATENDIDA": "Atendida",
+        "CANCELADA": "Cancelada",
+        "NO_SHOW": "No-show"
+      }
+    },
+    "agenda": {
+      "title": "Agenda",
+      "subtitle": "Citas de la clínica.",
+      "loadError": "No se pudo cargar la agenda ({status}).",
+      "empty": "No hay citas en el rango seleccionado.",
+      "viewDay": "Día",
+      "viewWeek": "Semana",
+      "filters": {
+        "allProfessionals": "Todos los profesionales",
+        "allStatuses": "Todos los estados"
+      },
+      "detailTitle": "Detalle de cita",
+      "detail": {
+        "patient": "Paciente",
+        "phone": "Teléfono",
+        "service": "Servicio",
+        "professional": "Profesional",
+        "time": "Horario",
+        "status": "Estado",
+        "transitions": "Cambiar estado",
+        "noTransitions": "Esta cita ya está en un estado final."
+      },
+      "statusChanged": "Estado actualizado.",
+      "statusChangeFailed": "No se pudo actualizar el estado.",
+      "statusRaceRefresh": "Ese estado ya cambió — refrescando."
+    },
+    "conversations": {
+      "title": "Conversaciones",
+      "subtitle": "Bandeja de mensajes.",
+      "loadError": "No se pudieron cargar las conversaciones ({status}).",
+      "empty": "No hay conversaciones.",
+      "pickOne": "Elegí una conversación para ver el detalle.",
+      "messagesCount": "{n} mensajes",
+      "filters": {
+        "inbox": "Bandeja",
+        "BOT": "Bot",
+        "HUMAN": "Humano",
+        "all": "Todas"
+      },
+      "state": {
+        "BOT": "Bot",
+        "NEEDS_HUMAN": "Requiere humano",
+        "HUMAN": "Humano"
+      },
+      "takeover": "Tomar",
+      "takeoverOk": "Conversación tomada.",
+      "takeoverFailed": "No se pudo tomar la conversación.",
+      "release": "Devolver al bot",
+      "releaseOk": "Conversación devuelta al bot.",
+      "releaseFailed": "No se pudo devolver la conversación.",
+      "replyPlaceholder": "Escribí una respuesta...",
+      "replyEmpty": "El mensaje está vacío.",
+      "replyFailed": "No se pudo enviar el mensaje.",
+      "send": "Enviar",
+      "sending": "Enviando...",
+      "sendHint": "Máximo 1500 caracteres.",
+      "takeoverBeforeReply": "Tomá la conversación para poder responder."
+    },
+    "services": {
+      "title": "Servicios",
+      "subtitle": "Servicios que ofrece la clínica.",
+      "loadError": "No se pudieron cargar los servicios ({status}).",
+      "empty": "Sin servicios cargados.",
+      "new": "Nuevo servicio",
+      "newTitle": "Nuevo servicio",
+      "editTitle": "Editar servicio",
+      "edit": "Editar",
+      "delete": "Eliminar",
+      "actions": "Acciones",
+      "save": "Guardar",
+      "saving": "Guardando...",
+      "saved": "Servicio guardado.",
+      "saveFailed": "No se pudo guardar el servicio.",
+      "deleted": "Servicio desactivado.",
+      "deleteFailed": "No se pudo eliminar el servicio.",
+      "confirmDelete": "¿Desactivar este servicio? Podés reactivarlo después.",
+      "cancel": "Cancelar",
+      "noProfessionals": "No hay profesionales cargados.",
+      "fields": {
+        "name": "Nombre",
+        "duration": "Duración",
+        "buffer": "Buffer",
+        "priceCents": "Precio (centavos)",
+        "price": "Precio",
+        "professionals": "Profesionales"
+      },
+      "hints": {
+        "priceCents": "En centavos. Ej: 1500 = $15,00."
+      },
+      "errors": {
+        "required": "Requerido."
+      }
+    },
+    "professionals": {
+      "title": "Profesionales",
+      "subtitle": "Profesionales que atienden en la clínica.",
+      "loadError": "No se pudieron cargar los profesionales ({status}).",
+      "empty": "Sin profesionales cargados.",
+      "new": "Nuevo profesional",
+      "newTitle": "Nuevo profesional",
+      "editTitle": "Editar profesional",
+      "edit": "Editar",
+      "delete": "Eliminar",
+      "actions": "Acciones",
+      "save": "Guardar",
+      "saving": "Guardando...",
+      "saved": "Profesional guardado.",
+      "saveFailed": "No se pudo guardar el profesional.",
+      "deleted": "Profesional desactivado.",
+      "deleteFailed": "No se pudo eliminar el profesional.",
+      "confirmDelete": "¿Desactivar este profesional?",
+      "cancel": "Cancelar",
+      "noServices": "No hay servicios cargados todavía.",
+      "fields": {
+        "name": "Nombre",
+        "services": "Servicios que atiende"
+      },
+      "errors": {
+        "required": "Requerido."
+      }
+    },
+    "businessHours": {
+      "title": "Horarios",
+      "subtitle": "Horarios de atención de la clínica.",
+      "loadError": "No se pudieron cargar los horarios ({status}).",
+      "empty": "Sin horarios cargados.",
+      "new": "Nuevo horario",
+      "newTitle": "Nuevo horario",
+      "editTitle": "Editar horario",
+      "edit": "Editar",
+      "delete": "Eliminar",
+      "actions": "Acciones",
+      "save": "Guardar",
+      "saving": "Guardando...",
+      "saved": "Horario guardado.",
+      "saveFailed": "No se pudo guardar el horario.",
+      "deleted": "Horario eliminado.",
+      "deleteFailed": "No se pudo eliminar el horario.",
+      "confirmDelete": "¿Eliminar este horario?",
+      "cancel": "Cancelar",
+      "allProfessionals": "Toda la clínica",
+      "fields": {
+        "weekday": "Día",
+        "range": "Rango",
+        "start": "Desde",
+        "end": "Hasta",
+        "professional": "Profesional"
+      },
+      "weekdays": {
+        "0": "Domingo",
+        "1": "Lunes",
+        "2": "Martes",
+        "3": "Miércoles",
+        "4": "Jueves",
+        "5": "Viernes",
+        "6": "Sábado"
+      },
+      "errors": {
+        "rangeInvalid": "La hora fin debe ser mayor a la de inicio."
+      }
+    },
+    "timeOff": {
+      "title": "Bloqueos",
+      "subtitle": "Vacaciones y ausencias.",
+      "loadError": "No se pudieron cargar los bloqueos ({status}).",
+      "empty": "Sin bloqueos cargados.",
+      "new": "Nuevo bloqueo",
+      "newTitle": "Nuevo bloqueo",
+      "editTitle": "Editar bloqueo",
+      "edit": "Editar",
+      "delete": "Eliminar",
+      "actions": "Acciones",
+      "save": "Guardar",
+      "saving": "Guardando...",
+      "saved": "Bloqueo guardado.",
+      "saveFailed": "No se pudo guardar el bloqueo.",
+      "deleted": "Bloqueo eliminado.",
+      "deleteFailed": "No se pudo eliminar el bloqueo.",
+      "confirmDelete": "¿Eliminar este bloqueo?",
+      "cancel": "Cancelar",
+      "allProfessionals": "Toda la clínica",
+      "fields": {
+        "range": "Rango",
+        "start": "Desde",
+        "end": "Hasta",
+        "reason": "Motivo",
+        "professional": "Profesional"
+      },
+      "placeholders": {
+        "reason": "Ej: vacaciones, capacitación"
+      },
+      "errors": {
+        "required": "Requerido.",
+        "rangeInvalid": "La fecha fin debe ser mayor a la de inicio."
+      }
+    },
+    "faq": {
+      "title": "FAQ",
+      "subtitle": "Preguntas frecuentes para el bot.",
+      "loadError": "No se pudieron cargar las FAQs ({status}).",
+      "empty": "Sin FAQs cargadas.",
+      "new": "Nueva FAQ",
+      "newTitle": "Nueva FAQ",
+      "editTitle": "Editar FAQ",
+      "edit": "Editar",
+      "delete": "Eliminar",
+      "actions": "Acciones",
+      "save": "Guardar",
+      "saving": "Guardando...",
+      "saved": "FAQ guardada.",
+      "saveFailed": "No se pudo guardar la FAQ.",
+      "deleted": "FAQ eliminada.",
+      "deleteFailed": "No se pudo eliminar la FAQ.",
+      "confirmDelete": "¿Eliminar esta FAQ?",
+      "cancel": "Cancelar",
+      "fields": {
+        "content": "Contenido"
+      },
+      "placeholders": {
+        "content": "¿Cuánto dura la consulta? La consulta dura 30 minutos..."
+      },
+      "hints": {
+        "content": "La primera línea funciona como título. Podés usar markdown."
+      },
+      "errors": {
+        "content": "El contenido debe tener entre 5 y 4000 caracteres."
+      }
+    }
+  }
+}

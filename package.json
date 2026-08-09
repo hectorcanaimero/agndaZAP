@@ -1,0 +1,16 @@
+{
+  "name": "agendazap",
+  "private": true,
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "dev:backend": "pnpm --filter @agendazap/backend start:dev",
+    "dev:web": "pnpm --filter @agendazap/web dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "infra:up": "docker compose up -d db redis waha",
+    "infra:down": "docker compose down"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
+}

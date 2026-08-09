@@ -1,0 +1,39 @@
+# Deps
+**/node_modules
+**/.pnpm-store
+
+# Builds
+**/dist
+**/.next
+**/build
+
+# Tests / coverage
+**/coverage
+**/.nyc_output
+
+# Envs (NUNCA copiar al image — vienen por env vars del container)
+.env
+.env.*
+!.env.example
+
+# Git + IDE
+.git
+.gitignore
+.vscode
+.idea
+.DS_Store
+
+# Docs (no van al runtime del backend/web)
+docs
+**/*.md
+!README.md
+
+# Flutter (fuera del workspace pnpm)
+apps/mobile
+
+# Obsidian
+.obsidian
+.kiro
+
+# Runtime
+*.log

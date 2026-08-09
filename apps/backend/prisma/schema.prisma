@@ -1,0 +1,260 @@
+// AgendaZap — Prisma schema (MVP)
+// Multi-tenant: clinicId presente en todas las entidades de negocio.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgvector(map: "vector")]
+}
+
+// ─────────────────────────── Tenancy & usuarios ───────────────────────────
+
+model Clinic {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  timezone      String   @default("America/Caracas")
+  locale        String   @default("es") // es | pt
+  wahaSession   String   @unique          // nombre de instancia WAHA
+  wahaConnected Boolean  @default(false)
+  address       String?
+  // Config de recordatorios (horas antes de la cita)
+  reminderOffsetsH Int[]  @default([24, 3])
+  // Umbral (horas) sin confirmar tras el cual la cita pasa a EN_RIESGO
+  confirmThresholdH Int   @default(6)
+  autoConfirm   Boolean  @default(false) // si true, la cita nace CONFIRMADA
+
+  users         User[]
+  professionals Professional[]
+  services      Service[]
+  businessHours BusinessHour[]
+  timeOff       TimeOff[]
+  patients      Patient[]
+  appointments  Appointment[]
+  conversations Conversation[]
+  faqChunks     FaqChunk[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+enum Role {
+  SUPERADMIN
+  CLINIC_ADMIN
+  PROFESSIONAL
+}
+
+model User {
+  id        String   @id @default(cuid())
+  clinicId  String?
+  clinic    Clinic?  @relation(fields: [clinicId], references: [id])
+  email     String   @unique
+  password  String
+  name      String
+  role      Role     @default(CLINIC_ADMIN)
+  // vínculo opcional a un profesional (para la app Flutter)
+  professionalId String? @unique
+  professional   Professional? @relation(fields: [professionalId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clinicId])
+}
+
+// ─────────────────────────── Catálogo & agenda ───────────────────────────
+
+model Professional {
+  id        String   @id @default(cuid())
+  clinicId  String
+  clinic    Clinic   @relation(fields: [clinicId], references: [id])
+  name      String
+  active    Boolean  @default(true)
+  user      User?
+  services  Service[] @relation("ProfessionalServices")
+  businessHours BusinessHour[]
+  timeOff   TimeOff[]
+  appointments Appointment[]
+  createdAt DateTime @default(now())
+
+  @@index([clinicId])
+}
+
+model Service {
+  id         String   @id @default(cuid())
+  clinicId   String
+  clinic     Clinic   @relation(fields: [clinicId], references: [id])
+  name       String
+  durationMin Int      @default(30)
+  bufferMin  Int      @default(0)   // tiempo entre citas
+  priceCents Int?
+  active     Boolean  @default(true)
+  professionals Professional[] @relation("ProfessionalServices")
+  appointments Appointment[]
+  createdAt  DateTime @default(now())
+
+  @@index([clinicId])
+}
+
+// Horario semanal de atención (por clínica o por profesional)
+model BusinessHour {
+  id             String  @id @default(cuid())
+  clinicId       String
+  clinic         Clinic  @relation(fields: [clinicId], references: [id])
+  professionalId String?
+  professional   Professional? @relation(fields: [professionalId], references: [id])
+  weekday        Int     // 0=domingo ... 6=sábado
+  startMinutes   Int     // minutos desde medianoche (ej. 540 = 09:00)
+  endMinutes     Int     // ej. 1080 = 18:00
+
+  @@index([clinicId, weekday])
+}
+
+// Bloqueos / feriados / vacaciones
+model TimeOff {
+  id             String   @id @default(cuid())
+  clinicId       String
+  clinic         Clinic   @relation(fields: [clinicId], references: [id])
+  professionalId String?
+  professional   Professional? @relation(fields: [professionalId], references: [id])
+  startAt        DateTime
+  endAt          DateTime
+  reason         String?
+
+  @@index([clinicId, startAt])
+}
+
+// ─────────────────────────── Pacientes & citas ───────────────────────────
+
+model Patient {
+  id        String   @id @default(cuid())
+  clinicId  String
+  clinic    Clinic   @relation(fields: [clinicId], references: [id])
+  phone     String   // E.164
+  name      String?
+  consent   Boolean  @default(false)
+  appointments Appointment[]
+  createdAt DateTime @default(now())
+
+  @@unique([clinicId, phone])
+  @@index([clinicId])
+}
+
+enum AppointmentStatus {
+  PENDIENTE
+  CONFIRMADA
+  EN_RIESGO
+  ATENDIDA
+  CANCELADA
+  NO_SHOW
+}
+
+model Appointment {
+  id             String   @id @default(cuid())
+  clinicId       String
+  clinic         Clinic   @relation(fields: [clinicId], references: [id])
+  patientId      String
+  patient        Patient  @relation(fields: [patientId], references: [id])
+  serviceId      String
+  service        Service  @relation(fields: [serviceId], references: [id])
+  professionalId String
+  professional   Professional @relation(fields: [professionalId], references: [id])
+
+  startAt        DateTime
+  endAt          DateTime
+  status         AppointmentStatus @default(PENDIENTE)
+  notes          String?
+  // trazabilidad anti no-show
+  confirmedAt    DateTime?
+  canceledAt     DateTime?
+  outcome        String?  // atendio | no_show | null
+
+  reminders      Reminder[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Evita doble reserva del mismo profesional en el mismo instante de inicio
+  @@unique([professionalId, startAt])
+  @@index([clinicId, startAt])
+  @@index([status])
+}
+
+enum ReminderStatus {
+  SCHEDULED
+  SENT
+  CONFIRMED
+  FAILED
+  CANCELED
+}
+
+model Reminder {
+  id            String   @id @default(cuid())
+  appointmentId String
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  offsetH       Int         // cuántas horas antes
+  fireAt        DateTime
+  status        ReminderStatus @default(SCHEDULED)
+  jobId         String?     // id del job BullMQ (para cancelar)
+  sentAt        DateTime?
+
+  @@index([fireAt, status])
+}
+
+// ─────────────────────────── Conversaciones (bandeja) ───────────────────────────
+
+enum ConversationState {
+  BOT          // el bot maneja
+  NEEDS_HUMAN  // esperando atención humana
+  HUMAN        // humano respondiendo (bot silenciado)
+}
+
+model Conversation {
+  id         String   @id @default(cuid())
+  clinicId   String
+  clinic     Clinic   @relation(fields: [clinicId], references: [id])
+  chatId     String   // id de chat de WAHA (ej. 5804xxxx@c.us)
+  phone      String
+  state      ConversationState @default(BOT)
+  // paso del flujo (FSM) serializado
+  flowStep   String?
+  flowData   Json?
+  messages   Message[]
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+
+  @@unique([clinicId, chatId])
+  @@index([clinicId, state])
+}
+
+enum MessageDirection {
+  IN
+  OUT
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  direction      MessageDirection
+  body           String
+  createdAt      DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+// ─────────────────────────── FAQ / RAG ───────────────────────────
+
+model FaqChunk {
+  id        String   @id @default(cuid())
+  clinicId  String
+  clinic    Clinic   @relation(fields: [clinicId], references: [id])
+  content   String
+  embedding Unsupported("vector(1536)")?
+  createdAt DateTime @default(now())
+
+  @@index([clinicId])
+}
