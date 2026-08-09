@@ -11,6 +11,11 @@ const INJECTION_PATTERN =
 export class UpdateFaqDto {
   @IsOptional()
   @IsString()
+  @MaxLength(200)
+  title?: string;
+
+  @IsOptional()
+  @IsString()
   @MinLength(5)
   @MaxLength(4000)
   @Matches(INJECTION_PATTERN, {

@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
+import removeMd from 'remove-markdown';
+import { LlmRouterService } from '../common/llm/llm-router.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -65,7 +67,10 @@ export interface FaqMatch {
 export class KnowledgeService {
   private readonly logger = new Logger(KnowledgeService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly llm: LlmRouterService,
+  ) {}
 
   // ─────────────────────────── Embeddings ───────────────────────────
 
@@ -117,11 +122,36 @@ export class KnowledgeService {
   // ─────────────────────────── CRUD con embedding ───────────────────────────
 
   /**
+   * Devuelve el texto plano listo para embedding: strippea markdown y colapsa
+   * espacios. El content crudo (con `**bold**`, listas `- foo`, etc.) genera
+   * ruido en el vector — los tokens de sintaxis mueven la representación
+   * semántica sin agregar información. Preferimos indexar el texto que un
+   * lector humano leería (`removeMd`) para que la búsqueda por similitud
+   * matchee sobre significado, no sobre formato.
+   *
+   * IMPORTANTE: el content markdown ORIGINAL sigue guardándose en DB tal cual
+   * (columna `content`). Este helper sólo se aplica al string que va a OpenAI.
+   */
+  private toEmbeddingText(content: string, title?: string | null): string {
+    const plain = removeMd(content).replace(/\s+/g, ' ').trim();
+    // Prefijamos el título (si existe) para darle peso extra al vector: la
+    // pregunta del paciente suele mapear al título, no al detalle del body.
+    if (title && title.trim().length > 0) {
+      return `${title.trim()}\n${plain}`;
+    }
+    return plain;
+  }
+
+  /**
    * Inserta un `FaqChunk` con embedding.
    *
    * Usamos `$executeRawUnsafe` porque Prisma no soporta el tipo `vector` de
    * pgvector directamente (declarado `Unsupported(...)` en el schema). El id
    * se genera acá con `cuid()` para poder retornarlo sin un `SELECT` extra.
+   *
+   * `title` es opcional. Si viene, se guarda en DB y se antepone al plain-text
+   * que va al embedding (mejora recall del retrieval — la pregunta del paciente
+   * suele parecerse al título).
    *
    * Multi-tenant: `clinicId` va como parámetro `$2` (parametrizado, no
    * interpolado).
@@ -129,47 +159,86 @@ export class KnowledgeService {
   async ingest(input: {
     clinicId: string;
     content: string;
-  }): Promise<{ id: string; content: string }> {
-    const embedding = await this.embedText(input.content);
+    title?: string | null;
+  }): Promise<{ id: string; content: string; title: string | null }> {
+    const embeddingText = this.toEmbeddingText(input.content, input.title);
+    const embedding = await this.embedText(embeddingText);
     const id = this.generateId();
     const vectorLiteral = this.formatVector(embedding);
+    const title = input.title?.trim() ? input.title.trim() : null;
     // NOTE: el literal del vector no puede parametrizarse por Prisma (no conoce
     // el tipo). Lo formateamos manualmente y lo interpolamos en el SQL. El
     // riesgo de SQL injection es NULO porque `formatVector` sólo produce
     // números y comas — verificado por typing (`number[]`) + JS `toFixed()`.
-    // `clinicId`, `id` y `content` sí van parametrizados.
+    // `clinicId`, `id`, `title` y `content` sí van parametrizados.
     await this.prisma.$executeRawUnsafe(
-      `INSERT INTO "FaqChunk" (id, "clinicId", content, embedding, "createdAt")
-       VALUES ($1, $2, $3, '${vectorLiteral}'::vector, NOW())`,
+      `INSERT INTO "FaqChunk" (id, "clinicId", title, content, embedding, "createdAt")
+       VALUES ($1, $2, $3, $4, '${vectorLiteral}'::vector, NOW())`,
       id,
       input.clinicId,
+      title,
       input.content,
     );
     this.logger.log(
-      `faq ingested clinicId=${input.clinicId} chunkId=${id} contentLen=${input.content.length}`,
+      `faq ingested clinicId=${input.clinicId} chunkId=${id} contentLen=${input.content.length} hasTitle=${title !== null}`,
     );
-    return { id, content: input.content };
+    return { id, content: input.content, title };
   }
 
   /**
-   * Actualiza content + re-embed de un `FaqChunk` existente.
+   * Actualiza content (+ opcional title) + re-embed de un `FaqChunk` existente.
    * Respeta `clinicId` en el WHERE para evitar cross-tenant.
+   *
+   * Semántica de `title`:
+   * - `undefined` → no toca la columna `title` (mantiene lo que había).
+   * - `string` (o vacío) → hace UPDATE de `title` (normalizando vacío → NULL).
    */
   async updateChunk(input: {
     id: string;
     clinicId: string;
     content: string;
+    title?: string | null;
   }): Promise<{ id: string; content: string }> {
-    const embedding = await this.embedText(input.content);
+    // Para el embedding necesitamos el title vigente aunque el caller no lo
+    // toque. Si viene `undefined`, buscamos el actual en DB. Es un extra
+    // roundtrip pero mantiene el vector coherente con lo que se muestra en UI.
+    let titleForEmbedding: string | null | undefined = input.title;
+    if (titleForEmbedding === undefined) {
+      const row = await this.prisma.faqChunk.findFirst({
+        where: { id: input.id, clinicId: input.clinicId },
+        select: { title: true },
+      });
+      titleForEmbedding = row?.title ?? null;
+    }
+    const embeddingText = this.toEmbeddingText(input.content, titleForEmbedding);
+    const embedding = await this.embedText(embeddingText);
     const vectorLiteral = this.formatVector(embedding);
-    const rows = await this.prisma.$executeRawUnsafe(
-      `UPDATE "FaqChunk"
-       SET content = $1, embedding = '${vectorLiteral}'::vector
-       WHERE id = $2 AND "clinicId" = $3`,
-      input.content,
-      input.id,
-      input.clinicId,
-    );
+
+    let rows: number;
+    if (input.title === undefined) {
+      // No tocamos `title` — sólo content + embedding.
+      rows = await this.prisma.$executeRawUnsafe(
+        `UPDATE "FaqChunk"
+         SET content = $1, embedding = '${vectorLiteral}'::vector
+         WHERE id = $2 AND "clinicId" = $3`,
+        input.content,
+        input.id,
+        input.clinicId,
+      );
+    } else {
+      const normalized = input.title && input.title.trim().length > 0
+        ? input.title.trim()
+        : null;
+      rows = await this.prisma.$executeRawUnsafe(
+        `UPDATE "FaqChunk"
+         SET content = $1, title = $2, embedding = '${vectorLiteral}'::vector
+         WHERE id = $3 AND "clinicId" = $4`,
+        input.content,
+        normalized,
+        input.id,
+        input.clinicId,
+      );
+    }
     if (rows === 0) {
       // No lanzamos NotFound acá: el caller (FaqController) ya verificó
       // pertenencia con `findFirst` antes de llamar. Loguear inconsistencia
@@ -250,7 +319,7 @@ export class KnowledgeService {
    * - `null` si:
    *    - `retrieve` no devuelve matches confiables (bajo threshold),
    *    - el LLM devuelve `NULL_ANSWER` (no pudo responder desde las fuentes),
-   *    - ambos LLM (DeepSeek + Gemini) fallan,
+   *    - el router LLM (`LlmRouterService`) agota todos los providers,
    *    - falta `OPENAI_API_KEY` (embed falla, log + null).
    *
    * En todos los casos de `null`, el caller (bot) hace handoff a humano —
@@ -316,15 +385,10 @@ export class KnowledgeService {
 
     let rawAnswer: string | null = null;
     try {
-      rawAnswer = await this.callDeepSeek(system, user);
-    } catch (e1) {
-      this.logger.warn(`faq answer: deepseek falló, intento gemini: ${e1}`);
-      try {
-        rawAnswer = await this.callGemini(system, user);
-      } catch (e2) {
-        this.logger.error(`faq answer: ambos LLM fallaron: ${e2}`);
-        return null;
-      }
+      rawAnswer = await this.llm.complete({ system, user, maxTokens: 200 });
+    } catch (e) {
+      this.logger.error(`faq answer: todos los LLM fallaron: ${e}`);
+      return null;
     }
 
     const trimmed = (rawAnswer ?? '').trim();
@@ -343,61 +407,6 @@ export class KnowledgeService {
       answer: trimmed,
       sources: matches.map((m) => m.id),
     };
-  }
-
-  // ─────────────────────────── LLM helpers ───────────────────────────
-
-  /**
-   * Llama a DeepSeek (proveedor primario). Reutiliza el patrón de
-   * `IntentService`: fetch nativo, sin SDK. `max_tokens` bajo (200) para
-   * respuestas concisas y contener costos — la política es 1-2 oraciones.
-   */
-  private async callDeepSeek(system: string, user: string): Promise<string> {
-    const key = process.env.DEEPSEEK_API_KEY;
-    if (!key) throw new Error('DEEPSEEK_API_KEY missing');
-    const res = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${key}`,
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user },
-        ],
-        temperature: 0,
-        max_tokens: 200,
-      }),
-    });
-    if (!res.ok) throw new Error(`deepseek ${res.status}`);
-    const data = (await res.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    return data.choices?.[0]?.message?.content ?? '';
-  }
-
-  /** Fallback a Gemini si DeepSeek falla. Mismo shape que IntentService. */
-  private async callGemini(system: string, user: string): Promise<string> {
-    const key = process.env.GEMINI_API_KEY;
-    if (!key) throw new Error('GEMINI_API_KEY missing');
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: `${system}\n\n${user}` }] }],
-          generationConfig: { temperature: 0, maxOutputTokens: 200 },
-        }),
-      },
-    );
-    if (!res.ok) throw new Error(`gemini ${res.status}`);
-    const data = (await res.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
   }
 
   // ─────────────────────────── Utils ───────────────────────────

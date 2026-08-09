@@ -1,0 +1,154 @@
+- generic [active] [ref=f8e1]:
+  - generic [ref=f8e2]:
+    - complementary [ref=f8e3]:
+      - generic [ref=f8e4]: AgendaZap
+      - generic [ref=f8e10]:
+        - paragraph [ref=f8e11]: Clínica Demo
+        - paragraph [ref=f8e12]: demo
+      - navigation [ref=f8e13]:
+        - generic [ref=f8e14]:
+          - paragraph [ref=f8e15]: Operación
+          - list [ref=f8e16]:
+            - listitem [ref=f8e17]:
+              - link "Dashboard" [ref=f8e18] [cursor=pointer]:
+                - /url: /es/panel/dashboard
+            - listitem [ref=f8e25]:
+              - link "Agenda" [ref=f8e26] [cursor=pointer]:
+                - /url: /es/panel/agenda
+            - listitem [ref=f8e31]:
+              - link "Conversaciones" [ref=f8e32] [cursor=pointer]:
+                - /url: /es/panel/conversaciones
+        - generic [ref=f8e37]:
+          - paragraph [ref=f8e38]: Configuración
+          - list [ref=f8e39]:
+            - listitem [ref=f8e40]:
+              - link "Servicios" [ref=f8e41] [cursor=pointer]:
+                - /url: /es/panel/servicios
+            - listitem [ref=f8e46]:
+              - link "Profesionales" [ref=f8e47] [cursor=pointer]:
+                - /url: /es/panel/profesionales
+            - listitem [ref=f8e54]:
+              - link "Horarios" [ref=f8e55] [cursor=pointer]:
+                - /url: /es/panel/horarios
+            - listitem [ref=f8e60]:
+              - link "Bloqueos" [ref=f8e61] [cursor=pointer]:
+                - /url: /es/panel/bloqueos
+            - listitem [ref=f8e67]:
+              - link "Base de conocimiento" [ref=f8e68] [cursor=pointer]:
+                - /url: /es/panel/faq
+            - listitem [ref=f8e73]:
+              - link "WhatsApp" [ref=f8e74] [cursor=pointer]:
+                - /url: /es/panel/config/whatsapp
+      - button "Menú de usuario" [ref=f8e79] [cursor=pointer]:
+        - generic [ref=f8e80]: RD
+        - generic [ref=f8e81]:
+          - paragraph [ref=f8e82]: Recepción Demo
+          - paragraph [ref=f8e83]: panel.nav.roles.CLINIC_ADMIN
+    - main [ref=f8e85]:
+      - generic [ref=f8e87]:
+        - generic [ref=f8e89]:
+          - heading "Agenda" [level=1] [ref=f8e90]
+          - paragraph [ref=f8e91]: Citas de la clínica.
+        - generic [ref=f8e92]:
+          - generic [ref=f8e93]:
+            - generic [ref=f8e94]:
+              - generic [ref=f8e95]:
+                - button "Período anterior" [ref=f8e96] [cursor=pointer]
+                - button "Período siguiente" [ref=f8e97] [cursor=pointer]
+              - button "Hoy" [ref=f8e98] [cursor=pointer]
+              - heading "3 – 9 Agosto de 2026" [level=2] [ref=f8e100]
+            - tablist [ref=f8e102]:
+              - tab "Mes" [ref=f8e103] [cursor=pointer]
+              - tab "Semana" [selected] [ref=f8e109] [cursor=pointer]
+              - tab "Día" [ref=f8e112] [cursor=pointer]
+          - generic [ref=f8e117]:
+            - generic [ref=f8e118]:
+              - generic [ref=f8e119]: Estados
+              - button "Pendiente" [ref=f8e122] [cursor=pointer]
+              - button "Confirmada" [ref=f8e124] [cursor=pointer]
+              - button "En riesgo" [ref=f8e126] [cursor=pointer]
+              - button "Atendida" [ref=f8e128] [cursor=pointer]
+              - button "Cancelada" [ref=f8e130] [cursor=pointer]
+              - button "No-show" [ref=f8e132] [cursor=pointer]
+              - button "Solo pendientes de confirmar" [ref=f8e134] [cursor=pointer]
+            - generic [ref=f8e138]:
+              - searchbox "Buscar paciente" [ref=f8e140]
+              - generic [ref=f8e141]:
+                - generic [ref=f8e142]: Todos los profesionales
+                - combobox "Todos los profesionales" [ref=f8e143] [cursor=pointer]
+                - combobox [ref=f8e146]
+        - generic [ref=f8e149]:
+          - generic [ref=f8e150]:
+            - button "lun 3" [ref=f8e151] [cursor=pointer]:
+              - generic [ref=f8e152]: lun
+              - generic [ref=f8e153]: "3"
+            - generic [ref=f8e154]:
+              - button [ref=f8e155] [cursor=pointer]:
+                - paragraph [ref=f8e156]: 12:00
+                - paragraph [ref=f8e160]: Sofía Pérez
+                - paragraph [ref=f8e161]: Control
+                - paragraph [ref=f8e162]: Cancelada
+              - button [ref=f8e163] [cursor=pointer]:
+                - paragraph [ref=f8e164]: 13:00
+                - paragraph [ref=f8e168]: Luis Hernández
+                - paragraph [ref=f8e169]: Control
+                - paragraph [ref=f8e170]: Atendida
+              - button [ref=f8e171] [cursor=pointer]:
+                - paragraph [ref=f8e172]: 16:00
+                - paragraph [ref=f8e176]: María González
+                - paragraph [ref=f8e177]: Control
+                - paragraph [ref=f8e178]: Cancelada
+          - generic [ref=f8e179]:
+            - button "mar 4" [ref=f8e180] [cursor=pointer]:
+              - generic [ref=f8e181]: mar
+              - generic [ref=f8e182]: "4"
+            - generic [ref=f8e183]:
+              - button [ref=f8e184] [cursor=pointer]:
+                - paragraph [ref=f8e185]: 10:00
+                - paragraph [ref=f8e189]: Carlos Rodríguez
+                - paragraph [ref=f8e190]: Consulta general
+                - paragraph [ref=f8e191]: No-show
+              - button [ref=f8e192] [cursor=pointer]:
+                - paragraph [ref=f8e193]: 12:00
+                - paragraph [ref=f8e197]: María González
+                - paragraph [ref=f8e198]: Control
+                - paragraph [ref=f8e199]: Atendida
+              - button [ref=f8e200] [cursor=pointer]:
+                - paragraph [ref=f8e201]: 15:00
+                - paragraph [ref=f8e205]: Carlos Rodríguez
+                - paragraph [ref=f8e206]: Consulta general
+                - paragraph [ref=f8e207]: No-show
+          - generic [ref=f8e208]:
+            - button "mié 5" [ref=f8e209] [cursor=pointer]:
+              - generic [ref=f8e210]: mié
+              - generic [ref=f8e211]: "5"
+            - paragraph [ref=f8e213]: —
+          - generic [ref=f8e214]:
+            - button "jue 6" [ref=f8e215] [cursor=pointer]:
+              - generic [ref=f8e216]: jue
+              - generic [ref=f8e217]: "6"
+            - button [ref=f8e219] [cursor=pointer]:
+              - paragraph [ref=f8e220]: 15:00
+              - paragraph [ref=f8e224]: Sofía Pérez
+              - paragraph [ref=f8e225]: Consulta general
+              - paragraph [ref=f8e226]: Cancelada
+          - generic [ref=f8e227]:
+            - button "vie 7" [ref=f8e228] [cursor=pointer]:
+              - generic [ref=f8e229]: vie
+              - generic [ref=f8e230]: "7"
+            - button [ref=f8e232] [cursor=pointer]:
+              - paragraph [ref=f8e233]: 15:00
+              - paragraph [ref=f8e237]: Laura Blanco
+              - paragraph [ref=f8e238]: Control
+              - paragraph [ref=f8e239]: Atendida
+          - generic [ref=f8e240]:
+            - button "sáb 8" [ref=f8e241] [cursor=pointer]:
+              - generic [ref=f8e242]: sáb
+              - generic [ref=f8e243]: "8"
+            - paragraph [ref=f8e245]: —
+          - generic [ref=f8e246]:
+            - button "dom 9" [ref=f8e247] [cursor=pointer]:
+              - generic [ref=f8e248]: dom
+              - generic [ref=f8e249]: "9"
+            - paragraph [ref=f8e251]: —
+  - region "Notifications alt+T"

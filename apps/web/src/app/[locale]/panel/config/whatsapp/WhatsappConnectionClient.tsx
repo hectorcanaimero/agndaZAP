@@ -2,8 +2,9 @@
 
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/components/ui/toast';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { fetcher } from '@/lib/auth';
 import { cn } from '@/lib/utils';
 
@@ -102,9 +103,9 @@ function intervalFor(status: string): number {
  */
 export function WhatsappConnectionClient({ initial, token }: Props) {
   const t = useTranslations('panel.whatsapp');
-  const toast = useToast();
   const [state, setState] = useState<WahaStatusResponse>(initial);
   const [inFlight, setInFlight] = useState<'connect' | 'logout' | null>(null);
+  const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
 
   // Refs para orquestar el loop de polling sin caer en stale closures.
   //  - `timerRef` guarda el handle del próximo setTimeout para poder cancelarlo.
@@ -155,16 +156,16 @@ export function WhatsappConnectionClient({ initial, token }: Props) {
     if (res.ok) {
       setState(res.data);
     } else if (res.status === 429) {
-      toast.push(t('toast.rateLimited'), 'info');
+      toast.info(t('toast.rateLimited'));
       backoffRef.current = true;
     } else if (res.status === 502) {
-      toast.push(t('toast.statusFetchFailed'), 'error');
+      toast.error(t('toast.statusFetchFailed'));
       // No cortamos el loop — el próximo tick puede recuperar el estado.
     }
     // 401 lo maneja el fetcher (redirect a login), no hace falta hacer nada.
 
     scheduleNext();
-  }, [token, toast, t, scheduleNext]);
+  }, [token, t, scheduleNext]);
 
   // Arranca / re-arranca el loop cuando cambia el status. Si el status es
   // terminal (STOPPED/FAILED) `scheduleNext` no arma timer y quedamos idle.
@@ -196,23 +197,18 @@ export function WhatsappConnectionClient({ initial, token }: Props) {
       return;
     }
     if (res.status === 429) {
-      toast.push(t('toast.rateLimited'), 'info');
+      toast.info(t('toast.rateLimited'));
       return;
     }
     if (res.status === 502) {
-      toast.push(t('toast.startFailed'), 'error');
+      toast.error(t('toast.startFailed'));
       return;
     }
-  }, [inFlight, token, toast, t]);
+  }, [inFlight, token, t]);
 
-  const onLogout = useCallback(async () => {
+  const performLogout = useCallback(async () => {
     if (inFlight !== null) return;
-    // Confirm nativo — el panel no tiene un patrón de "modal de confirmación"
-    // reutilizable (el Modal existente es para detalle de cita). No introducimos
-    // uno nuevo acá para no salir del alcance de T5.
-    // eslint-disable-next-line no-alert
-    if (!window.confirm(t('actions.confirmDisconnect'))) return;
-
+    setConfirmLogoutOpen(false);
     setInFlight('logout');
     const res = await fetcher<{ status: string }>(
       '/api/clinics/me/waha/logout',
@@ -227,12 +223,12 @@ export function WhatsappConnectionClient({ initial, token }: Props) {
       return;
     }
     if (res.status === 429) {
-      toast.push(t('toast.rateLimited'), 'info');
+      toast.info(t('toast.rateLimited'));
       return;
     }
     if (res.status === 502) {
       // Otro admin pudo haber desconectado ya → refrescamos el estado real.
-      toast.push(t('toast.logoutFailed'), 'error');
+      toast.error(t('toast.logoutFailed'));
       const refresh = await fetcher<WahaStatusResponse>(
         '/api/clinics/me/waha/status',
         { token },
@@ -240,7 +236,7 @@ export function WhatsappConnectionClient({ initial, token }: Props) {
       if (mountedRef.current && refresh.ok) setState(refresh.data);
       return;
     }
-  }, [inFlight, token, toast, t]);
+  }, [inFlight, token, t]);
 
   const statusKey = KNOWN_STATUSES.has(state.status) ? state.status : 'UNKNOWN';
   const badgeClass = STATUS_STYLES[statusKey] ?? STATUS_STYLES.UNKNOWN;
@@ -327,7 +323,7 @@ export function WhatsappConnectionClient({ initial, token }: Props) {
           <Button
             type="button"
             variant="ghost"
-            onClick={onLogout}
+            onClick={() => setConfirmLogoutOpen(true)}
             disabled={disconnectDisabled}
           >
             {inFlight === 'logout'
@@ -336,6 +332,16 @@ export function WhatsappConnectionClient({ initial, token }: Props) {
           </Button>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmLogoutOpen}
+        onClose={() => setConfirmLogoutOpen(false)}
+        onConfirm={performLogout}
+        title={t('actions.confirmDisconnectTitle')}
+        description={t('actions.confirmDisconnect')}
+        confirmLabel={t('actions.disconnect')}
+        variant="destructive"
+      />
 
       <div
         className="flex items-center gap-2 text-xs text-gray-500"

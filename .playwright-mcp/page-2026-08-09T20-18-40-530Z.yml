@@ -1,0 +1,133 @@
+- generic [active] [ref=f9e1]:
+  - generic [ref=f9e2]:
+    - complementary [ref=f9e3]:
+      - generic [ref=f9e4]: AgendaZap
+      - generic [ref=f9e10]:
+        - paragraph [ref=f9e11]: Clínica Demo
+        - paragraph [ref=f9e12]: demo
+      - navigation [ref=f9e13]:
+        - generic [ref=f9e14]:
+          - paragraph [ref=f9e15]: Operación
+          - list [ref=f9e16]:
+            - listitem [ref=f9e17]:
+              - link "Dashboard" [ref=f9e18] [cursor=pointer]:
+                - /url: /es/panel/dashboard
+            - listitem [ref=f9e25]:
+              - link "Agenda" [ref=f9e26] [cursor=pointer]:
+                - /url: /es/panel/agenda
+            - listitem [ref=f9e31]:
+              - link "Conversaciones" [ref=f9e32] [cursor=pointer]:
+                - /url: /es/panel/conversaciones
+        - generic [ref=f9e37]:
+          - paragraph [ref=f9e38]: Configuración
+          - list [ref=f9e39]:
+            - listitem [ref=f9e40]:
+              - link "Servicios" [ref=f9e41] [cursor=pointer]:
+                - /url: /es/panel/servicios
+            - listitem [ref=f9e46]:
+              - link "Profesionales" [ref=f9e47] [cursor=pointer]:
+                - /url: /es/panel/profesionales
+            - listitem [ref=f9e54]:
+              - link "Horarios" [ref=f9e55] [cursor=pointer]:
+                - /url: /es/panel/horarios
+            - listitem [ref=f9e60]:
+              - link "Bloqueos" [ref=f9e61] [cursor=pointer]:
+                - /url: /es/panel/bloqueos
+            - listitem [ref=f9e67]:
+              - link "Base de conocimiento" [ref=f9e68] [cursor=pointer]:
+                - /url: /es/panel/faq
+            - listitem [ref=f9e73]:
+              - link "WhatsApp" [ref=f9e74] [cursor=pointer]:
+                - /url: /es/panel/config/whatsapp
+      - button "Menú de usuario" [ref=f9e79] [cursor=pointer]:
+        - generic [ref=f9e80]: RD
+        - generic [ref=f9e81]:
+          - paragraph [ref=f9e82]: Recepción Demo
+          - paragraph [ref=f9e83]: panel.nav.roles.CLINIC_ADMIN
+    - main [ref=f9e85]:
+      - generic [ref=f9e87]:
+        - generic [ref=f9e89]:
+          - heading "Agenda" [level=1] [ref=f9e90]
+          - paragraph [ref=f9e91]: Citas de la clínica.
+        - generic [ref=f9e92]:
+          - generic [ref=f9e93]:
+            - generic [ref=f9e94]:
+              - generic [ref=f9e95]:
+                - button "Período anterior" [ref=f9e96] [cursor=pointer]
+                - button "Período siguiente" [ref=f9e97] [cursor=pointer]
+              - button "Hoy" [ref=f9e98] [cursor=pointer]
+              - generic [ref=f9e99]:
+                - heading "Martes, 4 de agosto" [level=2] [ref=f9e100]
+                - generic [ref=f9e101]: "2026"
+            - tablist [ref=f9e103]:
+              - tab "Mes" [ref=f9e104] [cursor=pointer]
+              - tab "Semana" [ref=f9e110] [cursor=pointer]
+              - tab "Día" [selected] [ref=f9e113] [cursor=pointer]
+          - generic [ref=f9e118]:
+            - generic [ref=f9e119]:
+              - generic [ref=f9e120]: Estados
+              - button "Pendiente" [ref=f9e123] [cursor=pointer]
+              - button "Confirmada" [ref=f9e125] [cursor=pointer]
+              - button "En riesgo" [ref=f9e127] [cursor=pointer]
+              - button "Atendida" [ref=f9e129] [cursor=pointer]
+              - button "Cancelada" [ref=f9e131] [cursor=pointer]
+              - button "No-show" [ref=f9e133] [cursor=pointer]
+              - button "Solo pendientes de confirmar" [ref=f9e135] [cursor=pointer]
+            - generic [ref=f9e139]:
+              - searchbox "Buscar paciente" [ref=f9e141]
+              - generic [ref=f9e142]:
+                - generic [ref=f9e143]: Todos los profesionales
+                - combobox "Todos los profesionales" [ref=f9e144] [cursor=pointer]
+                - combobox [ref=f9e147]
+        - generic [ref=f9e149]:
+          - list [ref=f9e151]:
+            - listitem [ref=f9e152]:
+              - button "10:00 30′ Carlos Rodríguez Consulta general Dra. Ana Ríos No-show" [ref=f9e153] [cursor=pointer]:
+                - generic [ref=f9e154]:
+                  - generic [ref=f9e155]: 10:00
+                  - generic [ref=f9e156]: 30′
+                - generic [ref=f9e157]:
+                  - paragraph [ref=f9e158]: Carlos Rodríguez
+                  - paragraph [ref=f9e159]:
+                    - generic [ref=f9e163]: Consulta general
+                    - generic [ref=f9e164]: ·
+                    - generic [ref=f9e168]: Dra. Ana Ríos
+                - generic [ref=f9e169]: No-show
+            - listitem [ref=f9e170]:
+              - button "12:00 20′ María González Control Dra. Ana Ríos Atendida" [ref=f9e171] [cursor=pointer]:
+                - generic [ref=f9e172]:
+                  - generic [ref=f9e173]: 12:00
+                  - generic [ref=f9e174]: 20′
+                - generic [ref=f9e175]:
+                  - paragraph [ref=f9e176]: María González
+                  - paragraph [ref=f9e177]:
+                    - generic [ref=f9e181]: Control
+                    - generic [ref=f9e182]: ·
+                    - generic [ref=f9e186]: Dra. Ana Ríos
+                - generic [ref=f9e187]: Atendida
+            - listitem [ref=f9e188]:
+              - button "15:00 30′ Carlos Rodríguez Consulta general Dra. Ana Ríos No-show" [ref=f9e189] [cursor=pointer]:
+                - generic [ref=f9e190]:
+                  - generic [ref=f9e191]: 15:00
+                  - generic [ref=f9e192]: 30′
+                - generic [ref=f9e193]:
+                  - paragraph [ref=f9e194]: Carlos Rodríguez
+                  - paragraph [ref=f9e195]:
+                    - generic [ref=f9e199]: Consulta general
+                    - generic [ref=f9e200]: ·
+                    - generic [ref=f9e204]: Dra. Ana Ríos
+                - generic [ref=f9e205]: No-show
+          - complementary [ref=f9e206]:
+            - generic [ref=f9e207]:
+              - heading "Resumen del día" [level=3] [ref=f9e211]
+              - paragraph [ref=f9e212]: martes, 4 de agosto
+              - paragraph [ref=f9e213]: "3"
+              - paragraph [ref=f9e214]: citas agendadas
+              - list [ref=f9e215]:
+                - listitem [ref=f9e216]:
+                  - generic [ref=f9e217]: Atendida
+                  - generic [ref=f9e219]: "1"
+                - listitem [ref=f9e220]:
+                  - generic [ref=f9e221]: No-show
+                  - generic [ref=f9e223]: "2"
+  - region "Notifications alt+T"

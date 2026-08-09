@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation';
 import { setRequestLocale } from 'next-intl/server';
 import type { ReactNode } from 'react';
-import { ToastProvider } from '@/components/ui/toast';
 import { fetcher, getSession, getTokenFromCookies, type AuthMe } from '@/lib/auth';
 import { PanelShell } from './PanelShell';
 
@@ -52,10 +51,8 @@ export default async function PanelLayout({
         };
 
   return (
-    <ToastProvider>
-      <PanelShell locale={locale} me={me}>
-        {children}
-      </PanelShell>
-    </ToastProvider>
+    <PanelShell locale={locale} me={me}>
+      {children}
+    </PanelShell>
   );
 }

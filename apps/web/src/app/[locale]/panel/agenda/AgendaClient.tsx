@@ -1,15 +1,61 @@
 'use client';
 
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  AlertTriangle,
+  Briefcase,
+  CalendarClock,
+  CalendarDays,
+  CalendarOff,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Filter,
+  LayoutGrid,
+  Rows3,
+  Search,
+  Sparkles,
+  User,
+  X,
+} from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { Badge, type AppointmentStatus } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Modal } from '@/components/ui/modal';
-import { Select } from '@/components/ui/select';
-import { useToast } from '@/components/ui/toast';
-import { fetcher } from '@/lib/auth';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { APPOINTMENT_STATUS_TOKENS } from '@/components/ui/tokens';
+import { ApiError, apiMutation, apiQuery } from '@/lib/query-fn';
+import { queryKeys } from '@/lib/query-keys';
 import { cn } from '@/lib/utils';
+
+type ViewMode = 'month' | 'week' | 'day';
 
 interface Appointment {
   id: string;
@@ -29,9 +75,10 @@ interface Professional {
 interface AgendaClientProps {
   locale: string;
   date: string;
-  view: 'day' | 'week';
+  view: ViewMode;
   professionalId: string;
-  status: string;
+  status: string; // CSV de statuses
+  query: string;
   appointments: Appointment[];
   professionals: Professional[];
 }
@@ -49,22 +96,93 @@ const TRANSITIONS: Record<AppointmentStatus, AppointmentStatus[]> = {
   NO_SHOW: [],
 };
 
+const ALL_STATUSES: AppointmentStatus[] = [
+  'PENDIENTE',
+  'CONFIRMADA',
+  'EN_RIESGO',
+  'ATENDIDA',
+  'CANCELADA',
+  'NO_SHOW',
+];
+
+function transitionButtonVariant(
+  next: AppointmentStatus,
+): 'default' | 'destructive' | 'secondary' | 'outline' {
+  if (next === 'CANCELADA' || next === 'NO_SHOW') return 'destructive';
+  if (next === 'ATENDIDA') return 'secondary';
+  return 'default';
+}
+
 export function AgendaClient({
   locale,
   date,
   view,
   professionalId,
   status,
-  appointments,
+  query,
+  appointments: initialAppointments,
   professionals,
 }: AgendaClientProps) {
   const t = useTranslations('panel.agenda');
   const tStatus = useTranslations('panel.dashboard.status');
   const router = useRouter();
-  const toast = useToast();
+  const qc = useQueryClient();
 
   const [selected, setSelected] = useState<Appointment | null>(null);
-  const [busy, setBusy] = useState(false);
+  // Estado local del search — mientras el user tipea, filtramos client-side
+  // sin actualizar la URL. La URL se sincroniza on blur/enter (patrón similar
+  // al listado de conversaciones).
+  const [searchDraft, setSearchDraft] = useState(query);
+
+  const statusSet = useMemo(
+    () =>
+      new Set(
+        (status || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean) as AppointmentStatus[],
+      ),
+    [status],
+  );
+
+  const appointmentsKey = queryKeys.appointments({
+    date,
+    view,
+    professionalId,
+    // Cache-key: incluimos el CSV crudo para que cada combinación de filtros
+    // sea una entrada de cache independiente (con su propio initialData del SSR).
+    status,
+  });
+
+  const { data: rawAppointments = initialAppointments } = useQuery({
+    queryKey: appointmentsKey,
+    queryFn: () => {
+      const { from, to } = rangeForClient(date, view);
+      const qs = new URLSearchParams();
+      qs.set('from', from.toISOString());
+      qs.set('to', to.toISOString());
+      qs.set('limit', '200');
+      if (professionalId) qs.set('professionalId', professionalId);
+      // Backend acepta un solo status. Multi-status → filtramos client-side.
+      if (statusSet.size === 1) qs.set('status', [...statusSet][0]!);
+      return apiQuery<Appointment[]>(`/api/appointments?${qs.toString()}`);
+    },
+    initialData: initialAppointments,
+  });
+
+  // Aplicamos multi-status + búsqueda por paciente en cliente. `search` es
+  // el estado local del input; buscamos por nombre y por teléfono (dígitos).
+  const appointments = useMemo(() => {
+    const needle = searchDraft.trim().toLowerCase();
+    return rawAppointments.filter((a) => {
+      if (statusSet.size >= 2 && !statusSet.has(a.status)) return false;
+      if (!needle) return true;
+      return (
+        a.patient.name.toLowerCase().includes(needle) ||
+        a.patient.phone.toLowerCase().includes(needle)
+      );
+    });
+  }, [rawAppointments, statusSet, searchDraft]);
 
   function updateQuery(patch: Record<string, string | undefined>) {
     const qs = new URLSearchParams();
@@ -73,6 +191,7 @@ export function AgendaClient({
       view,
       professionalId: professionalId || undefined,
       status: status || undefined,
+      q: query || undefined,
       ...patch,
     };
     for (const [k, v] of Object.entries(merged)) {
@@ -81,271 +200,403 @@ export function AgendaClient({
     router.push(`?${qs.toString()}`);
   }
 
-  async function changeStatus(next: AppointmentStatus) {
+  const changeStatusMutation = useMutation({
+    mutationFn: ({ id, next }: { id: string; next: AppointmentStatus }) =>
+      apiMutation<Appointment, { status: AppointmentStatus }>(
+        `/api/appointments/${id}/status`,
+        'PATCH',
+        { status: next },
+      ),
+    onMutate: async ({ id, next }) => {
+      await qc.cancelQueries({ queryKey: appointmentsKey });
+      const snapshot = qc.getQueryData<Appointment[]>(appointmentsKey);
+      qc.setQueryData<Appointment[]>(appointmentsKey, (old) =>
+        (old ?? []).map((a) => (a.id === id ? { ...a, status: next } : a)),
+      );
+      return { snapshot };
+    },
+    onSuccess: () => {
+      toast.success(t('statusChanged'));
+      setSelected(null);
+    },
+    onError: (err, _vars, ctx) => {
+      if (ctx?.snapshot) {
+        qc.setQueryData(appointmentsKey, ctx.snapshot);
+      }
+      if (err instanceof ApiError && err.status === 422) {
+        toast.info(t('statusRaceRefresh'));
+        setSelected(null);
+        void qc.invalidateQueries({ queryKey: appointmentsKey });
+        return;
+      }
+      toast.error(t('statusChangeFailed'));
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: appointmentsKey });
+      void qc.invalidateQueries({ queryKey: queryKeys.dashboardMetrics });
+    },
+  });
+
+  function changeStatus(next: AppointmentStatus) {
     if (!selected) return;
-    setBusy(true);
-    const res = await fetcher(`/api/appointments/${selected.id}/status`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status: next }),
-    });
-    setBusy(false);
-    if (res.ok) {
-      toast.push(t('statusChanged'), 'success');
-      setSelected(null);
-      router.refresh();
-      return;
-    }
-    // Race: otro operador movió la cita → 422 (FSM ilegal en la DB actual).
-    // Refetcheamos, cerramos modal y avisamos. El usuario ve la data fresca.
-    if (res.status === 422) {
-      toast.push(t('statusRaceRefresh'), 'info');
-      setSelected(null);
-      router.refresh();
-      return;
-    }
-    // Cualquier otro error (500, network) → toast genérico, modal queda abierto.
-    toast.push(t('statusChangeFailed'), 'error');
+    changeStatusMutation.mutate({ id: selected.id, next });
   }
 
-  const shiftDay = (delta: number) => {
-    // UTC-anchored: partimos de un ms UTC calculado a mano → determinístico,
-    // sin drift TZ del navegador. Ver Nit-A5.
-    updateQuery({ date: shiftDayISO(date, delta) });
+  const busy = changeStatusMutation.isPending;
+
+  const shiftPeriod = (dir: -1 | 1) => {
+    if (view === 'month') updateQuery({ date: shiftMonthISO(date, dir) });
+    else if (view === 'week') updateQuery({ date: shiftDayISO(date, dir * 7) });
+    else updateQuery({ date: shiftDayISO(date, dir) });
   };
+
+  const goToday = () => {
+    updateQuery({ date: normalizeDateForView(todayISO(), view) });
+  };
+
+  const toggleStatus = (s: AppointmentStatus) => {
+    const next = new Set(statusSet);
+    if (next.has(s)) next.delete(s);
+    else next.add(s);
+    updateQuery({ status: next.size ? [...next].join(',') : undefined });
+  };
+
+  const clearAllFilters = () => {
+    setSearchDraft('');
+    updateQuery({
+      professionalId: undefined,
+      status: undefined,
+      q: undefined,
+    });
+  };
+
+  const applyPresetPending = () => {
+    updateQuery({ status: 'PENDIENTE,EN_RIESGO' });
+  };
+
+  const hasActiveFilters =
+    Boolean(professionalId) || statusSet.size > 0 || Boolean(searchDraft);
+
+  const periodLabel = useMemo(
+    () => formatPeriodLabel(date, view, locale),
+    [date, view, locale],
+  );
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-3 rounded-md border border-gray-200 bg-white p-3">
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            className="h-8 px-2"
-            onClick={() => shiftDay(view === 'week' ? -7 : -1)}
+      {/* ──────────────────────────  TOOLBAR  ────────────────────────── */}
+      <div className="rounded-xl border border-border bg-card shadow-sm">
+        {/* Fila principal — título del período + navegación + tabs de vista */}
+        <div className="flex flex-col gap-3 border-b border-border/60 p-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 rounded-lg border border-border bg-background p-0.5">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => shiftPeriod(-1)}
+                aria-label={t('prevPeriod')}
+              >
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => shiftPeriod(1)}
+                aria-label={t('nextPeriod')}
+              >
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9"
+              onClick={goToday}
+            >
+              {t('today')}
+            </Button>
+            <div className="ml-2 flex flex-col leading-tight">
+              <h2 className="text-xl font-semibold tracking-tight text-foreground">
+                {periodLabel.title}
+              </h2>
+              {periodLabel.sub ? (
+                <span className="text-xs text-muted-foreground">
+                  {periodLabel.sub}
+                </span>
+              ) : null}
+            </div>
+          </div>
+
+          <Tabs
+            value={view}
+            onValueChange={(v) => {
+              const next = v as ViewMode;
+              updateQuery({ view: next, date: normalizeDateForView(date, next) });
+            }}
           >
-            ‹
-          </Button>
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => updateQuery({ date: e.target.value })}
-            className="h-8 rounded-md border border-gray-300 px-2 text-sm"
+            <TabsList className="h-9">
+              <TabsTrigger value="month" className="gap-1.5 px-3">
+                <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
+                {t('viewMonth')}
+              </TabsTrigger>
+              <TabsTrigger value="week" className="gap-1.5 px-3">
+                <Rows3 className="h-3.5 w-3.5" aria-hidden="true" />
+                {t('viewWeek')}
+              </TabsTrigger>
+              <TabsTrigger value="day" className="gap-1.5 px-3">
+                <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
+                {t('viewDay')}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+
+        {/* Filtros: TODO en una sola fila.
+            Orden: [dropdown Estados] [search flexible] [prof select] [clear].
+            El dropdown de estados es multi-select (checkboxes) + acciones rápidas
+            (todos, ninguno, preset pendientes). En pantallas muy chicas los
+            controles pueden envolver pero cada control mantiene su ancho fijo. */}
+        <div className="flex flex-wrap items-center gap-2 p-4">
+          <StatusFilterDropdown
+            statusSet={statusSet}
+            onToggle={toggleStatus}
+            onClear={() => updateQuery({ status: undefined })}
+            onPresetPending={applyPresetPending}
+            onSelectAll={() =>
+              updateQuery({ status: ALL_STATUSES.join(',') })
+            }
           />
-          <Button
-            variant="ghost"
-            className="h-8 px-2"
-            onClick={() => shiftDay(view === 'week' ? 7 : 1)}
-          >
-            ›
-          </Button>
-        </div>
 
-        <div className="flex items-center gap-1">
-          <Button
-            variant={view === 'day' ? 'primary' : 'ghost'}
-            className="h-8 px-3"
-            onClick={() => updateQuery({ view: 'day' })}
-          >
-            {t('viewDay')}
-          </Button>
-          <Button
-            variant={view === 'week' ? 'primary' : 'ghost'}
-            className="h-8 px-3"
-            onClick={() => updateQuery({ view: 'week' })}
-          >
-            {t('viewWeek')}
-          </Button>
-        </div>
+          <div className="relative min-w-0 flex-1 sm:max-w-[320px]">
+            <Search
+              className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              type="search"
+              value={searchDraft}
+              onChange={(e) => setSearchDraft(e.target.value)}
+              onBlur={() =>
+                updateQuery({ q: searchDraft.trim() || undefined })
+              }
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+              placeholder={t('filters.searchPlaceholder')}
+              className="h-9 w-full pl-8"
+              aria-label={t('filters.search')}
+            />
+          </div>
 
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          <Select
-            className="h-8 w-auto text-sm"
-            value={professionalId}
-            onChange={(e) =>
-              updateQuery({ professionalId: e.target.value || undefined })
-            }
-          >
-            <option value="">{t('filters.allProfessionals')}</option>
-            {professionals.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </Select>
-          <Select
-            className="h-8 w-auto text-sm"
-            value={status}
-            onChange={(e) =>
-              updateQuery({ status: e.target.value || undefined })
-            }
-          >
-            <option value="">{t('filters.allStatuses')}</option>
-            {(
-              [
-                'PENDIENTE',
-                'CONFIRMADA',
-                'EN_RIESGO',
-                'ATENDIDA',
-                'CANCELADA',
-                'NO_SHOW',
-              ] as const
-            ).map((s) => (
-              <option key={s} value={s}>
-                {tStatus(s)}
-              </option>
-            ))}
-          </Select>
+          <div className="w-44 shrink-0 sm:w-56">
+            <label htmlFor="agenda-professional" className="sr-only">
+              {t('filters.allProfessionals')}
+            </label>
+            <Select
+              value={professionalId || '__all'}
+              onValueChange={(v) =>
+                updateQuery({
+                  professionalId: v === '__all' ? undefined : v,
+                })
+              }
+            >
+              <SelectTrigger id="agenda-professional" className="h-9 text-sm">
+                <SelectValue placeholder={t('filters.allProfessionals')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all">
+                  {t('filters.allProfessionals')}
+                </SelectItem>
+                {professionals.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {hasActiveFilters ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={clearAllFilters}
+              className="h-9 shrink-0 text-muted-foreground hover:text-foreground"
+            >
+              <X className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+              <span className="hidden sm:inline">{t('filters.clearAll')}</span>
+            </Button>
+          ) : null}
         </div>
       </div>
 
-      {view === 'day' ? (
-        <DayView
-          appointments={appointments}
-          locale={locale}
-          onSelect={setSelected}
-          emptyLabel={t('empty')}
-        />
-      ) : (
-        <WeekView
-          date={date}
-          appointments={appointments}
-          locale={locale}
-          onSelect={setSelected}
-        />
-      )}
+      {/* ──────────────────────────  VISTAS  ────────────────────────── */}
+      <div className="mt-4">
+        {view === 'month' ? (
+          <MonthView
+            date={date}
+            appointments={appointments}
+            locale={locale}
+            onPickDay={(d) => updateQuery({ view: 'day', date: d })}
+            onSelect={setSelected}
+          />
+        ) : view === 'week' ? (
+          <WeekView
+            date={date}
+            appointments={appointments}
+            locale={locale}
+            onSelect={setSelected}
+            onPickDay={(d) => updateQuery({ view: 'day', date: d })}
+          />
+        ) : (
+          <DayView
+            date={date}
+            appointments={appointments}
+            locale={locale}
+            onSelect={setSelected}
+            emptyTitle={t('emptyState.title')}
+            emptyDescription={t('emptyState.description')}
+          />
+        )}
+      </div>
 
-      <Modal
+      {/* ──────────────────────────  DETALLE  ────────────────────────── */}
+      <Dialog
         open={selected !== null}
-        onClose={() => setSelected(null)}
-        title={t('detailTitle')}
+        onOpenChange={(o) => {
+          if (!o) setSelected(null);
+        }}
       >
-        {selected ? (
-          <div className="space-y-4">
-            <div className="space-y-1 text-sm">
-              <p>
-                <span className="text-gray-500">{t('detail.patient')}:</span>{' '}
-                <span className="font-medium">{selected.patient.name}</span>
-              </p>
-              <p>
-                <span className="text-gray-500">{t('detail.phone')}:</span>{' '}
-                <span className="tabular-nums">{selected.patient.phone}</span>
-              </p>
-              <p>
-                <span className="text-gray-500">{t('detail.service')}:</span>{' '}
-                {selected.service.name} ({selected.service.durationMin} min)
-              </p>
-              <p>
-                <span className="text-gray-500">{t('detail.professional')}:</span>{' '}
-                {selected.professional.name}
-              </p>
-              <p>
-                <span className="text-gray-500">{t('detail.time')}:</span>{' '}
-                {formatDateTime(selected.startAt, locale)}
-              </p>
-              <p>
-                <span className="text-gray-500">{t('detail.status')}:</span>{' '}
-                <Badge variant={selected.status}>{tStatus(selected.status)}</Badge>
-              </p>
-            </div>
-
-            <div className="border-t border-gray-100 pt-3">
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
-                {t('detail.transitions')}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {TRANSITIONS[selected.status].length === 0 ? (
-                  <p className="text-sm text-gray-500">
-                    {t('detail.noTransitions')}
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('detailTitle')}</DialogTitle>
+          </DialogHeader>
+          {selected ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-3 border-b border-border pb-3">
+                <div className="min-w-0">
+                  <p className="truncate text-lg font-semibold text-foreground">
+                    {selected.patient.name}
                   </p>
-                ) : (
-                  TRANSITIONS[selected.status].map((next) => (
-                    <Button
-                      key={next}
-                      variant="primary"
-                      className="h-9 px-3 text-sm"
-                      disabled={busy}
-                      onClick={() => changeStatus(next)}
-                    >
-                      {tStatus(next)}
-                    </Button>
-                  ))
-                )}
+                  <p className="truncate text-sm tabular-nums text-muted-foreground">
+                    {selected.patient.phone}
+                  </p>
+                </div>
+                <Badge variant={selected.status} className="shrink-0">
+                  {tStatus(selected.status)}
+                </Badge>
+              </div>
+
+              <dl className="space-y-2 text-sm">
+                <div className="flex items-center gap-3">
+                  <Clock
+                    className="h-4 w-4 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <dt className="sr-only">{t('detail.time')}</dt>
+                    <dd className="tabular-nums text-foreground">
+                      {formatDateTime(selected.startAt, locale)}
+                    </dd>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Briefcase
+                    className="h-4 w-4 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <dt className="sr-only">{t('detail.service')}</dt>
+                    <dd className="text-foreground">
+                      {selected.service.name}{' '}
+                      <span className="tabular-nums text-muted-foreground">
+                        · {selected.service.durationMin} min
+                      </span>
+                    </dd>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <User
+                    className="h-4 w-4 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <dt className="sr-only">{t('detail.professional')}</dt>
+                    <dd className="text-foreground">
+                      {selected.professional.name}
+                    </dd>
+                  </div>
+                </div>
+              </dl>
+
+              <div className="border-t border-border pt-3">
+                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {t('detail.transitions')}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {TRANSITIONS[selected.status].length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      {t('detail.noTransitions')}
+                    </p>
+                  ) : (
+                    TRANSITIONS[selected.status].map((next) => (
+                      <Button
+                        key={next}
+                        size="sm"
+                        variant={transitionButtonVariant(next)}
+                        disabled={busy}
+                        onClick={() => changeStatus(next)}
+                      >
+                        {tStatus(next)}
+                      </Button>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        ) : null}
-      </Modal>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
 
-function DayView({
-  appointments,
-  locale,
-  onSelect,
-  emptyLabel,
-}: {
-  appointments: Appointment[];
-  locale: string;
-  onSelect: (a: Appointment) => void;
-  emptyLabel: string;
-}) {
-  const tStatus = useTranslations('panel.dashboard.status');
+/* ═══════════════════════════════════════════════════════════════════
+ *                             MONTH VIEW
+ * ═══════════════════════════════════════════════════════════════════ */
 
-  if (appointments.length === 0) {
-    return (
-      <div className="rounded-md border border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
-        {emptyLabel}
-      </div>
-    );
-  }
-
-  return (
-    <ul className="divide-y divide-gray-100 rounded-md border border-gray-200 bg-white">
-      {appointments.map((a) => (
-        <li key={a.id}>
-          <button
-            type="button"
-            onClick={() => onSelect(a)}
-            className="flex w-full items-center gap-4 px-4 py-3 text-left hover:bg-gray-50"
-          >
-            <div className="w-20 shrink-0 tabular-nums text-sm text-gray-900">
-              {formatTime(a.startAt, locale)}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-gray-900">
-                {a.patient.name}
-              </p>
-              <p className="truncate text-xs text-gray-500">
-                {a.service.name} · {a.professional.name}
-              </p>
-            </div>
-            <Badge variant={a.status} className="shrink-0">
-              {tStatus(a.status)}
-            </Badge>
-          </button>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function WeekView({
+function MonthView({
   date,
   appointments,
   locale,
+  onPickDay,
   onSelect,
 }: {
   date: string;
   appointments: Appointment[];
   locale: string;
+  onPickDay: (dateISO: string) => void;
   onSelect: (a: Appointment) => void;
 }) {
+  const t = useTranslations('panel.agenda');
   const tStatus = useTranslations('panel.dashboard.status');
 
-  // 7 columnas — desde `date` hasta +6. UTC-anchored (Nit-A5).
-  const days = useMemo(() => {
-    return Array.from({ length: 7 }, (_, i) => shiftDayISO(date, i));
-  }, [date]);
+  // Grid 7x6 — 42 celdas comenzando en el lunes previo al día 1 del mes.
+  const gridStart = useMemo(() => firstMondayOfMonthGrid(date), [date]);
+  const currentMonth = useMemo(() => date.slice(0, 7), [date]);
+  const todayStr = useMemo(() => todayISO(), []);
+
+  const days = useMemo(
+    () => Array.from({ length: 42 }, (_, i) => shiftDayISO(gridStart, i)),
+    [gridStart],
+  );
+
+  const weekdays = useMemo(() => weekdayNames(locale), [locale]);
 
   const byDay = useMemo(() => {
     const map = new Map<string, Appointment[]>();
@@ -355,22 +606,206 @@ function WeekView({
       const bucket = map.get(key);
       if (bucket) bucket.push(a);
     }
+    // ordenar por hora dentro de cada día
+    for (const bucket of map.values()) {
+      bucket.sort((a, b) => a.startAt.localeCompare(b.startAt));
+    }
     return map;
   }, [appointments, days]);
 
   return (
-    <div className="overflow-x-auto rounded-md border border-gray-200 bg-white">
-      <div className="grid min-w-[840px] grid-cols-7 divide-x divide-gray-100">
+    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      {/* Cabecera con días de la semana */}
+      <div className="grid grid-cols-7 border-b border-border bg-muted/40">
+        {weekdays.map((w) => (
+          <div
+            key={w}
+            className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+          >
+            {w}
+          </div>
+        ))}
+      </div>
+
+      {/* Grid de 6 semanas */}
+      <div className="grid grid-cols-7 grid-rows-6 divide-x divide-y divide-border border-t border-border">
         {days.map((d) => {
           const items = byDay.get(d) ?? [];
+          const isCurrentMonth = d.slice(0, 7) === currentMonth;
+          const isToday = d === todayStr;
+          const [, , dayNum] = d.split('-');
+          const visible = items.slice(0, 3);
+          const overflow = items.length - visible.length;
+
           return (
-            <div key={d} className="flex min-h-[240px] flex-col">
-              <div className="border-b border-gray-100 bg-gray-50 px-2 py-1.5 text-xs font-medium text-gray-700">
-                {formatWeekdayShort(d, locale)}
+            <button
+              key={d}
+              type="button"
+              onClick={() => onPickDay(d)}
+              className={cn(
+                'group relative flex min-h-[112px] flex-col gap-1.5 p-2 text-left transition-colors',
+                'focus:outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+                isCurrentMonth
+                  ? 'bg-card hover:bg-accent/40'
+                  : 'bg-muted/20 text-muted-foreground/70 hover:bg-muted/40',
+              )}
+              aria-label={`${d} · ${items.length} citas`}
+            >
+              <div className="flex items-center justify-between">
+                <span
+                  className={cn(
+                    'inline-flex h-6 min-w-[24px] items-center justify-center rounded-full px-1.5 text-xs font-semibold tabular-nums',
+                    isToday
+                      ? 'bg-brand-600 text-white shadow-sm'
+                      : isCurrentMonth
+                        ? 'text-foreground'
+                        : 'text-muted-foreground/70',
+                  )}
+                >
+                  {Number(dayNum)}
+                </span>
+                {items.length > 0 ? (
+                  <span className="text-[10px] font-medium tabular-nums text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+                    {items.length}
+                  </span>
+                ) : null}
               </div>
-              <div className="flex-1 space-y-1 p-1">
+
+              <div className="flex flex-1 flex-col gap-1">
+                {visible.map((a) => (
+                  <span
+                    key={a.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelect(a);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onSelect(a);
+                      }
+                    }}
+                    className={cn(
+                      'flex items-center gap-1.5 truncate rounded-md border px-1.5 py-0.5 text-[11px] font-medium transition-transform hover:-translate-y-px hover:shadow-sm',
+                      APPOINTMENT_STATUS_TOKENS[a.status].subtle,
+                    )}
+                    title={`${formatTime(a.startAt, locale)} · ${a.patient.name} · ${tStatus(a.status)}`}
+                  >
+                    <span
+                      className={cn(
+                        'h-1.5 w-1.5 shrink-0 rounded-full',
+                        APPOINTMENT_STATUS_TOKENS[a.status].dot,
+                      )}
+                      aria-hidden="true"
+                    />
+                    <span className="shrink-0 tabular-nums opacity-90">
+                      {formatTime(a.startAt, locale)}
+                    </span>
+                    <span className="truncate">{a.patient.name}</span>
+                  </span>
+                ))}
+                {overflow > 0 ? (
+                  <span className="pl-1 text-[10px] font-medium text-muted-foreground">
+                    {t('monthOverflow', { count: overflow })}
+                  </span>
+                ) : null}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ *                             WEEK VIEW
+ * ═══════════════════════════════════════════════════════════════════ */
+
+function WeekView({
+  date,
+  appointments,
+  locale,
+  onSelect,
+  onPickDay,
+}: {
+  date: string;
+  appointments: Appointment[];
+  locale: string;
+  onSelect: (a: Appointment) => void;
+  onPickDay: (dateISO: string) => void;
+}) {
+  const tStatus = useTranslations('panel.dashboard.status');
+  const t = useTranslations('panel.agenda');
+
+  const days = useMemo(() => {
+    return Array.from({ length: 7 }, (_, i) => shiftDayISO(date, i));
+  }, [date]);
+
+  const todayStr = useMemo(() => todayISO(), []);
+
+  const byDay = useMemo(() => {
+    const map = new Map<string, Appointment[]>();
+    for (const d of days) map.set(d, []);
+    for (const a of appointments) {
+      const key = a.startAt.slice(0, 10);
+      const bucket = map.get(key);
+      if (bucket) bucket.push(a);
+    }
+    for (const b of map.values()) {
+      b.sort((a, b) => a.startAt.localeCompare(b.startAt));
+    }
+    return map;
+  }, [appointments, days]);
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
+      <div className="grid min-w-[980px] grid-cols-7 divide-x divide-border">
+        {days.map((d) => {
+          const items = byDay.get(d) ?? [];
+          const isToday = d === todayStr;
+          const [, , dayNum] = d.split('-');
+
+          return (
+            <div key={d} className="flex min-h-[360px] flex-col">
+              <button
+                type="button"
+                onClick={() => onPickDay(d)}
+                className={cn(
+                  'flex items-center gap-2 border-b border-border px-3 py-2.5 text-left transition-colors hover:bg-accent/40',
+                  isToday ? 'bg-brand-50/50' : 'bg-muted/30',
+                )}
+              >
+                <span
+                  className={cn(
+                    'text-[10px] font-semibold uppercase tracking-wider',
+                    isToday ? 'text-brand-700' : 'text-muted-foreground',
+                  )}
+                >
+                  {formatWeekdayOnly(d, locale)}
+                </span>
+                <span
+                  className={cn(
+                    'inline-flex h-6 min-w-[24px] items-center justify-center rounded-full text-xs font-semibold tabular-nums',
+                    isToday
+                      ? 'bg-brand-600 text-white shadow-sm'
+                      : 'text-foreground',
+                  )}
+                >
+                  {Number(dayNum)}
+                </span>
+              </button>
+              <div className="flex-1 space-y-1 p-1.5">
                 {items.length === 0 ? (
-                  <p className="p-1 text-xs text-gray-400">—</p>
+                  <p
+                    className="px-1 pt-1 text-xs text-muted-foreground/60"
+                    aria-label={t('emptyDay')}
+                  >
+                    —
+                  </p>
                 ) : (
                   items.map((a) => (
                     <button
@@ -378,15 +813,21 @@ function WeekView({
                       type="button"
                       onClick={() => onSelect(a)}
                       className={cn(
-                        'block w-full rounded-md border px-2 py-1 text-left text-xs hover:opacity-90',
-                        badgeBgFor(a.status),
+                        'block w-full rounded-md border px-2 py-1.5 text-left text-xs shadow-sm transition-all hover:-translate-y-px hover:shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                        APPOINTMENT_STATUS_TOKENS[a.status].subtle,
                       )}
                     >
-                      <p className="tabular-nums font-medium">
+                      <p className="flex items-center gap-1 tabular-nums font-medium">
+                        <Clock className="h-3 w-3" aria-hidden="true" />
                         {formatTime(a.startAt, locale)}
                       </p>
-                      <p className="truncate">{a.patient.name}</p>
-                      <p className="truncate opacity-75">
+                      <p className="mt-0.5 truncate font-medium">
+                        {a.patient.name}
+                      </p>
+                      <p className="mt-0.5 truncate text-[10px] opacity-80">
+                        {a.service.name}
+                      </p>
+                      <p className="truncate text-[10px] opacity-75">
                         {tStatus(a.status)}
                       </p>
                     </button>
@@ -401,22 +842,175 @@ function WeekView({
   );
 }
 
-function badgeBgFor(status: AppointmentStatus): string {
-  switch (status) {
-    case 'PENDIENTE':
-      return 'bg-yellow-50 border-yellow-300 text-yellow-900';
-    case 'CONFIRMADA':
-      return 'bg-green-50 border-green-300 text-green-900';
-    case 'EN_RIESGO':
-      return 'bg-orange-50 border-orange-300 text-orange-900';
-    case 'ATENDIDA':
-      return 'bg-blue-50 border-blue-300 text-blue-900';
-    case 'CANCELADA':
-      return 'bg-gray-50 border-gray-300 text-gray-700';
-    case 'NO_SHOW':
-      return 'bg-red-50 border-red-300 text-red-900';
-  }
+/* ═══════════════════════════════════════════════════════════════════
+ *                             DAY VIEW
+ * ═══════════════════════════════════════════════════════════════════ */
+
+function DayView({
+  date,
+  appointments,
+  locale,
+  onSelect,
+  emptyTitle,
+  emptyDescription,
+}: {
+  date: string;
+  appointments: Appointment[];
+  locale: string;
+  onSelect: (a: Appointment) => void;
+  emptyTitle: string;
+  emptyDescription: string;
+}) {
+  const tStatus = useTranslations('panel.dashboard.status');
+  const t = useTranslations('panel.agenda');
+
+  const stats = useMemo(() => {
+    const acc: Partial<Record<AppointmentStatus, number>> = {};
+    for (const a of appointments) {
+      acc[a.status] = (acc[a.status] ?? 0) + 1;
+    }
+    return acc;
+  }, [appointments]);
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+      {/* Timeline */}
+      <div>
+        {appointments.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card p-12 text-center">
+            <div className="rounded-full bg-muted p-3">
+              <CalendarOff
+                className="h-6 w-6 text-muted-foreground"
+                aria-hidden="true"
+              />
+            </div>
+            <p className="mt-3 text-sm font-medium text-foreground">
+              {emptyTitle}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {emptyDescription}
+            </p>
+          </div>
+        ) : (
+          <ul className="divide-y divide-border rounded-xl border border-border bg-card shadow-sm">
+            {appointments.map((a) => (
+              <li key={a.id}>
+                <button
+                  type="button"
+                  onClick={() => onSelect(a)}
+                  className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-4 px-4 py-3.5 text-left transition-colors hover:bg-accent/50 focus:outline-none focus-visible:bg-accent/60 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                >
+                  <div className="flex w-16 flex-col items-start">
+                    <span className="text-base font-semibold tabular-nums text-foreground">
+                      {formatTime(a.startAt, locale)}
+                    </span>
+                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                      {a.service.durationMin}′
+                    </span>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {a.patient.name}
+                    </p>
+                    <p className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                      <Briefcase
+                        className="h-3 w-3 shrink-0"
+                        aria-hidden="true"
+                      />
+                      <span className="truncate">{a.service.name}</span>
+                      <span aria-hidden="true">·</span>
+                      <User className="h-3 w-3 shrink-0" aria-hidden="true" />
+                      <span className="truncate">{a.professional.name}</span>
+                    </p>
+                  </div>
+                  <Badge variant={a.status} className="shrink-0">
+                    {tStatus(a.status)}
+                  </Badge>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* Panel de resumen — sólo desktop */}
+      <aside className="hidden space-y-4 lg:block">
+        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+          <div className="flex items-center gap-2 border-b border-border pb-3">
+            <CalendarDays
+              className="h-4 w-4 text-brand-600"
+              aria-hidden="true"
+            />
+            <h3 className="text-sm font-semibold text-foreground">
+              {t('summary.title')}
+            </h3>
+          </div>
+          <p className="mt-3 text-xs uppercase tracking-wide text-muted-foreground">
+            {formatLongDate(date, locale)}
+          </p>
+          <p className="mt-1 text-3xl font-semibold tabular-nums text-foreground">
+            {appointments.length}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {t('summary.appointments')}
+          </p>
+
+          <Separator className="my-4" />
+
+          <ul className="space-y-2">
+            {ALL_STATUSES.map((s) => {
+              const n = stats[s] ?? 0;
+              if (n === 0) return null;
+              return (
+                <li
+                  key={s}
+                  className="flex items-center justify-between text-xs"
+                >
+                  <span className="inline-flex items-center gap-2 text-muted-foreground">
+                    <span
+                      className={cn(
+                        'h-1.5 w-1.5 rounded-full',
+                        APPOINTMENT_STATUS_TOKENS[s].dot,
+                      )}
+                      aria-hidden="true"
+                    />
+                    {tStatus(s)}
+                  </span>
+                  <span className="font-semibold tabular-nums text-foreground">
+                    {n}
+                  </span>
+                </li>
+              );
+            })}
+            {appointments.length === 0 ? (
+              <li className="text-xs text-muted-foreground">
+                {t('summary.emptyStats')}
+              </li>
+            ) : null}
+          </ul>
+        </div>
+
+        {(stats.EN_RIESGO ?? 0) + (stats.PENDIENTE ?? 0) > 0 ? (
+          <div className="flex items-start gap-3 rounded-xl border border-orange-200 bg-orange-50/60 p-3 text-xs text-orange-900">
+            <AlertTriangle
+              className="mt-0.5 h-4 w-4 shrink-0"
+              aria-hidden="true"
+            />
+            <p>
+              {t('summary.pendingHint', {
+                count: (stats.EN_RIESGO ?? 0) + (stats.PENDIENTE ?? 0),
+              })}
+            </p>
+          </div>
+        ) : null}
+      </aside>
+    </div>
+  );
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+ *                          HELPERS
+ * ═══════════════════════════════════════════════════════════════════ */
 
 function formatTime(iso: string, locale: string): string {
   return new Intl.DateTimeFormat(locale, {
@@ -437,34 +1031,195 @@ function formatDateTime(iso: string, locale: string): string {
   }).format(new Date(iso));
 }
 
-function formatWeekdayShort(dateStr: string, locale: string): string {
-  // UTC-anchored: parseamos el YYYY-MM-DD a un ms UTC determinístico, así el
-  // Intl.DateTimeFormat renderiza el weekday correcto en cualquier browser TZ.
-  // Ver comentario general de shiftDayISO (Nit-A5).
+/**
+ * Formatea el label de período visible en el header del toolbar.
+ * - month → "Agosto 2026"
+ * - week  → "5 – 11 Agosto 2026" (con sub = "Semana N")
+ * - day   → "Sábado 9 de agosto" (sub = "2026")
+ */
+function formatPeriodLabel(
+  dateISO: string,
+  view: ViewMode,
+  locale: string,
+): { title: string; sub?: string } {
+  const [y, m, d] = dateISO.split('-').map(Number);
+  const anchor = new Date(Date.UTC(y!, (m ?? 1) - 1, d ?? 1));
+
+  if (view === 'month') {
+    const title = new Intl.DateTimeFormat(locale, {
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(anchor);
+    return { title: capitalize(title) };
+  }
+
+  if (view === 'week') {
+    const end = new Date(anchor);
+    end.setUTCDate(end.getUTCDate() + 6);
+    const sameMonth = anchor.getUTCMonth() === end.getUTCMonth();
+    const yearFmt = new Intl.DateTimeFormat(locale, {
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(anchor);
+    if (sameMonth) {
+      const monthYear = new Intl.DateTimeFormat(locale, {
+        month: 'long',
+        year: 'numeric',
+        timeZone: 'UTC',
+      }).format(anchor);
+      const startDay = anchor.getUTCDate();
+      const endDay = end.getUTCDate();
+      return { title: `${startDay} – ${endDay} ${capitalize(monthYear)}` };
+    }
+    const startFmt = new Intl.DateTimeFormat(locale, {
+      day: 'numeric',
+      month: 'short',
+      timeZone: 'UTC',
+    }).format(anchor);
+    const endFmt = new Intl.DateTimeFormat(locale, {
+      day: 'numeric',
+      month: 'short',
+      timeZone: 'UTC',
+    }).format(end);
+    return { title: `${startFmt} – ${endFmt}`, sub: yearFmt };
+  }
+
+  const long = new Intl.DateTimeFormat(locale, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'UTC',
+  }).format(anchor);
+  const yearFmt = new Intl.DateTimeFormat(locale, {
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(anchor);
+  return { title: capitalize(long), sub: yearFmt };
+}
+
+function formatWeekdayOnly(dateStr: string, locale: string): string {
   const [y, m, d] = dateStr.split('-').map(Number);
   const ms = Date.UTC(y!, (m ?? 1) - 1, d ?? 1);
   return new Intl.DateTimeFormat(locale, {
     weekday: 'short',
-    day: '2-digit',
-    month: 'short',
+    timeZone: 'UTC',
+  })
+    .format(new Date(ms))
+    .replace('.', '');
+}
+
+function formatLongDate(dateStr: string, locale: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const ms = Date.UTC(y!, (m ?? 1) - 1, d ?? 1);
+  return new Intl.DateTimeFormat(locale, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
     timeZone: 'UTC',
   }).format(new Date(ms));
 }
 
 /**
- * Suma `delta` días a `YYYY-MM-DD` sin tocar `new Date()` naive de la máquina.
- *
- * Estrategia: convertimos a ms UTC con `Date.UTC(...)` — es determinístico, no
- * depende de la TZ del browser (a diferencia de `new Date('2026-08-09')` que
- * en algunos navegadores parsea como local). Después de sumar `delta*86_400_000`
- * ms, extraemos el YYYY-MM-DD via `toISOString().slice(0, 10)`.
- *
- * Nota: usamos `new Date(ms)` con `ms` proveniente de `Date.UTC()` — esto NO
- * es "Date naive de la máquina". El principio de la regla es evitar la TZ
- * local del sistema; anclamos todo a UTC.
+ * Nombres de los días de la semana empezando en LUNES.
+ * Usamos un lunes conocido (2024-01-01 fue lunes) como ancla UTC.
+ */
+function weekdayNames(locale: string): string[] {
+  const monday = Date.UTC(2024, 0, 1); // 2024-01-01 = lunes
+  const fmt = new Intl.DateTimeFormat(locale, {
+    weekday: 'short',
+    timeZone: 'UTC',
+  });
+  return Array.from({ length: 7 }, (_, i) =>
+    fmt.format(new Date(monday + i * 86_400_000)).replace('.', ''),
+  );
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function todayISO(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Suma `delta` días a `YYYY-MM-DD` (ancla UTC — no depende de TZ local).
  */
 function shiftDayISO(dateISO: string, delta: number): string {
   const [y, m, d] = dateISO.split('-').map(Number);
   const ms = Date.UTC(y!, (m ?? 1) - 1, d ?? 1) + delta * 86_400_000;
   return new Date(ms).toISOString().slice(0, 10);
+}
+
+/**
+ * Suma `delta` meses a `YYYY-MM-DD` preservando el día (o cae al último día
+ * válido si el mes destino es más corto — comportamiento nativo de setUTCMonth).
+ */
+function shiftMonthISO(dateISO: string, delta: number): string {
+  const [y, m, d] = dateISO.split('-').map(Number);
+  const target = new Date(Date.UTC(y!, (m ?? 1) - 1 + delta, 1));
+  const daysInTarget = new Date(
+    Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  const day = Math.min(d ?? 1, daysInTarget);
+  target.setUTCDate(day);
+  return target.toISOString().slice(0, 10);
+}
+
+/**
+ * Primer lunes del grid mensual para `dateISO` — el lunes de la semana
+ * que contiene el día 1 del mes de `dateISO`.
+ */
+function firstMondayOfMonthGrid(dateISO: string): string {
+  const [y, m] = dateISO.split('-').map(Number);
+  const first = new Date(Date.UTC(y!, (m ?? 1) - 1, 1));
+  const dow = first.getUTCDay();
+  const offset = (dow + 6) % 7; // días atrás hasta el lunes
+  const start = new Date(first);
+  start.setUTCDate(1 - offset);
+  return start.toISOString().slice(0, 10);
+}
+
+/**
+ * Ancla `dateISO` al anchor esperado por cada vista:
+ *   - month → día 1 del mes (así "Agosto 2026" es "2026-08-01").
+ *   - week  → LUNES de la semana que contiene `dateISO`.
+ *   - day   → tal cual.
+ *
+ * Es útil al cambiar de tab (evita que la semana arranque en domingo si el
+ * user estaba parado en domingo, o que el mes muestre día 15 en el label).
+ */
+function normalizeDateForView(dateISO: string, view: ViewMode): string {
+  if (view === 'month') return `${dateISO.slice(0, 7)}-01`;
+  if (view === 'week') {
+    const [y, m, d] = dateISO.split('-').map(Number);
+    const ms = Date.UTC(y!, (m ?? 1) - 1, d ?? 1);
+    const dow = new Date(ms).getUTCDay(); // 0=dom … 6=sáb
+    const offset = (dow + 6) % 7; // días hacia atrás hasta lunes
+    return new Date(ms - offset * 86_400_000).toISOString().slice(0, 10);
+  }
+  return dateISO;
+}
+
+/**
+ * Igual que el helper del server — duplicado acá para no crear ida y vuelta
+ * de imports client/server. Se usa en la queryFn cuando el user navega y
+ * TanStack Query refetchea.
+ */
+function rangeForClient(
+  dateISO: string,
+  view: ViewMode,
+): { from: Date; to: Date } {
+  if (view === 'month') {
+    const start = firstMondayOfMonthGrid(dateISO);
+    const from = new Date(`${start}T00:00:00.000Z`);
+    const to = new Date(from);
+    to.setUTCDate(to.getUTCDate() + 42);
+    return { from, to };
+  }
+  const from = new Date(`${dateISO}T00:00:00.000Z`);
+  const to = new Date(from);
+  to.setUTCDate(to.getUTCDate() + (view === 'week' ? 7 : 1));
+  return { from, to };
 }

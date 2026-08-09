@@ -1,6 +1,13 @@
 import { setRequestLocale, getTranslations } from 'next-intl/server';
-import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { fetcher, getTokenFromCookies } from '@/lib/auth';
+import { DashboardTrendChart } from './DashboardTrendChart';
+import { LucideIcon } from './LucideIcon';
 
 interface DashboardMetrics {
   noShowRate: number;
@@ -22,8 +29,22 @@ interface DashboardMetrics {
 }
 
 /**
+ * Formatea una fecha ISO (YYYY-MM-DD) al locale del usuario, en formato corto
+ * "dd MMM" (ej. "05 ago" en es, "05 ago." en pt). Usa UTC para evitar shift
+ * de día por TZ del server.
+ */
+function formatDayLabel(isoDate: string, locale: string): string {
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  return new Intl.DateTimeFormat(locale, {
+    day: '2-digit',
+    month: 'short',
+    timeZone: 'UTC',
+  }).format(d);
+}
+
+/**
  * Dashboard SSR — trae `GET /api/dashboard/metrics` en el server con el token
- * del cookie. Renderiza 4 cards + un mini bar chart SVG puro para la tendencia.
+ * del cookie. Renderiza 4 cards + un shadcn Chart (Recharts) para la tendencia.
  */
 export default async function DashboardPage({
   params,
@@ -55,29 +76,66 @@ export default async function DashboardPage({
   const confirmationPct = (metrics.confirmations.rate * 100).toFixed(1);
   const total = Object.values(metrics.byStatus).reduce((a, b) => a + b, 0);
 
+  // Sample sizes para dar contexto a las tasas (%). Sin denominador el operador
+  // no puede distinguir "100% con 1 cita" de "100% con 100 citas".
+  const noShowShows = metrics.byStatus.NO_SHOW;
+  const noShowClosed = metrics.byStatus.ATENDIDA + metrics.byStatus.NO_SHOW;
+
+  // Trend con label pre-formateado en el server — el client Chart ya lo recibe listo.
+  const trendData = metrics.trend.map((d) => ({
+    ...d,
+    label: formatDayLabel(d.date, locale),
+  }));
+
   return (
     <div className="max-w-6xl space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900">{t('title')}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-gray-900">
+          {t('title')}
+        </h1>
         <p className="text-sm text-gray-500">{t('subtitle')}</p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('noShow.title')}</CardTitle>
+        {/* No-show rate — TrendingDown como acento visual (métrica "menos = mejor") */}
+        <Card className="transition-shadow hover:shadow-md">
+          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">
+              {t('noShow.title')}
+            </CardTitle>
+            <LucideIcon
+              name="TrendingDown"
+              className="h-4 w-4 text-red-500"
+              aria-hidden="true"
+            />
           </CardHeader>
-          <CardBody>
-            <p className="text-3xl font-semibold text-gray-900">{noShowPct}%</p>
+          <CardContent>
+            <p className="text-3xl font-semibold tabular-nums text-gray-900">
+              {noShowPct}%
+            </p>
+            <p className="mt-1 text-xs text-gray-600 tabular-nums">
+              {t('noShow.sample', {
+                shows: noShowShows,
+                closed: noShowClosed,
+              })}
+            </p>
             <p className="mt-1 text-xs text-gray-500">{t('noShow.hint')}</p>
-          </CardBody>
+          </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('byStatus.title')}</CardTitle>
+        {/* Citas por estado — PieChart como acento */}
+        <Card className="transition-shadow hover:shadow-md">
+          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">
+              {t('byStatus.title')}
+            </CardTitle>
+            <LucideIcon
+              name="PieChart"
+              className="h-4 w-4 text-gray-400"
+              aria-hidden="true"
+            />
           </CardHeader>
-          <CardBody>
+          <CardContent>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
               {(
                 [
@@ -102,16 +160,30 @@ export default async function DashboardPage({
             <p className="mt-2 text-xs text-gray-500">
               {t('byStatus.total', { total })}
             </p>
-          </CardBody>
+          </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('confirmations.title')}</CardTitle>
+        {/* Tasa de confirmación — CheckCircle2 verde */}
+        <Card className="transition-shadow hover:shadow-md">
+          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">
+              {t('confirmations.title')}
+            </CardTitle>
+            <LucideIcon
+              name="CheckCircle2"
+              className="h-4 w-4 text-brand-600"
+              aria-hidden="true"
+            />
           </CardHeader>
-          <CardBody>
-            <p className="text-3xl font-semibold text-gray-900">
+          <CardContent>
+            <p className="text-3xl font-semibold tabular-nums text-gray-900">
               {confirmationPct}%
+            </p>
+            <p className="mt-1 text-xs text-gray-600 tabular-nums">
+              {t('confirmations.sample', {
+                confirmed: metrics.confirmations.confirmed,
+                sent: metrics.confirmations.sent,
+              })}
             </p>
             <div className="mt-2 space-y-0.5 text-sm text-gray-600">
               <p>
@@ -127,87 +199,72 @@ export default async function DashboardPage({
                 </span>
               </p>
             </div>
-          </CardBody>
+          </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('trend.title')}</CardTitle>
+        {/* Tendencia — chart shadcn (Recharts). El card ocupa 1 columna pero el
+            chart interno respira mejor. LineChart icon como acento. */}
+        <Card className="transition-shadow hover:shadow-md">
+          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">
+              {t('trend.title')}
+            </CardTitle>
+            <LucideIcon
+              name="LineChart"
+              className="h-4 w-4 text-gray-400"
+              aria-hidden="true"
+            />
           </CardHeader>
-          <CardBody>
-            <TrendChart trend={metrics.trend} />
+          <CardContent>
+            <DashboardTrendChart
+              trend={trendData}
+              labels={{
+                created: t('trend.legend.created'),
+                noShow: t('trend.legend.noShow'),
+                ariaLabel: t('trend.ariaLabel'),
+              }}
+            />
+
+            {/* Alternativa keyboard-accessible al chart — <details> + <table>
+                con las 14 filas × 3 columnas. Tab llega al summary, Enter/Space
+                abre. WCAG 2.1.1. */}
+            <details className="mt-3 text-sm">
+              <summary className="cursor-pointer text-gray-700 hover:text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600">
+                {t('trend.detailToggle')}
+              </summary>
+              <table className="mt-2 w-full text-sm">
+                <caption className="sr-only">
+                  {t('trend.tableCaption')}
+                </caption>
+                <thead>
+                  <tr className="border-b text-left text-gray-600">
+                    <th className="py-1 pr-4 font-medium">
+                      {t('trend.tableHeaders.date')}
+                    </th>
+                    <th className="py-1 pr-4 font-medium">
+                      {t('trend.tableHeaders.created')}
+                    </th>
+                    <th className="py-1 font-medium">
+                      {t('trend.tableHeaders.noShow')}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {trendData.map((day) => (
+                    <tr key={day.date} className="border-b border-gray-100">
+                      <td className="py-1 pr-4 tabular-nums">{day.label}</td>
+                      <td className="py-1 pr-4 tabular-nums">{day.created}</td>
+                      <td className="py-1 tabular-nums">{day.noShow}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+
             <p className="mt-2 text-xs text-gray-500">{t('trend.hint')}</p>
-          </CardBody>
+          </CardContent>
         </Card>
       </div>
     </div>
-  );
-}
-
-/**
- * Mini bar chart SVG hand-rolled. Sin dependencia de recharts/chartjs — es un
- * MVP y todo lo que necesitamos es el shape de la tendencia.
- *
- * Renderiza dos series:
- * - `created` en `brand-500` (verde AgendaZap).
- * - `noShow`  en `red-500` (para atraer la vista).
- */
-function TrendChart({
-  trend,
-}: {
-  trend: Array<{
-    date: string;
-    created: number;
-    confirmed: number;
-    noShow: number;
-  }>;
-}) {
-  const w = 280;
-  const h = 80;
-  const pad = 4;
-  const bars = trend.length || 1;
-  const barW = (w - pad * 2) / bars;
-  const maxV = Math.max(
-    1,
-    ...trend.map((t) => Math.max(t.created, t.noShow)),
-  );
-
-  return (
-    <svg
-      width="100%"
-      viewBox={`0 0 ${w} ${h}`}
-      preserveAspectRatio="none"
-      role="img"
-      aria-label="Tendencia 14 días"
-      className="block h-20 w-full"
-    >
-      {trend.map((day, i) => {
-        const x = pad + i * barW;
-        const createdH = (day.created / maxV) * (h - 8);
-        const noShowH = (day.noShow / maxV) * (h - 8);
-        return (
-          <g key={day.date}>
-            <rect
-              x={x + 1}
-              y={h - createdH}
-              width={Math.max(1, barW / 2 - 2)}
-              height={createdH}
-              fill="#16a34a"
-            >
-              <title>{`${day.date}: ${day.created} creadas`}</title>
-            </rect>
-            <rect
-              x={x + barW / 2 + 1}
-              y={h - noShowH}
-              width={Math.max(1, barW / 2 - 2)}
-              height={noShowH}
-              fill="#ef4444"
-            >
-              <title>{`${day.date}: ${day.noShow} no-show`}</title>
-            </rect>
-          </g>
-        );
-      })}
-    </svg>
   );
 }

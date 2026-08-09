@@ -252,6 +252,7 @@ model FaqChunk {
   id        String   @id @default(cuid())
   clinicId  String
   clinic    Clinic   @relation(fields: [clinicId], references: [id])
+  title     String?
   content   String
   embedding Unsupported("vector(1536)")?
   createdAt DateTime @default(now())

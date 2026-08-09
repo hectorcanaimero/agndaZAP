@@ -1,9 +1,24 @@
 {
+  "common": {
+    "cancel": "Cancelar",
+    "search": "Buscar",
+    "columns": "Columnas",
+    "page": "Página",
+    "empty": "Sin resultados",
+    "previous": "Anterior",
+    "next": "Siguiente"
+  },
   "page": {
     "title": "Agendá tu cita",
     "subtitle": "Elegí servicio, profesional y horario. Te confirmamos por WhatsApp.",
     "clinicNotFound": "Clínica no encontrada",
-    "clinicNotFoundDescription": "El enlace no corresponde a ninguna clínica activa."
+    "clinicNotFoundDescription": "El enlace no corresponde a ninguna clínica activa.",
+    "poweredBy": "Agendamiento online",
+    "features": {
+      "title": "Rápido y por WhatsApp",
+      "quick": "Reservá en menos de un minuto.",
+      "whatsapp": "Confirmación y recordatorios por WhatsApp."
+    }
   },
   "form": {
     "labels": {
@@ -39,7 +54,27 @@
       "rateLimit": "Demasiados intentos. Probá en un minuto."
     },
     "noSlots": "No hay horarios disponibles esta semana.",
-    "chooseCombination": "Elegí servicio y profesional para ver horarios."
+    "chooseCombination": "Elegí servicio y profesional para ver horarios.",
+    "emptyDescription": "No encontramos horarios en los próximos 7 días.",
+    "tryNextWeek": "Probar la próxima semana",
+    "tryOtherProfessional": "Cambiar profesional",
+    "submitting": "Confirmando...",
+    "submit": "Confirmar cita",
+    "loadingSlotsAria": "Cargando horarios disponibles",
+    "sections": {
+      "service": {
+        "title": "Servicio",
+        "description": "Elegí qué necesitás y con quién."
+      },
+      "slot": {
+        "title": "Horario",
+        "description": "Estos son los horarios disponibles."
+      },
+      "patient": {
+        "title": "Tus datos",
+        "description": "Los usamos para confirmar tu cita."
+      }
+    }
   },
   "thanks": {
     "title": "¡Listo, {name}!",
@@ -59,12 +94,24 @@
     },
     "submit": "Entrar",
     "submitting": "Ingresando...",
+    "recovery": {
+      "hint": "¿Olvidaste tu contraseña? Contactá al admin de tu clínica."
+    },
     "errors": {
       "email": "Email inválido.",
       "password": "Ingresá tu contraseña (mínimo 8 caracteres).",
       "invalidCredentials": "Credenciales inválidas.",
-      "tooManyAttempts": "Demasiados intentos. Probá en un rato.",
+      "tooManyAttempts": "Demasiados intentos. Probá en 15 minutos.",
       "generic": "No pudimos ingresar. Probá de nuevo."
+    },
+    "brand": {
+      "tagline": "Agendamiento por WhatsApp para clínicas.",
+      "features": {
+        "agenda": "Agenda unificada online y por chat",
+        "reminders": "Recordatorios que reducen no-shows",
+        "public": "Página pública para reservas sin fricción"
+      },
+      "footer": "Multi-tenant · pensada para consultorios que atienden en volumen."
     }
   },
   "panel": {
@@ -76,9 +123,22 @@
       "professionals": "Profesionales",
       "businessHours": "Horarios",
       "timeOff": "Bloqueos",
-      "faq": "FAQ",
+      "faq": "Base de conocimiento",
       "whatsapp": "WhatsApp",
-      "logout": "Cerrar sesión"
+      "logout": "Cerrar sesión",
+      "openMenu": "Abrir menú",
+      "closeMenu": "Cerrar menú",
+      "sections": {
+        "operation": "Operación",
+        "configuration": "Configuración"
+      },
+      "userMenu": "Menú de usuario",
+      "roles": {
+        "OWNER": "Dueña/o",
+        "ADMIN": "Administrador",
+        "STAFF": "Staff",
+        "PROFESSIONAL": "Profesional"
+      }
     },
     "dashboard": {
       "title": "Dashboard",
@@ -86,7 +146,8 @@
       "errorLoading": "No se pudieron cargar las métricas.",
       "noShow": {
         "title": "No-show rate",
-        "hint": "% de citas cerradas que fueron no-show."
+        "hint": "% de citas cerradas que fueron no-show.",
+        "sample": "{shows} de {closed} citas cerradas"
       },
       "byStatus": {
         "title": "Citas por estado",
@@ -95,11 +156,24 @@
       "confirmations": {
         "title": "Tasa de confirmación",
         "sent": "Recordatorios enviados",
-        "confirmed": "Citas confirmadas"
+        "confirmed": "Citas confirmadas",
+        "sample": "{confirmed} de {sent} recordatorios respondidos"
       },
       "trend": {
         "title": "Tendencia 14 días",
-        "hint": "Verde: creadas · Rojo: no-show"
+        "hint": "Verde: creadas · Rojo: no-show",
+        "ariaLabel": "Tendencia de citas de los últimos 14 días — barras verdes: citas creadas, barras rojas: no-show.",
+        "legend": {
+          "created": "Creadas",
+          "noShow": "No-show"
+        },
+        "detailToggle": "Ver datos detallados",
+        "tableCaption": "Datos de tendencia de los últimos 14 días",
+        "tableHeaders": {
+          "date": "Fecha",
+          "created": "Creadas",
+          "noShow": "No-show"
+        }
       },
       "status": {
         "PENDIENTE": "Pendiente",
@@ -115,11 +189,37 @@
       "subtitle": "Citas de la clínica.",
       "loadError": "No se pudo cargar la agenda ({status}).",
       "empty": "No hay citas en el rango seleccionado.",
+      "emptyState": {
+        "title": "No hay citas para este día",
+        "description": "Cuando alguien agende, va a aparecer acá."
+      },
+      "viewMonth": "Mes",
       "viewDay": "Día",
       "viewWeek": "Semana",
+      "today": "Hoy",
+      "prevPeriod": "Período anterior",
+      "nextPeriod": "Período siguiente",
+      "datePicker": "Fecha",
+      "viewMode": "Vista",
+      "emptyDay": "Sin citas",
+      "monthOverflow": "+ {count} más",
+      "summary": {
+        "title": "Resumen del día",
+        "appointments": "citas agendadas",
+        "emptyStats": "Sin actividad todavía.",
+        "pendingHint": "{count, plural, one {# cita} other {# citas}} sin confirmar — activá el bot o llamá para asegurar el turno."
+      },
       "filters": {
+        "status": "Estados",
+        "search": "Buscar paciente",
+        "searchPlaceholder": "Nombre o teléfono…",
         "allProfessionals": "Todos los profesionales",
-        "allStatuses": "Todos los estados"
+        "allStatuses": "Todos los estados",
+        "toggle": "Filtros",
+        "clearAll": "Limpiar filtros",
+        "presets": {
+          "pending": "Solo pendientes de confirmar"
+        }
       },
       "detailTitle": "Detalle de cita",
       "detail": {
@@ -141,6 +241,8 @@
       "subtitle": "Bandeja de mensajes.",
       "loadError": "No se pudieron cargar las conversaciones ({status}).",
       "empty": "No hay conversaciones.",
+      "emptyList": "No hay conversaciones en esta bandeja.",
+      "emptyDetail": "Elegí una conversación para ver el detalle.",
       "pickOne": "Elegí una conversación para ver el detalle.",
       "messagesCount": "{n} mensajes",
       "filters": {
@@ -166,13 +268,20 @@
       "send": "Enviar",
       "sending": "Enviando...",
       "sendHint": "Máximo 1500 caracteres.",
-      "takeoverBeforeReply": "Tomá la conversación para poder responder."
+      "takeoverBeforeReply": "Tomá la conversación para poder responder.",
+      "lastRefresh": "Actualizado hace {seconds}s",
+      "refreshing": "Actualizando…",
+      "autoTakeoverHint": "Al enviar tomás la conversación automáticamente.",
+      "errors": {
+        "takeoverFailed": "No se pudo tomar la conversación."
+      }
     },
     "services": {
       "title": "Servicios",
       "subtitle": "Servicios que ofrece la clínica.",
       "loadError": "No se pudieron cargar los servicios ({status}).",
       "empty": "Sin servicios cargados.",
+      "searchPlaceholder": "Buscar servicio…",
       "new": "Nuevo servicio",
       "newTitle": "Nuevo servicio",
       "editTitle": "Editar servicio",
@@ -185,7 +294,10 @@
       "saveFailed": "No se pudo guardar el servicio.",
       "deleted": "Servicio desactivado.",
       "deleteFailed": "No se pudo eliminar el servicio.",
-      "confirmDelete": "¿Desactivar este servicio? Podés reactivarlo después.",
+      "confirmDelete": {
+        "title": "¿Desactivar servicio?",
+        "description": "Vas a desactivar <name>{name}</name>. Podés reactivarlo después."
+      },
       "cancel": "Cancelar",
       "noProfessionals": "No hay profesionales cargados.",
       "fields": {
@@ -208,6 +320,7 @@
       "subtitle": "Profesionales que atienden en la clínica.",
       "loadError": "No se pudieron cargar los profesionales ({status}).",
       "empty": "Sin profesionales cargados.",
+      "searchPlaceholder": "Buscar profesional…",
       "new": "Nuevo profesional",
       "newTitle": "Nuevo profesional",
       "editTitle": "Editar profesional",
@@ -220,7 +333,10 @@
       "saveFailed": "No se pudo guardar el profesional.",
       "deleted": "Profesional desactivado.",
       "deleteFailed": "No se pudo eliminar el profesional.",
-      "confirmDelete": "¿Desactivar este profesional?",
+      "confirmDelete": {
+        "title": "¿Desactivar profesional?",
+        "description": "Vas a desactivar <name>{name}</name>. Podés reactivarlo después."
+      },
       "cancel": "Cancelar",
       "noServices": "No hay servicios cargados todavía.",
       "fields": {
@@ -248,7 +364,10 @@
       "saveFailed": "No se pudo guardar el horario.",
       "deleted": "Horario eliminado.",
       "deleteFailed": "No se pudo eliminar el horario.",
-      "confirmDelete": "¿Eliminar este horario?",
+      "confirmDelete": {
+        "title": "¿Eliminar horario?",
+        "description": "Vas a eliminar <name>{name}</name>. <warn>Esta acción no se puede deshacer.</warn>"
+      },
       "cancel": "Cancelar",
       "allProfessionals": "Toda la clínica",
       "fields": {
@@ -276,6 +395,7 @@
       "subtitle": "Vacaciones y ausencias.",
       "loadError": "No se pudieron cargar los bloqueos ({status}).",
       "empty": "Sin bloqueos cargados.",
+      "searchPlaceholder": "Buscar por motivo…",
       "new": "Nuevo bloqueo",
       "newTitle": "Nuevo bloqueo",
       "editTitle": "Editar bloqueo",
@@ -288,7 +408,10 @@
       "saveFailed": "No se pudo guardar el bloqueo.",
       "deleted": "Bloqueo eliminado.",
       "deleteFailed": "No se pudo eliminar el bloqueo.",
-      "confirmDelete": "¿Eliminar este bloqueo?",
+      "confirmDelete": {
+        "title": "¿Eliminar bloqueo?",
+        "description": "Vas a eliminar <name>{name}</name>. <warn>Esta acción no se puede deshacer.</warn>"
+      },
       "cancel": "Cancelar",
       "allProfessionals": "Toda la clínica",
       "fields": {
@@ -308,34 +431,58 @@
     },
     "faq": {
       "title": "FAQ",
+      "titleKb": "Base de conocimiento",
       "subtitle": "Preguntas frecuentes para el bot.",
+      "subtitleKb": "Artículos que el bot usa para responder a tus pacientes.",
       "loadError": "No se pudieron cargar las FAQs ({status}).",
-      "empty": "Sin FAQs cargadas.",
+      "empty": "Sin artículos cargados. Creá el primero para que el bot pueda responder.",
       "new": "Nueva FAQ",
-      "newTitle": "Nueva FAQ",
-      "editTitle": "Editar FAQ",
+      "newArticle": "Nuevo artículo",
+      "newTitle": "Nuevo artículo",
+      "editTitle": "Editar artículo",
       "edit": "Editar",
       "delete": "Eliminar",
       "actions": "Acciones",
       "save": "Guardar",
       "saving": "Guardando...",
-      "saved": "FAQ guardada.",
-      "saveFailed": "No se pudo guardar la FAQ.",
-      "deleted": "FAQ eliminada.",
-      "deleteFailed": "No se pudo eliminar la FAQ.",
-      "confirmDelete": "¿Eliminar esta FAQ?",
+      "saved": "Artículo guardado.",
+      "saveFailed": "No se pudo guardar el artículo.",
+      "deleted": "Artículo eliminado.",
+      "deleteFailed": "No se pudo eliminar el artículo.",
+      "confirmDelete": {
+        "title": "¿Eliminar artículo?",
+        "description": "Vas a eliminar <name>{name}</name>. <warn>Esta acción no se puede deshacer.</warn>"
+      },
       "cancel": "Cancelar",
+      "back": "Volver",
+      "untitled": "Sin título",
+      "selectOrCreate": "Seleccioná un artículo o creá uno nuevo.",
+      "preview": "Vista previa",
+      "indexed": "Indexada",
+      "notIndexed": "Sin indexar",
+      "notIndexedAriaLabel": "FAQ sin indexar — el bot no puede responderla.",
+      "notIndexedBanner": "{count, plural, =1 {# artículo sin indexar. El bot no puede responderlo.} other {# artículos sin indexar. El bot no puede responderlos.}}",
+      "notIndexedHint": "Verificá `OPENAI_API_KEY` en el servidor o corré `pnpm prisma:reindex-faq`.",
+      "embeddingSkippedToast": "Guardado sin embedding (falta OPENAI_API_KEY). El bot aún no puede responderlo.",
       "fields": {
+        "title": "Título (opcional)",
         "content": "Contenido"
       },
       "placeholders": {
+        "title": "Ej: Cómo agendar una cita",
         "content": "¿Cuánto dura la consulta? La consulta dura 30 minutos..."
       },
       "hints": {
-        "content": "La primera línea funciona como título. Podés usar markdown."
+        "title": "Ayuda a organizar la lista. Si no ponés uno, se usa la primera línea del contenido.",
+        "content": "Podés usar markdown (negrita, listas, enlaces, etc.)."
       },
       "errors": {
+        "title": "El título no puede exceder 200 caracteres.",
+        "titleMax": "El título no puede exceder 200 caracteres.",
         "content": "El contenido debe tener entre 5 y 4000 caracteres."
+      },
+      "counters": {
+        "chars": "{current}/{max} caracteres"
       }
     },
     "whatsapp": {
@@ -364,7 +511,8 @@
         "disconnect": "Desconectar",
         "connecting": "Iniciando…",
         "disconnecting": "Desconectando…",
-        "confirmDisconnect": "¿Seguro que querés desconectar la sesión de WhatsApp? Vas a tener que escanear el QR de nuevo."
+        "confirmDisconnectTitle": "¿Desconectar sesión de WhatsApp?",
+        "confirmDisconnect": "Vas a desconectar la sesión de WhatsApp. Tendrás que escanear el QR de nuevo para reconectar."
       },
       "polling": {
         "fast": "Actualizando cada 3s",

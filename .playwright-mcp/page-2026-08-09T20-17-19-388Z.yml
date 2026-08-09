@@ -1,0 +1,125 @@
+- generic [active] [ref=f6e1]:
+  - generic [ref=f6e2]:
+    - complementary [ref=f6e3]:
+      - generic [ref=f6e4]: AgendaZap
+      - generic [ref=f6e10]:
+        - paragraph [ref=f6e11]: Clínica Demo
+        - paragraph [ref=f6e12]: demo
+      - navigation [ref=f6e13]:
+        - generic [ref=f6e14]:
+          - paragraph [ref=f6e15]: Operación
+          - list [ref=f6e16]:
+            - listitem [ref=f6e17]:
+              - link "Dashboard" [ref=f6e18] [cursor=pointer]:
+                - /url: /es/panel/dashboard
+            - listitem [ref=f6e26]:
+              - link "Agenda" [ref=f6e27] [cursor=pointer]:
+                - /url: /es/panel/agenda
+            - listitem [ref=f6e31]:
+              - link "Conversaciones" [ref=f6e32] [cursor=pointer]:
+                - /url: /es/panel/conversaciones
+        - generic [ref=f6e37]:
+          - paragraph [ref=f6e38]: Configuración
+          - list [ref=f6e39]:
+            - listitem [ref=f6e40]:
+              - link "Servicios" [ref=f6e41] [cursor=pointer]:
+                - /url: /es/panel/servicios
+            - listitem [ref=f6e46]:
+              - link "Profesionales" [ref=f6e47] [cursor=pointer]:
+                - /url: /es/panel/profesionales
+            - listitem [ref=f6e54]:
+              - link "Horarios" [ref=f6e55] [cursor=pointer]:
+                - /url: /es/panel/horarios
+            - listitem [ref=f6e60]:
+              - link "Bloqueos" [ref=f6e61] [cursor=pointer]:
+                - /url: /es/panel/bloqueos
+            - listitem [ref=f6e67]:
+              - link "Base de conocimiento" [ref=f6e68] [cursor=pointer]:
+                - /url: /es/panel/faq
+            - listitem [ref=f6e73]:
+              - link "WhatsApp" [ref=f6e74] [cursor=pointer]:
+                - /url: /es/panel/config/whatsapp
+      - button "Menú de usuario" [ref=f6e79] [cursor=pointer]:
+        - generic [ref=f6e80]: RD
+        - generic [ref=f6e81]:
+          - paragraph [ref=f6e82]: Recepción Demo
+          - paragraph [ref=f6e83]: panel.nav.roles.CLINIC_ADMIN
+    - main [ref=f6e85]:
+      - generic [ref=f6e87]:
+        - generic [ref=f6e88]:
+          - heading "Dashboard" [level=1] [ref=f6e89]
+          - paragraph [ref=f6e90]: Métricas de los últimos 30 días.
+        - generic [ref=f6e91]:
+          - generic [ref=f6e92]:
+            - generic [ref=f6e93]: No-show rate
+            - generic [ref=f6e98]:
+              - paragraph [ref=f6e99]: 21.4%
+              - paragraph [ref=f6e100]: 6 de 28 citas cerradas
+              - paragraph [ref=f6e101]: "% de citas cerradas que fueron no-show."
+          - generic [ref=f6e102]:
+            - generic [ref=f6e103]: Citas por estado
+            - generic [ref=f6e108]:
+              - generic [ref=f6e109]:
+                - generic [ref=f6e110]:
+                  - generic [ref=f6e111]: Pendiente
+                  - generic [ref=f6e112]: "0"
+                - generic [ref=f6e113]:
+                  - generic [ref=f6e114]: Confirmada
+                  - generic [ref=f6e115]: "0"
+                - generic [ref=f6e116]:
+                  - generic [ref=f6e117]: En riesgo
+                  - generic [ref=f6e118]: "0"
+                - generic [ref=f6e119]:
+                  - generic [ref=f6e120]: Atendida
+                  - generic [ref=f6e121]: "22"
+                - generic [ref=f6e122]:
+                  - generic [ref=f6e123]: Cancelada
+                  - generic [ref=f6e124]: "6"
+                - generic [ref=f6e125]:
+                  - generic [ref=f6e126]: No-show
+                  - generic [ref=f6e127]: "6"
+              - paragraph [ref=f6e128]: "Total: 34"
+          - generic [ref=f6e129]:
+            - generic [ref=f6e130]: Tasa de confirmación
+            - generic [ref=f6e135]:
+              - paragraph [ref=f6e136]: 39.3%
+              - paragraph [ref=f6e137]: 22 de 56 recordatorios respondidos
+              - generic [ref=f6e138]:
+                - paragraph [ref=f6e139]: "Recordatorios enviados: 56"
+                - paragraph [ref=f6e140]: "Citas confirmadas: 22"
+          - generic [ref=f6e141]:
+            - generic [ref=f6e142]: Tendencia 14 días
+            - generic [ref=f6e147]:
+              - generic [ref=f6e148]:
+                - generic [ref=f6e149]: Creadas
+                - generic [ref=f6e151]: No-show
+              - 'img "Tendencia de citas de los últimos 14 días — barras verdes: citas creadas, barras rojas: no-show." [ref=f6e153]':
+                - img [ref=f6e156]:
+                  - generic [ref=f6e160]:
+                    - generic [ref=f6e161]: 27 jul
+                    - generic [ref=f6e163]: 30 jul
+                    - generic [ref=f6e165]: 02 ago
+                    - generic [ref=f6e167]: 05 ago
+                    - generic [ref=f6e169]: 09 ago
+                  - generic [ref=f6e172]:
+                    - generic [ref=f6e173]: "0"
+                    - generic [ref=f6e175]: "15"
+                    - generic [ref=f6e177]: "30"
+                    - generic [ref=f6e179]: "45"
+                    - generic [ref=f6e181]: "60"
+              - group [ref=f6e197]:
+                - generic "Ver datos detallados" [ref=f6e198] [cursor=pointer]
+              - paragraph [ref=f6e199]: "Verde: creadas · Rojo: no-show"
+  - region "Notifications alt+T"
+  - button "Open Tanstack query devtools" [ref=f6e250] [cursor=pointer]
+  - generic [ref=f6e303] [cursor=pointer]:
+    - button "Open Next.js Dev Tools" [ref=f6e304]
+    - generic [ref=f6e308]:
+      - button "Open issues overlay" [ref=f6e309]:
+        - generic [ref=f6e310]:
+          - generic [ref=f6e311]: "0"
+          - generic [ref=f6e312]: "1"
+        - generic [ref=f6e313]: Issue
+      - button "Collapse issues badge" [ref=f6e314]
+  - alert [ref=f6e317]
+  - generic [ref=f6e318]: "45"

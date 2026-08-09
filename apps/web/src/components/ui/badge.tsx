@@ -1,11 +1,13 @@
-import { HTMLAttributes, forwardRef } from 'react';
+import * as React from 'react';
+import { cva, type VariantProps } from 'class-variance-authority';
+
 import { cn } from '@/lib/utils';
+import { APPOINTMENT_STATUS_TOKENS } from './tokens';
 
 /**
- * Badge para renderizar estados con colores accesibles (WCAG AA).
- *
- * Los estados de cita AgendaZap tienen paleta fija — mantenerla acá evita
- * inconsistencias entre la agenda, el detalle de cita y el dashboard.
+ * Estados de cita AgendaZap. Fuente única en `tokens.ts` — cualquier badge que
+ * pinte un status DEBE consumir `APPOINTMENT_STATUS_TOKENS` (contrastes WCAG AA
+ * ya verificados en los specs UX).
  */
 export type AppointmentStatus =
   | 'PENDIENTE'
@@ -15,36 +17,42 @@ export type AppointmentStatus =
   | 'CANCELADA'
   | 'NO_SHOW';
 
-export const APPOINTMENT_STATUS_STYLES: Record<AppointmentStatus, string> = {
-  PENDIENTE: 'bg-yellow-100 text-yellow-900 border-yellow-300',
-  CONFIRMADA: 'bg-green-100 text-green-900 border-green-300',
-  EN_RIESGO: 'bg-orange-100 text-orange-900 border-orange-300',
-  ATENDIDA: 'bg-blue-100 text-blue-900 border-blue-300',
-  CANCELADA: 'bg-gray-100 text-gray-700 border-gray-300',
-  NO_SHOW: 'bg-red-100 text-red-900 border-red-300',
-};
-
-interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
-  variant?: 'default' | AppointmentStatus;
-}
-
-export const Badge = forwardRef<HTMLSpanElement, BadgeProps>(
-  ({ className, variant = 'default', ...props }, ref) => {
-    const style =
-      variant === 'default'
-        ? 'bg-gray-100 text-gray-800 border-gray-300'
-        : APPOINTMENT_STATUS_STYLES[variant];
-    return (
-      <span
-        ref={ref}
-        className={cn(
-          'inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium',
-          style,
-          className,
-        )}
-        {...props}
-      />
-    );
+const badgeVariants = cva(
+  'inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
+  {
+    variants: {
+      variant: {
+        // Variants shadcn estándar.
+        default:
+          'border-transparent bg-primary text-primary-foreground shadow hover:bg-primary/80',
+        secondary:
+          'border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80',
+        destructive:
+          'border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80',
+        outline: 'text-foreground',
+        // Variants extra AgendaZap: appointment status (tokens semánticos).
+        PENDIENTE: APPOINTMENT_STATUS_TOKENS.PENDIENTE.intense,
+        CONFIRMADA: APPOINTMENT_STATUS_TOKENS.CONFIRMADA.intense,
+        EN_RIESGO: APPOINTMENT_STATUS_TOKENS.EN_RIESGO.intense,
+        ATENDIDA: APPOINTMENT_STATUS_TOKENS.ATENDIDA.intense,
+        CANCELADA: APPOINTMENT_STATUS_TOKENS.CANCELADA.intense,
+        NO_SHOW: APPOINTMENT_STATUS_TOKENS.NO_SHOW.intense,
+      },
+    },
+    defaultVariants: {
+      variant: 'default',
+    },
   },
 );
-Badge.displayName = 'Badge';
+
+export interface BadgeProps
+  extends React.HTMLAttributes<HTMLDivElement>,
+    VariantProps<typeof badgeVariants> {}
+
+function Badge({ className, variant, ...props }: BadgeProps) {
+  return (
+    <div className={cn(badgeVariants({ variant }), className)} {...props} />
+  );
+}
+
+export { Badge, badgeVariants };

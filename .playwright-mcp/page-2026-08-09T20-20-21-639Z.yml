@@ -1,0 +1,285 @@
+- generic [active] [ref=f11e1]:
+  - generic [ref=f11e2]:
+    - complementary [ref=f11e3]:
+      - generic [ref=f11e4]: AgendaZap
+      - generic [ref=f11e10]:
+        - paragraph [ref=f11e11]: Clínica Demo
+        - paragraph [ref=f11e12]: demo
+      - navigation [ref=f11e13]:
+        - generic [ref=f11e14]:
+          - paragraph [ref=f11e15]: Operación
+          - list [ref=f11e16]:
+            - listitem [ref=f11e17]:
+              - link "Dashboard" [ref=f11e18] [cursor=pointer]:
+                - /url: /es/panel/dashboard
+            - listitem [ref=f11e25]:
+              - link "Agenda" [ref=f11e26] [cursor=pointer]:
+                - /url: /es/panel/agenda
+            - listitem [ref=f11e31]:
+              - link "Conversaciones" [ref=f11e32] [cursor=pointer]:
+                - /url: /es/panel/conversaciones
+        - generic [ref=f11e37]:
+          - paragraph [ref=f11e38]: Configuración
+          - list [ref=f11e39]:
+            - listitem [ref=f11e40]:
+              - link "Servicios" [ref=f11e41] [cursor=pointer]:
+                - /url: /es/panel/servicios
+            - listitem [ref=f11e46]:
+              - link "Profesionales" [ref=f11e47] [cursor=pointer]:
+                - /url: /es/panel/profesionales
+            - listitem [ref=f11e54]:
+              - link "Horarios" [ref=f11e55] [cursor=pointer]:
+                - /url: /es/panel/horarios
+            - listitem [ref=f11e60]:
+              - link "Bloqueos" [ref=f11e61] [cursor=pointer]:
+                - /url: /es/panel/bloqueos
+            - listitem [ref=f11e67]:
+              - link "Base de conocimiento" [ref=f11e68] [cursor=pointer]:
+                - /url: /es/panel/faq
+            - listitem [ref=f11e73]:
+              - link "WhatsApp" [ref=f11e74] [cursor=pointer]:
+                - /url: /es/panel/config/whatsapp
+      - button "Menú de usuario" [ref=f11e79] [cursor=pointer]:
+        - generic [ref=f11e80]: RD
+        - generic [ref=f11e81]:
+          - paragraph [ref=f11e82]: Recepción Demo
+          - paragraph [ref=f11e83]: panel.nav.roles.CLINIC_ADMIN
+    - main [ref=f11e85]:
+      - generic [ref=f11e87]:
+        - generic [ref=f11e89]:
+          - heading "Agenda" [level=1] [ref=f11e90]
+          - paragraph [ref=f11e91]: Citas de la clínica.
+        - generic [ref=f11e92]:
+          - generic [ref=f11e93]:
+            - generic [ref=f11e94]:
+              - generic [ref=f11e95]:
+                - button "Período anterior" [ref=f11e96] [cursor=pointer]
+                - button "Período siguiente" [ref=f11e97] [cursor=pointer]
+              - button "Hoy" [ref=f11e98] [cursor=pointer]
+              - heading "Agosto de 2026" [level=2] [ref=f11e100]
+            - tablist [ref=f11e102]:
+              - tab "Mes" [selected] [ref=f11e103] [cursor=pointer]
+              - tab "Semana" [ref=f11e109] [cursor=pointer]
+              - tab "Día" [ref=f11e112] [cursor=pointer]
+          - generic [ref=f11e117]:
+            - generic [ref=f11e118]:
+              - generic [ref=f11e119]: Estados
+              - button "Pendiente" [ref=f11e122] [cursor=pointer]
+              - button "Confirmada" [ref=f11e124] [cursor=pointer]
+              - button "En riesgo" [ref=f11e126] [cursor=pointer]
+              - button "Atendida" [ref=f11e128] [cursor=pointer]
+              - button "Cancelada" [ref=f11e130] [cursor=pointer]
+              - button "No-show" [ref=f11e132] [cursor=pointer]
+              - button "Solo pendientes de confirmar" [ref=f11e134] [cursor=pointer]
+            - generic [ref=f11e138]:
+              - searchbox "Buscar paciente" [ref=f11e140]
+              - generic [ref=f11e141]:
+                - generic [ref=f11e142]: Todos los profesionales
+                - combobox "Todos los profesionales" [ref=f11e143] [cursor=pointer]
+                - combobox [ref=f11e146]
+        - generic [ref=f11e148]:
+          - generic [ref=f11e149]:
+            - generic [ref=f11e150]: lun
+            - generic [ref=f11e151]: mar
+            - generic [ref=f11e152]: mié
+            - generic [ref=f11e153]: jue
+            - generic [ref=f11e154]: vie
+            - generic [ref=f11e155]: sáb
+            - generic [ref=f11e156]: dom
+          - generic [ref=f11e157]:
+            - button "2026-07-27 · 0 citas" [ref=f11e158] [cursor=pointer]:
+              - generic [ref=f11e159]: "27"
+            - button "2026-07-28 · 0 citas" [ref=f11e162] [cursor=pointer]:
+              - generic [ref=f11e163]: "28"
+            - button "2026-07-29 · 1 citas" [ref=f11e166] [cursor=pointer]:
+              - generic [ref=f11e167]:
+                - generic [ref=f11e168]: "29"
+                - generic [ref=f11e169]: "1"
+              - button "13:00 Ana Martínez" [ref=f11e171]:
+                - generic [ref=f11e173]: 13:00
+                - generic [ref=f11e174]: Ana Martínez
+            - button "2026-07-30 · 2 citas" [ref=f11e175] [cursor=pointer]:
+              - generic [ref=f11e176]:
+                - generic [ref=f11e177]: "30"
+                - generic [ref=f11e178]: "2"
+              - generic [ref=f11e179]:
+                - button "13:00 Diego Morales" [ref=f11e180]:
+                  - generic [ref=f11e182]: 13:00
+                  - generic [ref=f11e183]: Diego Morales
+                - button "16:00 Carlos Rodríguez" [ref=f11e184]:
+                  - generic [ref=f11e186]: 16:00
+                  - generic [ref=f11e187]: Carlos Rodríguez
+            - button "2026-07-31 · 3 citas" [ref=f11e188] [cursor=pointer]:
+              - generic [ref=f11e189]:
+                - generic [ref=f11e190]: "31"
+                - generic [ref=f11e191]: "3"
+              - generic [ref=f11e192]:
+                - button "10:00 María González" [ref=f11e193]:
+                  - generic [ref=f11e195]: 10:00
+                  - generic [ref=f11e196]: María González
+                - button "13:00 Laura Blanco" [ref=f11e197]:
+                  - generic [ref=f11e199]: 13:00
+                  - generic [ref=f11e200]: Laura Blanco
+                - button "18:00 Ana Martínez" [ref=f11e201]:
+                  - generic [ref=f11e203]: 18:00
+                  - generic [ref=f11e204]: Ana Martínez
+            - button "2026-08-01 · 0 citas" [ref=f11e205] [cursor=pointer]:
+              - generic [ref=f11e206]: "1"
+            - button "2026-08-02 · 0 citas" [ref=f11e209] [cursor=pointer]:
+              - generic [ref=f11e210]: "2"
+            - button "2026-08-03 · 3 citas" [ref=f11e213] [cursor=pointer]:
+              - generic [ref=f11e214]:
+                - generic [ref=f11e215]: "3"
+                - generic [ref=f11e216]: "3"
+              - generic [ref=f11e217]:
+                - button "12:00 Sofía Pérez" [ref=f11e218]:
+                  - generic [ref=f11e220]: 12:00
+                  - generic [ref=f11e221]: Sofía Pérez
+                - button "13:00 Luis Hernández" [ref=f11e222]:
+                  - generic [ref=f11e224]: 13:00
+                  - generic [ref=f11e225]: Luis Hernández
+                - button "16:00 María González" [ref=f11e226]:
+                  - generic [ref=f11e228]: 16:00
+                  - generic [ref=f11e229]: María González
+            - button "2026-08-04 · 3 citas" [ref=f11e230] [cursor=pointer]:
+              - generic [ref=f11e231]:
+                - generic [ref=f11e232]: "4"
+                - generic [ref=f11e233]: "3"
+              - generic [ref=f11e234]:
+                - button "10:00 Carlos Rodríguez" [ref=f11e235]:
+                  - generic [ref=f11e237]: 10:00
+                  - generic [ref=f11e238]: Carlos Rodríguez
+                - button "12:00 María González" [ref=f11e239]:
+                  - generic [ref=f11e241]: 12:00
+                  - generic [ref=f11e242]: María González
+                - button "15:00 Carlos Rodríguez" [ref=f11e243]:
+                  - generic [ref=f11e245]: 15:00
+                  - generic [ref=f11e246]: Carlos Rodríguez
+            - button "2026-08-05 · 0 citas" [ref=f11e247] [cursor=pointer]:
+              - generic [ref=f11e248]: "5"
+            - button "2026-08-06 · 1 citas" [ref=f11e251] [cursor=pointer]:
+              - generic [ref=f11e252]:
+                - generic [ref=f11e253]: "6"
+                - generic [ref=f11e254]: "1"
+              - button "15:00 Sofía Pérez" [ref=f11e256]:
+                - generic [ref=f11e258]: 15:00
+                - generic [ref=f11e259]: Sofía Pérez
+            - button "2026-08-07 · 1 citas" [ref=f11e260] [cursor=pointer]:
+              - generic [ref=f11e261]:
+                - generic [ref=f11e262]: "7"
+                - generic [ref=f11e263]: "1"
+              - button "15:00 Laura Blanco" [ref=f11e265]:
+                - generic [ref=f11e267]: 15:00
+                - generic [ref=f11e268]: Laura Blanco
+            - button "2026-08-08 · 0 citas" [ref=f11e269] [cursor=pointer]:
+              - generic [ref=f11e270]: "8"
+            - button "2026-08-09 · 0 citas" [ref=f11e273] [cursor=pointer]:
+              - generic [ref=f11e274]: "9"
+            - button "2026-08-10 · 5 citas" [ref=f11e277] [cursor=pointer]:
+              - generic [ref=f11e278]:
+                - generic [ref=f11e279]: "10"
+                - generic [ref=f11e280]: "5"
+              - generic [ref=f11e281]:
+                - button "10:00 Juan Test" [ref=f11e282]:
+                  - generic [ref=f11e284]: 10:00
+                  - generic [ref=f11e285]: Juan Test
+                - button "15:00 Carlos Rodríguez" [ref=f11e286]:
+                  - generic [ref=f11e288]: 15:00
+                  - generic [ref=f11e289]: Carlos Rodríguez
+                - button "15:00 Diego Morales" [ref=f11e290]:
+                  - generic [ref=f11e292]: 15:00
+                  - generic [ref=f11e293]: Diego Morales
+                - generic [ref=f11e294]: + 2 más
+            - button "2026-08-11 · 3 citas" [ref=f11e295] [cursor=pointer]:
+              - generic [ref=f11e296]:
+                - generic [ref=f11e297]: "11"
+                - generic [ref=f11e298]: "3"
+              - generic [ref=f11e299]:
+                - button "10:00 Test1" [ref=f11e300]:
+                  - generic [ref=f11e302]: 10:00
+                  - generic [ref=f11e303]: Test1
+                - button "16:00 Laura Blanco" [ref=f11e304]:
+                  - generic [ref=f11e306]: 16:00
+                  - generic [ref=f11e307]: Laura Blanco
+                - button "18:00 Laura Blanco" [ref=f11e308]:
+                  - generic [ref=f11e310]: 18:00
+                  - generic [ref=f11e311]: Laura Blanco
+            - button "2026-08-12 · 3 citas" [ref=f11e312] [cursor=pointer]:
+              - generic [ref=f11e313]:
+                - generic [ref=f11e314]: "12"
+                - generic [ref=f11e315]: "3"
+              - generic [ref=f11e316]:
+                - button "10:00 Test2" [ref=f11e317]:
+                  - generic [ref=f11e319]: 10:00
+                  - generic [ref=f11e320]: Test2
+                - button "10:00 Ana Martínez" [ref=f11e321]:
+                  - generic [ref=f11e323]: 10:00
+                  - generic [ref=f11e324]: Ana Martínez
+                - button "13:00 Sofía Pérez" [ref=f11e325]:
+                  - generic [ref=f11e327]: 13:00
+                  - generic [ref=f11e328]: Sofía Pérez
+            - button "2026-08-13 · 2 citas" [ref=f11e329] [cursor=pointer]:
+              - generic [ref=f11e330]:
+                - generic [ref=f11e331]: "13"
+                - generic [ref=f11e332]: "2"
+              - generic [ref=f11e333]:
+                - button "10:00 Test3" [ref=f11e334]:
+                  - generic [ref=f11e336]: 10:00
+                  - generic [ref=f11e337]: Test3
+                - button "16:00 Carlos Rodríguez" [ref=f11e338]:
+                  - generic [ref=f11e340]: 16:00
+                  - generic [ref=f11e341]: Carlos Rodríguez
+            - button "2026-08-14 · 1 citas" [ref=f11e342] [cursor=pointer]:
+              - generic [ref=f11e343]:
+                - generic [ref=f11e344]: "14"
+                - generic [ref=f11e345]: "1"
+              - button "10:00 Test4" [ref=f11e347]:
+                - generic [ref=f11e349]: 10:00
+                - generic [ref=f11e350]: Test4
+            - button "2026-08-15 · 0 citas" [ref=f11e351] [cursor=pointer]:
+              - generic [ref=f11e352]: "15"
+            - button "2026-08-16 · 0 citas" [ref=f11e355] [cursor=pointer]:
+              - generic [ref=f11e356]: "16"
+            - button "2026-08-17 · 0 citas" [ref=f11e359] [cursor=pointer]:
+              - generic [ref=f11e360]: "17"
+            - button "2026-08-18 · 0 citas" [ref=f11e363] [cursor=pointer]:
+              - generic [ref=f11e364]: "18"
+            - button "2026-08-19 · 0 citas" [ref=f11e367] [cursor=pointer]:
+              - generic [ref=f11e368]: "19"
+            - button "2026-08-20 · 0 citas" [ref=f11e371] [cursor=pointer]:
+              - generic [ref=f11e372]: "20"
+            - button "2026-08-21 · 0 citas" [ref=f11e375] [cursor=pointer]:
+              - generic [ref=f11e376]: "21"
+            - button "2026-08-22 · 0 citas" [ref=f11e379] [cursor=pointer]:
+              - generic [ref=f11e380]: "22"
+            - button "2026-08-23 · 0 citas" [ref=f11e383] [cursor=pointer]:
+              - generic [ref=f11e384]: "23"
+            - button "2026-08-24 · 0 citas" [ref=f11e387] [cursor=pointer]:
+              - generic [ref=f11e388]: "24"
+            - button "2026-08-25 · 0 citas" [ref=f11e391] [cursor=pointer]:
+              - generic [ref=f11e392]: "25"
+            - button "2026-08-26 · 0 citas" [ref=f11e395] [cursor=pointer]:
+              - generic [ref=f11e396]: "26"
+            - button "2026-08-27 · 0 citas" [ref=f11e399] [cursor=pointer]:
+              - generic [ref=f11e400]: "27"
+            - button "2026-08-28 · 0 citas" [ref=f11e403] [cursor=pointer]:
+              - generic [ref=f11e404]: "28"
+            - button "2026-08-29 · 0 citas" [ref=f11e407] [cursor=pointer]:
+              - generic [ref=f11e408]: "29"
+            - button "2026-08-30 · 0 citas" [ref=f11e411] [cursor=pointer]:
+              - generic [ref=f11e412]: "30"
+            - button "2026-08-31 · 0 citas" [ref=f11e415] [cursor=pointer]:
+              - generic [ref=f11e416]: "31"
+            - button "2026-09-01 · 0 citas" [ref=f11e419] [cursor=pointer]:
+              - generic [ref=f11e420]: "1"
+            - button "2026-09-02 · 0 citas" [ref=f11e423] [cursor=pointer]:
+              - generic [ref=f11e424]: "2"
+            - button "2026-09-03 · 0 citas" [ref=f11e427] [cursor=pointer]:
+              - generic [ref=f11e428]: "3"
+            - button "2026-09-04 · 0 citas" [ref=f11e431] [cursor=pointer]:
+              - generic [ref=f11e432]: "4"
+            - button "2026-09-05 · 0 citas" [ref=f11e435] [cursor=pointer]:
+              - generic [ref=f11e436]: "5"
+            - button "2026-09-06 · 0 citas" [ref=f11e439] [cursor=pointer]:
+              - generic [ref=f11e440]: "6"
+  - region "Notifications alt+T"

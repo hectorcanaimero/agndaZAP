@@ -1,0 +1,173 @@
+- generic [active] [ref=f3e1]:
+  - generic [ref=f3e2]:
+    - complementary [ref=f3e3]:
+      - generic [ref=f3e4]: AgendaZap
+      - paragraph [ref=f3e11]: —
+      - navigation [ref=f3e12]:
+        - generic [ref=f3e13]:
+          - paragraph [ref=f3e14]: Operación
+          - list [ref=f3e15]:
+            - listitem [ref=f3e16]:
+              - link "Dashboard" [ref=f3e17] [cursor=pointer]:
+                - /url: /es/panel/dashboard
+            - listitem [ref=f3e24]:
+              - link "Agenda" [ref=f3e25] [cursor=pointer]:
+                - /url: /es/panel/agenda
+            - listitem [ref=f3e30]:
+              - link "Conversaciones" [ref=f3e31] [cursor=pointer]:
+                - /url: /es/panel/conversaciones
+        - generic [ref=f3e36]:
+          - paragraph [ref=f3e37]: Configuración
+          - list [ref=f3e38]:
+            - listitem [ref=f3e39]:
+              - link "Servicios" [ref=f3e40] [cursor=pointer]:
+                - /url: /es/panel/servicios
+            - listitem [ref=f3e45]:
+              - link "Profesionales" [ref=f3e46] [cursor=pointer]:
+                - /url: /es/panel/profesionales
+            - listitem [ref=f3e53]:
+              - link "Horarios" [ref=f3e54] [cursor=pointer]:
+                - /url: /es/panel/horarios
+            - listitem [ref=f3e59]:
+              - link "Bloqueos" [ref=f3e60] [cursor=pointer]:
+                - /url: /es/panel/bloqueos
+            - listitem [ref=f3e66]:
+              - link "Base de conocimiento" [ref=f3e67] [cursor=pointer]:
+                - /url: /es/panel/faq
+            - listitem [ref=f3e72]:
+              - link "WhatsApp" [ref=f3e73] [cursor=pointer]:
+                - /url: /es/panel/config/whatsapp
+      - button "Menú de usuario" [ref=f3e78] [cursor=pointer]:
+        - generic [ref=f3e79]: SA
+        - generic [ref=f3e80]:
+          - paragraph [ref=f3e81]: Super Admin
+          - paragraph [ref=f3e82]: panel.nav.roles.SUPERADMIN
+    - main [ref=f3e84]:
+      - generic [ref=f3e86]:
+        - generic [ref=f3e88]:
+          - heading "Agenda" [level=1] [ref=f3e89]
+          - paragraph [ref=f3e90]: Citas de la clínica.
+        - generic [ref=f3e91]: No se pudo cargar la agenda (400).
+        - generic [ref=f3e92]:
+          - generic [ref=f3e93]:
+            - generic [ref=f3e94]:
+              - generic [ref=f3e95]:
+                - button "Período anterior" [ref=f3e96] [cursor=pointer]
+                - button "Período siguiente" [ref=f3e97] [cursor=pointer]
+              - button "Hoy" [ref=f3e98] [cursor=pointer]
+              - heading "Agosto de 2026" [level=2] [ref=f3e100]
+            - tablist [ref=f3e102]:
+              - tab "Mes" [selected] [ref=f3e103] [cursor=pointer]
+              - tab "Semana" [ref=f3e109] [cursor=pointer]
+              - tab "Día" [ref=f3e112] [cursor=pointer]
+          - generic [ref=f3e117]:
+            - generic [ref=f3e118]:
+              - generic [ref=f3e119]: Estados
+              - button "Pendiente" [ref=f3e122] [cursor=pointer]
+              - button "Confirmada" [ref=f3e124] [cursor=pointer]
+              - button "En riesgo" [ref=f3e126] [cursor=pointer]
+              - button "Atendida" [ref=f3e128] [cursor=pointer]
+              - button "Cancelada" [ref=f3e130] [cursor=pointer]
+              - button "No-show" [ref=f3e132] [cursor=pointer]
+              - button "Solo pendientes de confirmar" [ref=f3e134] [cursor=pointer]
+            - generic [ref=f3e138]:
+              - searchbox "Buscar paciente" [ref=f3e140]
+              - generic [ref=f3e141]:
+                - generic [ref=f3e142]: Todos los profesionales
+                - combobox "Todos los profesionales" [ref=f3e143] [cursor=pointer]
+                - combobox [ref=f3e146]
+        - generic [ref=f3e148]:
+          - generic [ref=f3e149]:
+            - generic [ref=f3e150]: lun
+            - generic [ref=f3e151]: mar
+            - generic [ref=f3e152]: mié
+            - generic [ref=f3e153]: jue
+            - generic [ref=f3e154]: vie
+            - generic [ref=f3e155]: sáb
+            - generic [ref=f3e156]: dom
+          - generic [ref=f3e157]:
+            - button "2026-07-27 · 0 citas" [ref=f3e158] [cursor=pointer]:
+              - generic [ref=f3e159]: "27"
+            - button "2026-07-28 · 0 citas" [ref=f3e162] [cursor=pointer]:
+              - generic [ref=f3e163]: "28"
+            - button "2026-07-29 · 0 citas" [ref=f3e166] [cursor=pointer]:
+              - generic [ref=f3e167]: "29"
+            - button "2026-07-30 · 0 citas" [ref=f3e170] [cursor=pointer]:
+              - generic [ref=f3e171]: "30"
+            - button "2026-07-31 · 0 citas" [ref=f3e174] [cursor=pointer]:
+              - generic [ref=f3e175]: "31"
+            - button "2026-08-01 · 0 citas" [ref=f3e178] [cursor=pointer]:
+              - generic [ref=f3e179]: "1"
+            - button "2026-08-02 · 0 citas" [ref=f3e182] [cursor=pointer]:
+              - generic [ref=f3e183]: "2"
+            - button "2026-08-03 · 0 citas" [ref=f3e186] [cursor=pointer]:
+              - generic [ref=f3e187]: "3"
+            - button "2026-08-04 · 0 citas" [ref=f3e190] [cursor=pointer]:
+              - generic [ref=f3e191]: "4"
+            - button "2026-08-05 · 0 citas" [ref=f3e194] [cursor=pointer]:
+              - generic [ref=f3e195]: "5"
+            - button "2026-08-06 · 0 citas" [ref=f3e198] [cursor=pointer]:
+              - generic [ref=f3e199]: "6"
+            - button "2026-08-07 · 0 citas" [ref=f3e202] [cursor=pointer]:
+              - generic [ref=f3e203]: "7"
+            - button "2026-08-08 · 0 citas" [ref=f3e206] [cursor=pointer]:
+              - generic [ref=f3e207]: "8"
+            - button "2026-08-09 · 0 citas" [ref=f3e210] [cursor=pointer]:
+              - generic [ref=f3e211]: "9"
+            - button "2026-08-10 · 0 citas" [ref=f3e214] [cursor=pointer]:
+              - generic [ref=f3e215]: "10"
+            - button "2026-08-11 · 0 citas" [ref=f3e218] [cursor=pointer]:
+              - generic [ref=f3e219]: "11"
+            - button "2026-08-12 · 0 citas" [ref=f3e222] [cursor=pointer]:
+              - generic [ref=f3e223]: "12"
+            - button "2026-08-13 · 0 citas" [ref=f3e226] [cursor=pointer]:
+              - generic [ref=f3e227]: "13"
+            - button "2026-08-14 · 0 citas" [ref=f3e230] [cursor=pointer]:
+              - generic [ref=f3e231]: "14"
+            - button "2026-08-15 · 0 citas" [ref=f3e234] [cursor=pointer]:
+              - generic [ref=f3e235]: "15"
+            - button "2026-08-16 · 0 citas" [ref=f3e238] [cursor=pointer]:
+              - generic [ref=f3e239]: "16"
+            - button "2026-08-17 · 0 citas" [ref=f3e242] [cursor=pointer]:
+              - generic [ref=f3e243]: "17"
+            - button "2026-08-18 · 0 citas" [ref=f3e246] [cursor=pointer]:
+              - generic [ref=f3e247]: "18"
+            - button "2026-08-19 · 0 citas" [ref=f3e250] [cursor=pointer]:
+              - generic [ref=f3e251]: "19"
+            - button "2026-08-20 · 0 citas" [ref=f3e254] [cursor=pointer]:
+              - generic [ref=f3e255]: "20"
+            - button "2026-08-21 · 0 citas" [ref=f3e258] [cursor=pointer]:
+              - generic [ref=f3e259]: "21"
+            - button "2026-08-22 · 0 citas" [ref=f3e262] [cursor=pointer]:
+              - generic [ref=f3e263]: "22"
+            - button "2026-08-23 · 0 citas" [ref=f3e266] [cursor=pointer]:
+              - generic [ref=f3e267]: "23"
+            - button "2026-08-24 · 0 citas" [ref=f3e270] [cursor=pointer]:
+              - generic [ref=f3e271]: "24"
+            - button "2026-08-25 · 0 citas" [ref=f3e274] [cursor=pointer]:
+              - generic [ref=f3e275]: "25"
+            - button "2026-08-26 · 0 citas" [ref=f3e278] [cursor=pointer]:
+              - generic [ref=f3e279]: "26"
+            - button "2026-08-27 · 0 citas" [ref=f3e282] [cursor=pointer]:
+              - generic [ref=f3e283]: "27"
+            - button "2026-08-28 · 0 citas" [ref=f3e286] [cursor=pointer]:
+              - generic [ref=f3e287]: "28"
+            - button "2026-08-29 · 0 citas" [ref=f3e290] [cursor=pointer]:
+              - generic [ref=f3e291]: "29"
+            - button "2026-08-30 · 0 citas" [ref=f3e294] [cursor=pointer]:
+              - generic [ref=f3e295]: "30"
+            - button "2026-08-31 · 0 citas" [ref=f3e298] [cursor=pointer]:
+              - generic [ref=f3e299]: "31"
+            - button "2026-09-01 · 0 citas" [ref=f3e302] [cursor=pointer]:
+              - generic [ref=f3e303]: "1"
+            - button "2026-09-02 · 0 citas" [ref=f3e306] [cursor=pointer]:
+              - generic [ref=f3e307]: "2"
+            - button "2026-09-03 · 0 citas" [ref=f3e310] [cursor=pointer]:
+              - generic [ref=f3e311]: "3"
+            - button "2026-09-04 · 0 citas" [ref=f3e314] [cursor=pointer]:
+              - generic [ref=f3e315]: "4"
+            - button "2026-09-05 · 0 citas" [ref=f3e318] [cursor=pointer]:
+              - generic [ref=f3e319]: "5"
+            - button "2026-09-06 · 0 citas" [ref=f3e322] [cursor=pointer]:
+              - generic [ref=f3e323]: "6"
+  - region "Notifications alt+T"

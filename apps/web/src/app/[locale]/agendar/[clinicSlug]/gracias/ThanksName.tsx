@@ -40,10 +40,14 @@ export function ThanksName() {
   // nombre para evitar mismatch. Post-hydration se rellena.
   if (!hydrated) {
     return (
-      <h1 className="text-2xl font-bold text-gray-900">{t('title', { name: '' })}</h1>
+      <h1 className="mt-4 text-2xl font-bold tracking-tight text-gray-900">
+        {t('title', { name: '' })}
+      </h1>
     );
   }
   return (
-    <h1 className="text-2xl font-bold text-gray-900">{t('title', { name })}</h1>
+    <h1 className="mt-4 text-2xl font-bold tracking-tight text-gray-900">
+      {t('title', { name })}
+    </h1>
   );
 }

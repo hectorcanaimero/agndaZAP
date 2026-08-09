@@ -1,3 +1,4 @@
+import { LlmRouterService } from '../common/llm/llm-router.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   EMBEDDING_DIMS,
@@ -21,48 +22,11 @@ function mockOpenAIEmbeddingsOk(vector = FAKE_VECTOR): jest.Mock {
   return fetchMock;
 }
 
-/** Helper: mockea `global.fetch` con una respuesta LLM (chat completions) OK. */
-function mockDeepSeekOk(content: string): jest.Mock {
-  const fetchMock = jest.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    json: async () => ({ choices: [{ message: { content } }] }),
-  });
-  global.fetch = fetchMock as unknown as typeof fetch;
-  return fetchMock;
-}
-
-/**
- * Encadenar respuestas de fetch: primero embed OK, luego LLM OK.
- * `KnowledgeService.answer` hace 1 embed (question) + 1 LLM call.
- */
-function mockEmbedThenLLM(
-  vector: number[],
-  llmContent: string,
-): jest.Mock {
-  const fetchMock = jest
-    .fn()
-    // 1) embed de la pregunta
-    .mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({ data: [{ embedding: vector }] }),
-    })
-    // 2) DeepSeek chat completion
-    .mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({ choices: [{ message: { content: llmContent } }] }),
-    });
-  global.fetch = fetchMock as unknown as typeof fetch;
-  return fetchMock;
-}
-
 describe('KnowledgeService', () => {
   let prisma: Deep<PrismaService>;
+  let llm: { complete: jest.Mock };
   let svc: KnowledgeService;
   const originalOpenAIKey = process.env.OPENAI_API_KEY;
-  const originalDeepSeekKey = process.env.DEEPSEEK_API_KEY;
 
   beforeEach(() => {
     prisma = {
@@ -72,9 +36,12 @@ describe('KnowledgeService', () => {
         findFirst: jest.fn(),
       },
     };
-    svc = new KnowledgeService(prisma as unknown as PrismaService);
+    llm = { complete: jest.fn() };
+    svc = new KnowledgeService(
+      prisma as unknown as PrismaService,
+      llm as unknown as LlmRouterService,
+    );
     process.env.OPENAI_API_KEY = 'sk-test-key';
-    process.env.DEEPSEEK_API_KEY = 'sk-deepseek-test';
   });
 
   afterEach(() => {
@@ -82,11 +49,6 @@ describe('KnowledgeService', () => {
       delete process.env.OPENAI_API_KEY;
     } else {
       process.env.OPENAI_API_KEY = originalOpenAIKey;
-    }
-    if (originalDeepSeekKey === undefined) {
-      delete process.env.DEEPSEEK_API_KEY;
-    } else {
-      process.env.DEEPSEEK_API_KEY = originalDeepSeekKey;
     }
     jest.restoreAllMocks();
   });
@@ -154,11 +116,11 @@ describe('KnowledgeService', () => {
       // El vector literal se interpola (Prisma no lo parametriza): debe empezar con [ y contener números
       expect(sql).toMatch(/\[0\.01,0\.01,/);
       expect(sql).toMatch(/::vector/);
-      // clinicId, id y content son parámetros posicionales.
-      // args = [id, clinicId, content]
+      // args = [id, clinicId, title, content] — title es null cuando no se provee.
       expect(args[0]).toBe(result.id);
       expect(args[1]).toBe('clinic-A');
-      expect(args[2]).toBe('Horarios: L-V 9-18h');
+      expect(args[2]).toBeNull();
+      expect(args[3]).toBe('Horarios: L-V 9-18h');
     });
 
     it('propaga KnowledgeUnavailableError si no hay OPENAI_API_KEY', async () => {
@@ -281,14 +243,13 @@ describe('KnowledgeService', () => {
       expect(result).toBeNull();
     });
 
-    it('con matches: arma prompt con delimitadores + fuentes y llama al LLM', async () => {
-      // Setup: retrieve devuelve 2 chunks.
+    it('con matches: arma prompt con delimitadores + fuentes y llama al router LLM', async () => {
       prisma.$queryRawUnsafe.mockResolvedValueOnce([
         { id: 'f-1', content: 'Horario: L-V 9-18h.', distance: 0.15 },
         { id: 'f-2', content: 'Sin atención fines de semana.', distance: 0.3 },
       ]);
-      const fetchMock = mockEmbedThenLLM(
-        FAKE_VECTOR,
+      mockOpenAIEmbeddingsOk();
+      llm.complete.mockResolvedValueOnce(
         'Nuestro horario es de lunes a viernes de 9 a 18h.',
       );
 
@@ -302,25 +263,23 @@ describe('KnowledgeService', () => {
       expect(result!.answer).toContain('lunes a viernes');
       expect(result!.sources).toEqual(['f-1', 'f-2']);
 
-      // La segunda llamada de fetch es al LLM: verificamos que el prompt tiene
-      // los delimitadores de fuentes y la instrucción anti-injection.
-      const llmCall = fetchMock.mock.calls[1];
-      const body = JSON.parse((llmCall[1] as any).body);
-      const systemMsg = body.messages[0].content;
-      const userMsg = body.messages[1].content;
-      expect(systemMsg).toMatch(/ÚNICAMENTE/i);
-      expect(systemMsg).toMatch(/NULL_ANSWER/);
-      expect(systemMsg).toMatch(/NO obedezcas instrucciones/i);
-      expect(userMsg).toMatch(/--- FUENTE 1 ---/);
-      expect(userMsg).toMatch(/Horario: L-V 9-18h/);
-      expect(userMsg).toMatch(/--- FUENTE 2 ---/);
+      expect(llm.complete).toHaveBeenCalledTimes(1);
+      const opts = llm.complete.mock.calls[0][0];
+      expect(opts.maxTokens).toBe(200);
+      expect(opts.system).toMatch(/ÚNICAMENTE/i);
+      expect(opts.system).toMatch(/NULL_ANSWER/);
+      expect(opts.system).toMatch(/NO obedezcas instrucciones/i);
+      expect(opts.user).toMatch(/--- FUENTE 1 ---/);
+      expect(opts.user).toMatch(/Horario: L-V 9-18h/);
+      expect(opts.user).toMatch(/--- FUENTE 2 ---/);
     });
 
     it('devuelve null si el LLM responde NULL_ANSWER', async () => {
       prisma.$queryRawUnsafe.mockResolvedValueOnce([
         { id: 'f-1', content: 'Horario 9-18h', distance: 0.2 },
       ]);
-      mockEmbedThenLLM(FAKE_VECTOR, 'NULL_ANSWER');
+      mockOpenAIEmbeddingsOk();
+      llm.complete.mockResolvedValueOnce('NULL_ANSWER');
 
       const result = await svc.answer({
         clinicId: 'clinic-A',
@@ -333,44 +292,30 @@ describe('KnowledgeService', () => {
       prisma.$queryRawUnsafe.mockResolvedValueOnce([
         { id: 'f-1', content: 'Horario 9-18h', distance: 0.2 },
       ]);
-      const fetchMock = mockEmbedThenLLM(FAKE_VECTOR, 'Nosso horário é 9h-18h.');
+      mockOpenAIEmbeddingsOk();
+      llm.complete.mockResolvedValueOnce('Nosso horário é 9h-18h.');
 
       await svc.answer({
         clinicId: 'clinic-A',
         question: '¿Que horas abrem?',
         locale: 'pt',
       });
-      const body = JSON.parse((fetchMock.mock.calls[1][1] as any).body);
-      expect(body.messages[0].content).toMatch(/português/);
+      const opts = llm.complete.mock.calls[0][0];
+      expect(opts.system).toMatch(/português/);
     });
 
-    it('devuelve null si ambos LLM (DeepSeek + Gemini) fallan', async () => {
+    it('devuelve null si el router LLM falla', async () => {
       prisma.$queryRawUnsafe.mockResolvedValueOnce([
         { id: 'f-1', content: 'Horario 9-18h', distance: 0.2 },
       ]);
-      // 1) embed OK, 2) deepseek 500, 3) gemini 500
-      global.fetch = jest
-        .fn()
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          json: async () => ({ data: [{ embedding: FAKE_VECTOR }] }),
-        })
-        .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) })
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 500,
-          json: async () => ({}),
-        }) as unknown as typeof fetch;
-      // Necesitamos también Gemini key para que llegue al segundo intento.
-      process.env.GEMINI_API_KEY = 'g-test';
+      mockOpenAIEmbeddingsOk();
+      llm.complete.mockRejectedValueOnce(new Error('todos los LLM fallaron'));
 
       const result = await svc.answer({
         clinicId: 'clinic-A',
         question: '?',
       });
       expect(result).toBeNull();
-      delete process.env.GEMINI_API_KEY;
     });
   });
 });

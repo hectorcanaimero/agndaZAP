@@ -1,9 +1,24 @@
 {
+  "common": {
+    "cancel": "Cancelar",
+    "search": "Buscar",
+    "columns": "Colunas",
+    "page": "Página",
+    "empty": "Sem resultados",
+    "previous": "Anterior",
+    "next": "Próximo"
+  },
   "page": {
     "title": "Agende sua consulta",
     "subtitle": "Escolha serviço, profissional e horário. Confirmamos pelo WhatsApp.",
     "clinicNotFound": "Clínica não encontrada",
-    "clinicNotFoundDescription": "O link não corresponde a nenhuma clínica ativa."
+    "clinicNotFoundDescription": "O link não corresponde a nenhuma clínica ativa.",
+    "poweredBy": "Agendamento online",
+    "features": {
+      "title": "Rápido e pelo WhatsApp",
+      "quick": "Reserve em menos de um minuto.",
+      "whatsapp": "Confirmação e lembretes pelo WhatsApp."
+    }
   },
   "form": {
     "labels": {
@@ -39,7 +54,27 @@
       "rateLimit": "Muitas tentativas. Tente em um minuto."
     },
     "noSlots": "Não há horários disponíveis esta semana.",
-    "chooseCombination": "Escolha serviço e profissional para ver horários."
+    "chooseCombination": "Escolha serviço e profissional para ver horários.",
+    "emptyDescription": "Não encontramos horários nos próximos 7 dias.",
+    "tryNextWeek": "Tentar a próxima semana",
+    "tryOtherProfessional": "Trocar profissional",
+    "submitting": "Confirmando...",
+    "submit": "Confirmar consulta",
+    "loadingSlotsAria": "Carregando horários disponíveis",
+    "sections": {
+      "service": {
+        "title": "Serviço",
+        "description": "Escolha o que precisa e com quem."
+      },
+      "slot": {
+        "title": "Horário",
+        "description": "Estes são os horários disponíveis."
+      },
+      "patient": {
+        "title": "Seus dados",
+        "description": "Usamos para confirmar sua consulta."
+      }
+    }
   },
   "thanks": {
     "title": "Pronto, {name}!",
@@ -48,63 +83,102 @@
     "backLink": "Voltar a agendar"
   },
   "login": {
-    "title": "Iniciá sesión",
-    "subtitle": "Ingresá con tu email y contraseña.",
+    "title": "Entrar",
+    "subtitle": "Acesse com seu e-mail e senha.",
     "labels": {
-      "email": "Email",
-      "password": "Contraseña"
+      "email": "E-mail",
+      "password": "Senha"
     },
     "placeholders": {
-      "email": "vos@clinica.com"
+      "email": "voce@clinica.com"
     },
     "submit": "Entrar",
-    "submitting": "Ingresando...",
+    "submitting": "Entrando...",
+    "recovery": {
+      "hint": "Esqueceu sua senha? Entre em contato com o admin da sua clínica."
+    },
     "errors": {
-      "email": "Email inválido.",
-      "password": "Ingresá tu contraseña (mínimo 8 caracteres).",
-      "invalidCredentials": "Credenciales inválidas.",
-      "tooManyAttempts": "Demasiados intentos. Probá en un rato.",
-      "generic": "No pudimos ingresar. Probá de nuevo."
+      "email": "E-mail inválido.",
+      "password": "Digite sua senha (mínimo 8 caracteres).",
+      "invalidCredentials": "Credenciais inválidas.",
+      "tooManyAttempts": "Muitas tentativas. Tente novamente em 15 minutos.",
+      "generic": "Não foi possível entrar. Tente novamente."
+    },
+    "brand": {
+      "tagline": "Agendamento por WhatsApp para clínicas.",
+      "features": {
+        "agenda": "Agenda unificada online e por chat",
+        "reminders": "Lembretes que reduzem no-shows",
+        "public": "Página pública para reservas sem atrito"
+      },
+      "footer": "Multi-tenant · pensada para consultórios de alto volume."
     }
   },
   "panel": {
     "nav": {
       "dashboard": "Dashboard",
       "agenda": "Agenda",
-      "conversations": "Conversaciones",
-      "services": "Servicios",
-      "professionals": "Profesionales",
-      "businessHours": "Horarios",
-      "timeOff": "Bloqueos",
-      "faq": "FAQ",
+      "conversations": "Conversas",
+      "services": "Serviços",
+      "professionals": "Profissionais",
+      "businessHours": "Horários",
+      "timeOff": "Bloqueios",
+      "faq": "Base de conhecimento",
       "whatsapp": "WhatsApp",
-      "logout": "Cerrar sesión"
+      "logout": "Sair",
+      "openMenu": "Abrir menu",
+      "closeMenu": "Fechar menu",
+      "sections": {
+        "operation": "Operação",
+        "configuration": "Configuração"
+      },
+      "userMenu": "Menu do usuário",
+      "roles": {
+        "OWNER": "Proprietária/o",
+        "ADMIN": "Administrador",
+        "STAFF": "Staff",
+        "PROFESSIONAL": "Profissional"
+      }
     },
     "dashboard": {
       "title": "Dashboard",
-      "subtitle": "Métricas de los últimos 30 días.",
-      "errorLoading": "No se pudieron cargar las métricas.",
+      "subtitle": "Métricas dos últimos 30 dias.",
+      "errorLoading": "Não foi possível carregar as métricas.",
       "noShow": {
         "title": "No-show rate",
-        "hint": "% de citas cerradas que fueron no-show."
+        "hint": "% de consultas fechadas que foram no-show.",
+        "sample": "{shows} de {closed} consultas encerradas"
       },
       "byStatus": {
-        "title": "Citas por estado",
+        "title": "Consultas por status",
         "total": "Total: {total}"
       },
       "confirmations": {
-        "title": "Tasa de confirmación",
-        "sent": "Recordatorios enviados",
-        "confirmed": "Citas confirmadas"
+        "title": "Taxa de confirmação",
+        "sent": "Lembretes enviados",
+        "confirmed": "Consultas confirmadas",
+        "sample": "{confirmed} de {sent} lembretes respondidos"
       },
       "trend": {
-        "title": "Tendencia 14 días",
-        "hint": "Verde: creadas · Rojo: no-show"
+        "title": "Tendência de 14 dias",
+        "hint": "Verde: criadas · Vermelho: no-show",
+        "ariaLabel": "Tendência de consultas dos últimos 14 dias — barras verdes: consultas criadas, barras vermelhas: no-show.",
+        "legend": {
+          "created": "Criadas",
+          "noShow": "No-show"
+        },
+        "detailToggle": "Ver dados detalhados",
+        "tableCaption": "Dados de tendência dos últimos 14 dias",
+        "tableHeaders": {
+          "date": "Data",
+          "created": "Criadas",
+          "noShow": "No-show"
+        }
       },
       "status": {
-        "PENDIENTE": "Pendiente",
+        "PENDIENTE": "Pendente",
         "CONFIRMADA": "Confirmada",
-        "EN_RIESGO": "En riesgo",
+        "EN_RIESGO": "Em risco",
         "ATENDIDA": "Atendida",
         "CANCELADA": "Cancelada",
         "NO_SHOW": "No-show"
@@ -112,270 +186,344 @@
     },
     "agenda": {
       "title": "Agenda",
-      "subtitle": "Citas de la clínica.",
-      "loadError": "No se pudo cargar la agenda ({status}).",
-      "empty": "No hay citas en el rango seleccionado.",
-      "viewDay": "Día",
-      "viewWeek": "Semana",
-      "filters": {
-        "allProfessionals": "Todos los profesionales",
-        "allStatuses": "Todos los estados"
+      "subtitle": "Consultas da clínica.",
+      "loadError": "Não foi possível carregar a agenda ({status}).",
+      "empty": "Não há consultas no período selecionado.",
+      "emptyState": {
+        "title": "Sem consultas para este dia",
+        "description": "Quando alguém agendar, vai aparecer aqui."
       },
-      "detailTitle": "Detalle de cita",
+      "viewMonth": "Mês",
+      "viewDay": "Dia",
+      "viewWeek": "Semana",
+      "today": "Hoje",
+      "prevPeriod": "Período anterior",
+      "nextPeriod": "Próximo período",
+      "datePicker": "Data",
+      "viewMode": "Visualização",
+      "emptyDay": "Sem consultas",
+      "monthOverflow": "+ {count} mais",
+      "summary": {
+        "title": "Resumo do dia",
+        "appointments": "consultas agendadas",
+        "emptyStats": "Sem atividade ainda.",
+        "pendingHint": "{count, plural, one {# consulta} other {# consultas}} sem confirmação — ative o bot ou ligue para garantir o horário."
+      },
+      "filters": {
+        "status": "Status",
+        "search": "Buscar paciente",
+        "searchPlaceholder": "Nome ou telefone…",
+        "allProfessionals": "Todos os profissionais",
+        "allStatuses": "Todos os status",
+        "toggle": "Filtros",
+        "clearAll": "Limpar filtros",
+        "presets": {
+          "pending": "Somente pendentes de confirmar"
+        }
+      },
+      "detailTitle": "Detalhes da consulta",
       "detail": {
         "patient": "Paciente",
-        "phone": "Teléfono",
-        "service": "Servicio",
-        "professional": "Profesional",
-        "time": "Horario",
-        "status": "Estado",
-        "transitions": "Cambiar estado",
-        "noTransitions": "Esta cita ya está en un estado final."
+        "phone": "Telefone",
+        "service": "Serviço",
+        "professional": "Profissional",
+        "time": "Horário",
+        "status": "Status",
+        "transitions": "Alterar status",
+        "noTransitions": "Esta consulta já está em um status final."
       },
-      "statusChanged": "Estado actualizado.",
-      "statusChangeFailed": "No se pudo actualizar el estado.",
-      "statusRaceRefresh": "Ese estado ya cambió — refrescando."
+      "statusChanged": "Status atualizado.",
+      "statusChangeFailed": "Não foi possível atualizar o status.",
+      "statusRaceRefresh": "Esse status já foi alterado — atualizando."
     },
     "conversations": {
-      "title": "Conversaciones",
-      "subtitle": "Bandeja de mensajes.",
-      "loadError": "No se pudieron cargar las conversaciones ({status}).",
-      "empty": "No hay conversaciones.",
-      "pickOne": "Elegí una conversación para ver el detalle.",
-      "messagesCount": "{n} mensajes",
+      "title": "Conversas",
+      "subtitle": "Caixa de entrada de mensagens.",
+      "loadError": "Não foi possível carregar as conversas ({status}).",
+      "empty": "Não há conversas.",
+      "emptyList": "Não há conversas nesta caixa.",
+      "emptyDetail": "Selecione uma conversa para ver os detalhes.",
+      "pickOne": "Selecione uma conversa para ver os detalhes.",
+      "messagesCount": "{n} mensagens",
       "filters": {
-        "inbox": "Bandeja",
+        "inbox": "Caixa de entrada",
         "BOT": "Bot",
         "HUMAN": "Humano",
         "all": "Todas"
       },
       "state": {
         "BOT": "Bot",
-        "NEEDS_HUMAN": "Requiere humano",
+        "NEEDS_HUMAN": "Requer humano",
         "HUMAN": "Humano"
       },
-      "takeover": "Tomar",
-      "takeoverOk": "Conversación tomada.",
-      "takeoverFailed": "No se pudo tomar la conversación.",
-      "release": "Devolver al bot",
-      "releaseOk": "Conversación devuelta al bot.",
-      "releaseFailed": "No se pudo devolver la conversación.",
-      "replyPlaceholder": "Escribí una respuesta...",
-      "replyEmpty": "El mensaje está vacío.",
-      "replyFailed": "No se pudo enviar el mensaje.",
+      "takeover": "Assumir",
+      "takeoverOk": "Conversa assumida.",
+      "takeoverFailed": "Não foi possível assumir a conversa.",
+      "release": "Devolver ao bot",
+      "releaseOk": "Conversa devolvida ao bot.",
+      "releaseFailed": "Não foi possível devolver a conversa.",
+      "replyPlaceholder": "Escreva uma resposta...",
+      "replyEmpty": "A mensagem está vazia.",
+      "replyFailed": "Não foi possível enviar a mensagem.",
       "send": "Enviar",
       "sending": "Enviando...",
-      "sendHint": "Máximo 1500 caracteres.",
-      "takeoverBeforeReply": "Tomá la conversación para poder responder."
+      "sendHint": "Máximo de 1500 caracteres.",
+      "takeoverBeforeReply": "Assuma a conversa para poder responder.",
+      "lastRefresh": "Atualizado há {seconds}s",
+      "refreshing": "Atualizando…",
+      "autoTakeoverHint": "Ao enviar, você assume a conversa automaticamente.",
+      "errors": {
+        "takeoverFailed": "Não foi possível assumir a conversa."
+      }
     },
     "services": {
-      "title": "Servicios",
-      "subtitle": "Servicios que ofrece la clínica.",
-      "loadError": "No se pudieron cargar los servicios ({status}).",
-      "empty": "Sin servicios cargados.",
-      "new": "Nuevo servicio",
-      "newTitle": "Nuevo servicio",
-      "editTitle": "Editar servicio",
+      "title": "Serviços",
+      "subtitle": "Serviços oferecidos pela clínica.",
+      "loadError": "Não foi possível carregar os serviços ({status}).",
+      "empty": "Nenhum serviço cadastrado.",
+      "searchPlaceholder": "Buscar serviço…",
+      "new": "Novo serviço",
+      "newTitle": "Novo serviço",
+      "editTitle": "Editar serviço",
       "edit": "Editar",
-      "delete": "Eliminar",
-      "actions": "Acciones",
-      "save": "Guardar",
-      "saving": "Guardando...",
-      "saved": "Servicio guardado.",
-      "saveFailed": "No se pudo guardar el servicio.",
-      "deleted": "Servicio desactivado.",
-      "deleteFailed": "No se pudo eliminar el servicio.",
-      "confirmDelete": "¿Desactivar este servicio? Podés reactivarlo después.",
+      "delete": "Excluir",
+      "actions": "Ações",
+      "save": "Salvar",
+      "saving": "Salvando...",
+      "saved": "Serviço salvo.",
+      "saveFailed": "Não foi possível salvar o serviço.",
+      "deleted": "Serviço desativado.",
+      "deleteFailed": "Não foi possível excluir o serviço.",
+      "confirmDelete": {
+        "title": "Desativar serviço?",
+        "description": "Você vai desativar <name>{name}</name>. É possível reativar depois."
+      },
       "cancel": "Cancelar",
-      "noProfessionals": "No hay profesionales cargados.",
+      "noProfessionals": "Nenhum profissional cadastrado.",
       "fields": {
-        "name": "Nombre",
-        "duration": "Duración",
+        "name": "Nome",
+        "duration": "Duração",
         "buffer": "Buffer",
-        "priceCents": "Precio (centavos)",
-        "price": "Precio",
-        "professionals": "Profesionales"
+        "priceCents": "Preço (centavos)",
+        "price": "Preço",
+        "professionals": "Profissionais"
       },
       "hints": {
-        "priceCents": "En centavos. Ej: 1500 = $15,00."
+        "priceCents": "Em centavos. Ex: 1500 = R$ 15,00."
       },
       "errors": {
-        "required": "Requerido."
+        "required": "Obrigatório."
       }
     },
     "professionals": {
-      "title": "Profesionales",
-      "subtitle": "Profesionales que atienden en la clínica.",
-      "loadError": "No se pudieron cargar los profesionales ({status}).",
-      "empty": "Sin profesionales cargados.",
-      "new": "Nuevo profesional",
-      "newTitle": "Nuevo profesional",
-      "editTitle": "Editar profesional",
+      "title": "Profissionais",
+      "subtitle": "Profissionais que atendem na clínica.",
+      "loadError": "Não foi possível carregar os profissionais ({status}).",
+      "empty": "Nenhum profissional cadastrado.",
+      "searchPlaceholder": "Buscar profissional…",
+      "new": "Novo profissional",
+      "newTitle": "Novo profissional",
+      "editTitle": "Editar profissional",
       "edit": "Editar",
-      "delete": "Eliminar",
-      "actions": "Acciones",
-      "save": "Guardar",
-      "saving": "Guardando...",
-      "saved": "Profesional guardado.",
-      "saveFailed": "No se pudo guardar el profesional.",
-      "deleted": "Profesional desactivado.",
-      "deleteFailed": "No se pudo eliminar el profesional.",
-      "confirmDelete": "¿Desactivar este profesional?",
+      "delete": "Excluir",
+      "actions": "Ações",
+      "save": "Salvar",
+      "saving": "Salvando...",
+      "saved": "Profissional salvo.",
+      "saveFailed": "Não foi possível salvar o profissional.",
+      "deleted": "Profissional desativado.",
+      "deleteFailed": "Não foi possível excluir o profissional.",
+      "confirmDelete": {
+        "title": "Desativar profissional?",
+        "description": "Você vai desativar <name>{name}</name>. É possível reativar depois."
+      },
       "cancel": "Cancelar",
-      "noServices": "No hay servicios cargados todavía.",
+      "noServices": "Nenhum serviço cadastrado ainda.",
       "fields": {
-        "name": "Nombre",
-        "services": "Servicios que atiende"
+        "name": "Nome",
+        "services": "Serviços que atende"
       },
       "errors": {
-        "required": "Requerido."
+        "required": "Obrigatório."
       }
     },
     "businessHours": {
-      "title": "Horarios",
-      "subtitle": "Horarios de atención de la clínica.",
-      "loadError": "No se pudieron cargar los horarios ({status}).",
-      "empty": "Sin horarios cargados.",
-      "new": "Nuevo horario",
-      "newTitle": "Nuevo horario",
-      "editTitle": "Editar horario",
+      "title": "Horários",
+      "subtitle": "Horários de atendimento da clínica.",
+      "loadError": "Não foi possível carregar os horários ({status}).",
+      "empty": "Nenhum horário cadastrado.",
+      "new": "Novo horário",
+      "newTitle": "Novo horário",
+      "editTitle": "Editar horário",
       "edit": "Editar",
-      "delete": "Eliminar",
-      "actions": "Acciones",
-      "save": "Guardar",
-      "saving": "Guardando...",
-      "saved": "Horario guardado.",
-      "saveFailed": "No se pudo guardar el horario.",
-      "deleted": "Horario eliminado.",
-      "deleteFailed": "No se pudo eliminar el horario.",
-      "confirmDelete": "¿Eliminar este horario?",
+      "delete": "Excluir",
+      "actions": "Ações",
+      "save": "Salvar",
+      "saving": "Salvando...",
+      "saved": "Horário salvo.",
+      "saveFailed": "Não foi possível salvar o horário.",
+      "deleted": "Horário excluído.",
+      "deleteFailed": "Não foi possível excluir o horário.",
+      "confirmDelete": {
+        "title": "Excluir horário?",
+        "description": "Você vai excluir <name>{name}</name>. <warn>Esta ação não pode ser desfeita.</warn>"
+      },
       "cancel": "Cancelar",
-      "allProfessionals": "Toda la clínica",
+      "allProfessionals": "Toda a clínica",
       "fields": {
-        "weekday": "Día",
-        "range": "Rango",
-        "start": "Desde",
-        "end": "Hasta",
-        "professional": "Profesional"
+        "weekday": "Dia",
+        "range": "Intervalo",
+        "start": "Início",
+        "end": "Fim",
+        "professional": "Profissional"
       },
       "weekdays": {
         "0": "Domingo",
-        "1": "Lunes",
-        "2": "Martes",
-        "3": "Miércoles",
-        "4": "Jueves",
-        "5": "Viernes",
+        "1": "Segunda",
+        "2": "Terça",
+        "3": "Quarta",
+        "4": "Quinta",
+        "5": "Sexta",
         "6": "Sábado"
       },
       "errors": {
-        "rangeInvalid": "La hora fin debe ser mayor a la de inicio."
+        "rangeInvalid": "O horário de fim deve ser maior que o de início."
       }
     },
     "timeOff": {
-      "title": "Bloqueos",
-      "subtitle": "Vacaciones y ausencias.",
-      "loadError": "No se pudieron cargar los bloqueos ({status}).",
-      "empty": "Sin bloqueos cargados.",
-      "new": "Nuevo bloqueo",
-      "newTitle": "Nuevo bloqueo",
-      "editTitle": "Editar bloqueo",
+      "title": "Bloqueios",
+      "subtitle": "Férias e ausências.",
+      "loadError": "Não foi possível carregar os bloqueios ({status}).",
+      "empty": "Nenhum bloqueio cadastrado.",
+      "searchPlaceholder": "Buscar por motivo…",
+      "new": "Novo bloqueio",
+      "newTitle": "Novo bloqueio",
+      "editTitle": "Editar bloqueio",
       "edit": "Editar",
-      "delete": "Eliminar",
-      "actions": "Acciones",
-      "save": "Guardar",
-      "saving": "Guardando...",
-      "saved": "Bloqueo guardado.",
-      "saveFailed": "No se pudo guardar el bloqueo.",
-      "deleted": "Bloqueo eliminado.",
-      "deleteFailed": "No se pudo eliminar el bloqueo.",
-      "confirmDelete": "¿Eliminar este bloqueo?",
+      "delete": "Excluir",
+      "actions": "Ações",
+      "save": "Salvar",
+      "saving": "Salvando...",
+      "saved": "Bloqueio salvo.",
+      "saveFailed": "Não foi possível salvar o bloqueio.",
+      "deleted": "Bloqueio excluído.",
+      "deleteFailed": "Não foi possível excluir o bloqueio.",
+      "confirmDelete": {
+        "title": "Excluir bloqueio?",
+        "description": "Você vai excluir <name>{name}</name>. <warn>Esta ação não pode ser desfeita.</warn>"
+      },
       "cancel": "Cancelar",
-      "allProfessionals": "Toda la clínica",
+      "allProfessionals": "Toda a clínica",
       "fields": {
-        "range": "Rango",
-        "start": "Desde",
-        "end": "Hasta",
+        "range": "Intervalo",
+        "start": "Início",
+        "end": "Fim",
         "reason": "Motivo",
-        "professional": "Profesional"
+        "professional": "Profissional"
       },
       "placeholders": {
-        "reason": "Ej: vacaciones, capacitación"
+        "reason": "Ex: férias, treinamento"
       },
       "errors": {
-        "required": "Requerido.",
-        "rangeInvalid": "La fecha fin debe ser mayor a la de inicio."
+        "required": "Obrigatório.",
+        "rangeInvalid": "A data de fim deve ser maior que a de início."
       }
     },
     "faq": {
       "title": "FAQ",
-      "subtitle": "Preguntas frecuentes para el bot.",
-      "loadError": "No se pudieron cargar las FAQs ({status}).",
-      "empty": "Sin FAQs cargadas.",
-      "new": "Nueva FAQ",
-      "newTitle": "Nueva FAQ",
-      "editTitle": "Editar FAQ",
+      "titleKb": "Base de conhecimento",
+      "subtitle": "Perguntas frequentes para o bot.",
+      "subtitleKb": "Artigos que o bot usa para responder aos seus pacientes.",
+      "loadError": "Não foi possível carregar as FAQs ({status}).",
+      "empty": "Nenhum artigo cadastrado. Crie o primeiro para que o bot possa responder.",
+      "new": "Nova FAQ",
+      "newArticle": "Novo artigo",
+      "newTitle": "Novo artigo",
+      "editTitle": "Editar artigo",
       "edit": "Editar",
-      "delete": "Eliminar",
-      "actions": "Acciones",
-      "save": "Guardar",
-      "saving": "Guardando...",
-      "saved": "FAQ guardada.",
-      "saveFailed": "No se pudo guardar la FAQ.",
-      "deleted": "FAQ eliminada.",
-      "deleteFailed": "No se pudo eliminar la FAQ.",
-      "confirmDelete": "¿Eliminar esta FAQ?",
+      "delete": "Excluir",
+      "actions": "Ações",
+      "save": "Salvar",
+      "saving": "Salvando...",
+      "saved": "Artigo salvo.",
+      "saveFailed": "Não foi possível salvar o artigo.",
+      "deleted": "Artigo excluído.",
+      "deleteFailed": "Não foi possível excluir o artigo.",
+      "confirmDelete": {
+        "title": "Excluir artigo?",
+        "description": "Você vai excluir <name>{name}</name>. <warn>Esta ação não pode ser desfeita.</warn>"
+      },
       "cancel": "Cancelar",
+      "back": "Voltar",
+      "untitled": "Sem título",
+      "selectOrCreate": "Selecione um artigo ou crie um novo.",
+      "preview": "Pré-visualização",
+      "indexed": "Indexada",
+      "notIndexed": "Sem indexação",
+      "notIndexedAriaLabel": "FAQ sem indexação — o bot não pode respondê-la.",
+      "notIndexedBanner": "{count, plural, =1 {# artigo sem indexação. O bot não pode respondê-lo.} other {# artigos sem indexação. O bot não pode respondê-los.}}",
+      "notIndexedHint": "Verifique `OPENAI_API_KEY` no servidor ou rode `pnpm prisma:reindex-faq`.",
+      "embeddingSkippedToast": "Salvo sem embedding (falta OPENAI_API_KEY). O bot ainda não pode respondê-lo.",
       "fields": {
-        "content": "Contenido"
+        "title": "Título (opcional)",
+        "content": "Conteúdo"
       },
       "placeholders": {
-        "content": "¿Cuánto dura la consulta? La consulta dura 30 minutos..."
+        "title": "Ex: Como agendar uma consulta",
+        "content": "Quanto dura a consulta? A consulta dura 30 minutos..."
       },
       "hints": {
-        "content": "La primera línea funciona como título. Podés usar markdown."
+        "title": "Ajuda a organizar a lista. Se não informar, usamos a primeira linha do conteúdo.",
+        "content": "Você pode usar markdown (negrito, listas, links, etc.)."
       },
       "errors": {
-        "content": "El contenido debe tener entre 5 y 4000 caracteres."
+        "title": "O título não pode exceder 200 caracteres.",
+        "titleMax": "O título não pode exceder 200 caracteres.",
+        "content": "O conteúdo deve ter entre 5 e 4000 caracteres."
+      },
+      "counters": {
+        "chars": "{current}/{max} caracteres"
       }
     },
     "whatsapp": {
-      "title": "Conexión de WhatsApp",
-      "subtitle": "Estado de la sesión del bot para esta clínica.",
-      "loadError": "No se pudo cargar el estado ({status}).",
-      "sessionLabel": "sesión",
+      "title": "Conexão do WhatsApp",
+      "subtitle": "Status da sessão do bot para esta clínica.",
+      "loadError": "Não foi possível carregar o status ({status}).",
+      "sessionLabel": "sessão",
       "status": {
         "WORKING": "Conectado",
         "STARTING": "Iniciando…",
-        "SCAN_QR_CODE": "Esperando QR",
+        "SCAN_QR_CODE": "Aguardando QR",
         "STOPPED": "Desconectado",
-        "FAILED": "Falló",
-        "UNKNOWN": "Sin info"
+        "FAILED": "Falhou",
+        "UNKNOWN": "Sem informação"
       },
       "qr": {
-        "alt": "Código QR para escanear con WhatsApp",
-        "help": "Escaneá con el WhatsApp del número dedicado de la clínica."
+        "alt": "Código QR para escanear com o WhatsApp",
+        "help": "Escaneie com o WhatsApp do número dedicado da clínica."
       },
       "empty": {
-        "title": "Sin QR activo",
-        "help": "Presioná Conectar para iniciar la sesión."
+        "title": "Nenhum QR ativo",
+        "help": "Clique em Conectar para iniciar a sessão."
       },
       "actions": {
         "connect": "Conectar",
         "disconnect": "Desconectar",
         "connecting": "Iniciando…",
         "disconnecting": "Desconectando…",
-        "confirmDisconnect": "¿Seguro que querés desconectar la sesión de WhatsApp? Vas a tener que escanear el QR de nuevo."
+        "confirmDisconnectTitle": "Desconectar sessão do WhatsApp?",
+        "confirmDisconnect": "Você vai desconectar a sessão do WhatsApp. Precisará escanear o QR novamente para reconectar."
       },
       "polling": {
-        "fast": "Actualizando cada 3s",
-        "slow": "Actualizando cada 15s",
-        "off": "Sin actualización"
+        "fast": "Atualizando a cada 3s",
+        "slow": "Atualizando a cada 15s",
+        "off": "Sem atualização"
       },
       "toast": {
-        "startFailed": "No se pudo iniciar la sesión (WAHA no respondió)",
-        "logoutFailed": "No se pudo desconectar la sesión (WAHA no respondió). Refrescando estado…",
-        "rateLimited": "Muchas peticiones seguidas. Reintentando en unos segundos…",
-        "statusFetchFailed": "No se pudo consultar el estado (reintentando…)"
+        "startFailed": "Não foi possível iniciar a sessão (WAHA não respondeu)",
+        "logoutFailed": "Não foi possível desconectar a sessão (WAHA não respondeu). Atualizando status…",
+        "rateLimited": "Muitas requisições seguidas. Tentando novamente em alguns segundos…",
+        "statusFetchFailed": "Não foi possível consultar o status (tentando novamente…)"
       }
     }
   }

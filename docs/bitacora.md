@@ -1,5 +1,28 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-08-09 — FAQ banner "sin embedding" — fallo silencioso resuelto (spec P0)
+- Ejecutado [[ux/2026-08-09-faq-embedding-banner]]: cerrado el fallo silencioso donde una FAQ cargada sin `OPENAI_API_KEY` quedaba en DB con `embedding=NULL`, el bot NO podía responderla (`KnowledgeService.retrieve` filtra por `embedding IS NOT NULL`), y el operador NO lo sabía porque el `FaqClient` no distinguía chunks indexados vs no indexados.
+- Cambios:
+  - **Backend** `apps/backend/src/faq/faq.controller.ts`: nuevo helper `selectFaqChunks(clinicId, {id?})` con `$queryRawUnsafe` que retorna `id, clinicId, content, createdAt, (embedding IS NOT NULL) AS hasEmbedding`. El vector `embedding` (1536 floats) NUNCA se carga a memoria ni sale del backend. Aplicado a `list()`, `findOne()`, `create()` (happy + fallback), `update()`.
+  - **Backend tests** `faq.controller.spec.ts`: agregado bloque `vector embedding NUNCA se expone en la response` (6 sub-tests) + ajustes en tests existentes para mockear `$queryRawUnsafe` con guard-rail interno que tira si detecta `SELECT ... embedding` sin `IS NOT NULL`. Total 258 tests (antes 249).
+  - **Frontend** `apps/web/src/app/[locale]/panel/faq/page.tsx`: shape con `hasEmbedding`, compute `pendingCount`, pasa a client.
+  - **Frontend** `apps/web/src/app/[locale]/panel/faq/FaqClient.tsx`: banner amarillo `role="status"` con pluralización ICU cuando `pendingCount > 0`, y `Badge` "Indexada" (brand-100) / "Sin indexar" (amber-100) por row con `aria-label` descriptivo. Reutiliza tokens del design system (spec #28).
+  - **i18n** `apps/web/messages/{es,pt}.json`: 5 keys nuevas bajo `panel.faq.*` (`indexed`, `notIndexed`, `notIndexedAriaLabel`, `notIndexedBanner` con plural ICU, `notIndexedHint`). Paridad de paths escalares verificada con `diff <(jq)`.
+- Verificaciones: 258/258 tests backend verdes, `pnpm build` de web limpio (25/25 páginas), diff i18n = vacío.
+- Deuda: el CLI `pnpm prisma:reindex-faq` sigue siendo la vía para reindexar chunks huérfanos (no se agregó botón "Reindexar" en el UI — fuera de scope explícito del spec).
+
+## 2026-08-09 — Traducción pt-BR del panel y login (spec P0)
+- Ejecutado [[ux/2026-08-09-pt-json-panel-en-espanol]]: traducido a português do Brasil todo el bloque `login.*` y `panel.*` de `apps/web/messages/pt.json` (unblock piloto pt-BR).
+- Adaptaciones de tono clave (voseo Rioplatense → você imperativo):
+  - "Iniciá sesión" → "Entrar" · "Ingresá" → "Digite/Entre" · "Elegí" → "Selecione/Escolha" · "Cerrar sesión" → "Sair" · "Tomá la conversación" → "Assuma a conversa"
+  - Weekdays 0-6 → Domingo/Segunda/Terça/Quarta/Quinta/Sexta/Sábado.
+  - Estados de cita mantienen keys en español (`PENDIENTE`, `EN_RIESGO`, `NO_SHOW`) pero valores en pt-BR (`Pendente`, `Em risco`, `No-show`).
+  - "Cita" → "consulta" · "Bandeja" → "Caixa de entrada" · "Buffer" y "No-show" mantenidos como jerga técnica.
+  - Precio en `services.hints.priceCents`: "Ej: 1500 = $15,00" → "Ex: 1500 = R$ 15,00" (adaptado a moneda BRL).
+- Aprovechado el pase para traducir las 6 keys nuevas del spec #27 (ScheduleForm) que quedaban con `_TODO_pt_translation`: `emptyDescription`, `tryNextWeek`, `tryOtherProfessional`, `loadingSlotsAria`, `submit`, `submitting`. Eliminado el marcador `_TODO_pt_translation` para restaurar paridad estricta con `es.json`.
+- Verificaciones: `diff` de paths escalares es.json vs pt.json = vacío (paridad exacta), `rg` de residuos Rioplatenses = 0, `pnpm --filter @agendazap/web build` verde (25/25 páginas), 249/249 tests backend verdes.
+- Archivo tocado: `apps/web/messages/pt.json` (388 líneas). Cero cambios en TSX/TS.
+
 ## 2026-08-08 — Arranque del proyecto
 - Definidos PRD, SPEC (Gherkin) y ARCHITECTURE.
 - Modelo Prisma multi-tenant + motor de disponibilidad + motor de recordatorios anti no-show + WAHA + bot base.
@@ -140,6 +163,37 @@
 - **B.10 Race PATCH status → 422 refresh** (nuevo): `AgendaClient.changeStatus` maneja `res.status === 422` → toast info + `router.refresh()` + cierra modal. Otros errores (500/network) → toast error + modal queda abierto. Nueva key `panel.agenda.statusRaceRefresh` en es/pt.
 - **ADR 0006 creado** (`docs/adr/0006-panel-mvp-y-deuda.md`) — consolida decisiones y documenta 9 items de deuda (idempotencia POST /appointments, race takeover, AuditEvent, cancelReason, professionalId en JWT, pt.json, JWT httpOnly + refresh + revocación, rate-limit en CRUDs, WebSocket para conversaciones). Registrado en [[INDEX]].
 - Verificaciones: build backend + web limpios. `rg 'clinicId:' apps/backend/src/{dashboard,services,professionals,appointments,conversations,time-off,business-hours,faq}` sólo devuelve derivaciones de `scope.clinicId` + tipos + `select` de FAQ (campo expuesto en response). `rg 'new Date\(\)' apps/backend/src -g '!*.spec.ts'` limpio. `rg 'new Date\(\)' apps/web/src/app/[locale]/panel/agenda` solo helper UTC-anchored documentado.
+
+## 2026-08-09 — UX audit del panel Next.js (ux-plan-auditor)
+- **Audit UX completo ejecutado** siguiendo el skill `ux-plan-auditor`, 6 ejes (consistency,
+  density, states, a11y, responsive, i18n). Objetivo: cerrar deuda UX documentada + destapar
+  gaps invisibles antes del piloto real.
+- **12 specs generadas** bajo `docs/ux/` — priorización brutal: **6 P0** (bloqueadores
+  piloto/WCAG crítico), **5 P1** (importantes para escalar), **1 P2** (polish).
+- **Top-3 findings críticos**:
+  1. `apps/web/messages/pt.json:50-338` — todo el bloque `login.*` + `panel.*` está en
+     ESPAÑOL. Blocker piloto pt-BR. Ver [[ux/2026-08-09-pt-json-panel-en-espanol]].
+  2. `apps/web/src/app/[locale]/panel/faq/FaqClient.tsx` — sin banner "N FAQs sin
+     embedding" → el bot es silenciosamente inútil si `OPENAI_API_KEY` no está seteada.
+     Ver [[ux/2026-08-09-faq-embedding-banner]].
+  3. `apps/web/src/app/[locale]/panel/conversaciones/ConversationsClient.tsx:356` — la
+     Textarea de reply está disabled hasta HUMAN → el operador no puede pre-escribir
+     durante el handoff. Además staleness invisible del polling 15s. Ver
+     [[ux/2026-08-09-conversations-staleness-y-reply-lock]].
+- **Fase A (antes de piloto)**: los 6 P0.
+  Fase B (antes de escalar): los 5 P1.
+  Fase C (polish): 1 P2.
+- **Deuda ya documentada** confirmada durante el audit: `AgendaClient` con `new Date()`
+  UTC-anchored explícito (OK per ADR 0006), modal focus management parcial sin trap del
+  Tab (nuevo spec P0), design system con `stateStyle` duplicado + hex hardcodeados en el
+  chart, `bg-brand-500 text-white` bubble/slot con contraste 2.83:1 → FALLA WCAG AA.
+- **Sub-agent recommendations** en cada spec bajo la matriz del skill (mayoría
+  `general-purpose` + `frontend-design`; el drawer mobile usa `mobile-app-ui-design`;
+  el pt.json usa `copywriting`; tokens de tailwind usan `tailwind-design-system`).
+- Specs registradas en [[INDEX]] bajo nueva sección "UX specs". Cada spec incluye
+  file:line evidence, propuesta con criterios de aceptación, y prompt listo para el
+  subagente ejecutor.
+- Restricción cumplida: cero código UI escrito — sólo specs + docs.
 
 ## 2026-08-09 (cierre) — Bloque Piloto: seed histórico + docs + deploy
 - **Seed enriquecido** (`apps/backend/prisma/seed.ts`): agregada la función `seedHistoricalData()`. Ahora, además de la clínica demo + servicios + profesionales + FAQs + users, genera 8 pacientes ficticios VE (+58414/+58424, E.164 válido, nombres realistas), **42 citas** en los últimos 30 días con distribución 22 ATENDIDA / 6 NO_SHOW / 6 CANCELADA / 4 CONFIRMADA / 2 PENDIENTE / 2 EN_RIESGO (para tener la alerta visible), **84 recordatorios** (2 por cita, status coherente: SENT/CONFIRMED/CANCELED/SCHEDULED), y 2 conversaciones sample (una BOT, una NEEDS_HUMAN).

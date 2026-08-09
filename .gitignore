@@ -60,3 +60,8 @@ coverage/
 
 # Skills lockfile (regenerado por herramienta local)
 skills-lock.json
+
+# Screenshots temporales
+*.png
+!apps/**/*.png
+!docs/**/*.png

@@ -23,6 +23,8 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[adr/0005-auth-mvp-y-deuda|0005 — Auth MVP: alcance, decisiones y deuda para post-piloto]]
 - [[adr/0006-panel-mvp-y-deuda|0006 — Panel MVP: fixes post-audit y deuda documentada]]
 - [[adr/0007-rate-limit-bot|0007 — Rate-limit del bot de WhatsApp (protección LLM budget)]]
+- [[adr/0008-panel-conexion-waha-y-observabilidad|0008 — Panel de conexión WAHA + observabilidad]]
+- [[adr/0009-faq-title-y-markdown-strip|0009 — FAQ: `title` opcional y strip de markdown antes del embedding]]
 
 ## Notas y descubrimientos
 - [[notas/2026-08-08-prisma-pgvector-y-env|2026-08-08 — Prisma + pgvector y carga de `.env` en el monorepo]]
@@ -34,6 +36,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[notas/2026-08-08-bloque-auth|2026-08-08 — Bloque 5: Auth (JWT + guards multi-tenant + RBAC)]]
 - [[notas/2026-08-09-panel-backend-cruds|2026-08-09 — Panel Backend: TenantContext + CRUDs (Etapa 1)]]
 - [[notas/2026-08-09-rag-faq|2026-08-09 — Bloque RAG FAQ (KnowledgeModule)]]
+- [[notas/2026-08-09-f5-rediseno-shadcn-recharts|2026-08-09 — F5 rediseño shadcn + Recharts (4 pantallas grandes)]]
 
 ## Flujo de trabajo
 - [[skills-y-flujo|Skills, agentes y flujo de trabajo]]
@@ -43,3 +46,23 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 
 ## Bitácora
 - [[bitacora|Bitácora de sesiones]]
+
+## UX specs (audit 2026-08-09)
+
+### P0 — Bloqueadores piloto / WCAG crítico
+- [[ux/2026-08-09-pt-json-panel-en-espanol|2026-08-09 — pt.json panel + login en español]] · P0 · i18n
+- [[ux/2026-08-09-conversations-staleness-y-reply-lock|2026-08-09 — Conversations: staleness invisible + reply-lock]] · P0 · states
+- [[ux/2026-08-09-faq-embedding-banner|2026-08-09 — FAQ: banner "N FAQs sin embedding"]] · P0 · states
+- [[ux/2026-08-09-modal-focus-trap|2026-08-09 — Modal: focus trap del Tab]] · P0 · a11y
+- [[ux/2026-08-09-panel-mobile-navigation-drawer|2026-08-09 — Panel mobile: drawer + hamburger]] · P0 · responsive
+- [[ux/2026-08-09-schedule-form-states-y-doble-submit|2026-08-09 — ScheduleForm: invisible states + doble submit]] · P0 · states
+
+### P1 — Importantes para escalar
+- [[ux/2026-08-09-design-system-tokens-y-dedup|2026-08-09 — Design system: tokens semánticos + dedup]] · P1 · consistency
+- [[ux/2026-08-09-dashboard-chart-accesible-e-i18n|2026-08-09 — Dashboard chart: accesible + i18n]] · P1 · a11y
+- [[ux/2026-08-09-panel-tables-a-cards-en-mobile|2026-08-09 — Panel tables → cards en mobile]] · P1 · responsive
+- [[ux/2026-08-09-agenda-filter-bar-mobile-y-touch-targets|2026-08-09 — Agenda filter bar mobile + touch targets]] · P1 · responsive
+- [[ux/2026-08-09-confirm-dialog-en-vez-de-confirm-nativo|2026-08-09 — Reemplazar `confirm()` por ConfirmDialog]] · P1 · a11y
+
+### P2 — Polish
+- [[ux/2026-08-09-login-polish-autofocus-y-context|2026-08-09 — Login: autoFocus + hint recovery + contraste]] · P2 · density

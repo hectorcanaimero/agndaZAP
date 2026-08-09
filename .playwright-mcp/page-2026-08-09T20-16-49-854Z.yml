@@ -1,0 +1,32 @@
+- generic [ref=f5e1]:
+  - main [ref=f5e2]:
+    - complementary [ref=f5e3]:
+      - generic [ref=f5e5]:
+        - generic [ref=f5e6]: AgendaZap
+        - generic [ref=f5e12]:
+          - heading [level=2] [ref=f5e13]: Agendamiento por WhatsApp para clínicas.
+          - list [ref=f5e14]:
+            - listitem [ref=f5e15]:
+              - generic [ref=f5e19]: Agenda unificada online y por chat
+            - listitem [ref=f5e20]:
+              - generic [ref=f5e24]: Recordatorios que reducen no-shows
+            - listitem [ref=f5e25]:
+              - generic [ref=f5e30]: Página pública para reservas sin fricción
+        - paragraph [ref=f5e31]: Multi-tenant · pensada para consultorios que atienden en volumen.
+    - generic [ref=f5e33]:
+      - generic [ref=f5e34]:
+        - heading "Iniciá sesión" [level=1] [ref=f5e35]
+        - paragraph [ref=f5e36]: Ingresá con tu email y contraseña.
+      - generic [ref=f5e37]:
+        - generic [ref=f5e38]:
+          - text: Email
+          - textbox "Email" [active] [ref=f5e40]:
+            - /placeholder: vos@clinica.com
+            - text: super@agendazap.dev
+        - generic [ref=f5e41]:
+          - text: Contraseña
+          - textbox "Contraseña" [ref=f5e43]
+        - button "Entrar" [ref=f5e44] [cursor=pointer]
+      - paragraph [ref=f5e45]: ¿Olvidaste tu contraseña? Contactá al admin de tu clínica.
+  - region "Notifications alt+T"
+  - alert [ref=f5e46]

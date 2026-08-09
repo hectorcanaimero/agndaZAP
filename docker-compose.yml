@@ -23,14 +23,17 @@ services:
       - redis_data:/data
 
   # WAHA — WhatsApp HTTP API (no oficial). Escanea el QR en http://localhost:3000
+  # Engine NOWEB (Baileys): sin Chromium, ~30% más liviano y con arm64 nativo.
+  # Tags separados por arquitectura: `noweb-arm` (Apple Silicon) · `noweb` (x86).
+  # En prod x86, sobreescribí: WAHA_IMAGE_TAG=noweb
   waha:
-    image: devlikeapro/waha:latest
-    # WAHA free (WEBJS/Chromium) solo publica manifest linux/amd64.
-    # En Apple Silicon corre bajo emulación QEMU.
-    platform: linux/amd64
+    image: devlikeapro/waha:${WAHA_IMAGE_TAG:-noweb-arm}
     ports:
       - "3000:3000"
     environment:
+      # engine por defecto al crear sesiones. NOWEB = Baileys, sin browser.
+      # Nota: NOWEB no soporta botones/listas interactivas (solo WEBJS/WPP).
+      WHATSAPP_DEFAULT_ENGINE: NOWEB
       # token que WAHA exige en el header 'X-Api-Key'
       WAHA_API_KEY: ${WAHA_API_KEY:-dev-waha-key}
       # WAHA enviará los eventos entrantes a nuestro backend

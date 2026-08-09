@@ -1,4 +1,4 @@
-import { IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 /**
  * Regex anti prompt-injection. Rechaza los patrones más obvios que un atacante
@@ -25,15 +25,20 @@ const INJECTION_PATTERN =
 /**
  * DTO de FaqChunk.
  *
- * NOTA: el schema Prisma actual (ver `prisma/schema.prisma` modelo FaqChunk)
- * expone SÓLO `content` y `embedding` (vector 1536, opcional). No hay `title`.
- * El RAG del Bloque 4 llenará `embedding`; este CRUD sólo maneja `content`.
+ * Schema: `title` (opcional, max 200) + `content` (markdown crudo, 5..4000
+ * chars con guarda anti-injection) + `embedding` (vector 1536, lo llena el
+ * `KnowledgeService`).
  *
- * Si el frontend quiere títulos visuales, puede prefijar el `content` con la
- * primera línea (el markdown convencional lo respeta). Cuando el schema evolucione
- * (post-piloto) agregar `title` es una migración menor.
+ * `title` es opcional para no forzar migraciones de datos viejos y porque el
+ * bot no necesita título — sólo el content va al vector. La UI de la "Base de
+ * conocimiento" lo usa como etiqueta en la lista (ver ADR 0009).
  */
 export class CreateFaqDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  title?: string;
+
   @IsString()
   @MinLength(5)
   @MaxLength(4000)
