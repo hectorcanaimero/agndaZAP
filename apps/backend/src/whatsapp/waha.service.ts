@@ -42,13 +42,24 @@ export class WahaService {
     }
   }
 
-  /** Crea/inicia una sesión para una clínica y devuelve el estado (para escanear QR). */
+  /**
+   * Crea/inicia una sesion para una clinica.
+   * Consistency fix (T3): mirroring del patron de `sendText` y `logoutSession`,
+   * tira `Error` en `!res.ok` para que el controller pueda envolverlo como
+   * `BadGatewayException`. Antes fallaba en silencio.
+   */
   async startSession(session: string): Promise<void> {
-    await fetch(`${this.baseUrl}/api/sessions/start`, {
+    const res = await fetch(`${this.baseUrl}/api/sessions/start`, {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify({ name: session }),
     });
+
+    if (!res.ok) {
+      const body = await res.text();
+      this.logger.error(`WAHA startSession failed (${res.status}): ${body}`);
+      throw new Error(`WAHA startSession ${res.status}`);
+    }
   }
 
   async getSessionStatus(session: string): Promise<string> {

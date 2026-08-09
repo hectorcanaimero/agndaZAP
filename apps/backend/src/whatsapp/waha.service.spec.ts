@@ -5,6 +5,8 @@ import { WahaService } from './waha.service';
  * Tests unit para las primitivas nuevas del WahaService:
  *  - logoutSession
  *  - getQrCode
+ *  - startSession (consistency fix T3: ahora tira Error en !res.ok, mirroring
+ *    el patron de sendText y logoutSession).
  *
  * `WahaService` lee `WAHA_BASE_URL` y `WAHA_API_KEY` en el constructor,
  * asi que seteamos el env ANTES de instanciar en cada test.
@@ -38,6 +40,26 @@ describe('WahaService (primitives)', () => {
     }
     global.fetch = originalFetch;
     jest.restoreAllMocks();
+  });
+
+  // ─────────────────────────── startSession ───────────────────────────
+
+  describe('startSession', () => {
+    it('non-ok: fetch responde 500 → rechaza con Error("WAHA startSession 500")', async () => {
+      // Consistency fix (T3): startSession originalmente no verificaba `!res.ok`,
+      // lo que dejaba al controller sin poder distinguir un WAHA caido de un
+      // start exitoso. Alineamos el comportamiento con sendText y logoutSession.
+      const fetchMock = jest.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: async () => 'boom',
+      });
+      global.fetch = fetchMock as unknown as typeof fetch;
+
+      await expect(svc.startSession('clinic-abc')).rejects.toThrow(
+        /WAHA startSession 500/,
+      );
+    });
   });
 
   // ─────────────────────────── logoutSession ───────────────────────────

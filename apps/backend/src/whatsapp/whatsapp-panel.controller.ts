@@ -1,4 +1,12 @@
-import { Controller, Get, Logger, UseGuards } from '@nestjs/common';
+import {
+  BadGatewayException,
+  Controller,
+  Get,
+  HttpCode,
+  Logger,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -12,13 +20,16 @@ import { WahaService } from './waha.service';
  * observar la sesión WAHA de la clínica del usuario autenticado.
  *
  * Contrato (ver docs/notas/2026-08-09-bloque-waha-panel-conexion.md §Contratos):
- *  - `GET /api/clinics/me/waha/status`
+ *  - `GET  /api/clinics/me/waha/status`
+ *  - `POST /api/clinics/me/waha/start`   (202 Accepted, inicia sesión async)
+ *  - `POST /api/clinics/me/waha/logout`  (200 OK, borra credenciales y fuerza re-QR)
  *
  * Guards:
  *  - `JwtAuthGuard` es GLOBAL (APP_GUARD en AuthModule) → no hace falta declararlo.
  *  - `RolesGuard` + `@Roles('CLINIC_ADMIN', 'SUPERADMIN')` a nivel controller.
- *  - `RateLimit(20, 'waha-status')` a nivel handler (scope explícito para no
- *    colisionar con el rate-limit por `:slug` de rutas públicas).
+ *  - `RateLimit(20, 'waha-status')` sólo en GET /status (los POSTs son acciones
+ *    de admin: RolesGuard + assertClinicScope ya alcanzan como defensa; no
+ *    justifican una capa extra de rate-limit).
  *
  * Reglas duras:
  *  - El `session` **nunca** se acepta del cliente: se deriva vía
@@ -89,5 +100,74 @@ export class WhatsappPanelController {
       session: clinic.wahaSession,
       ...(qr ? { qr } : {}),
     };
+  }
+
+  /**
+   * Inicia (o reinicia) la sesión WAHA de la clínica del user.
+   *
+   * Response shape: `{ status: 'STARTING' }`. Es un ACK optimista: WAHA acepta
+   * el pedido y arranca el ciclo `STARTING → SCAN_QR_CODE → WORKING` de forma
+   * asíncrona. El frontend debe empezar a poll'ear `GET /status` para observar
+   * la transición y renderizar el QR cuando aparezca.
+   *
+   * Errores:
+   *  - WAHA responde 5xx → `WahaService.startSession` tira → aquí lo envolvemos
+   *    como `BadGatewayException` (502). Nunca filtramos el mensaje interno de
+   *    WAHA al cliente (podría contener detalles de infra).
+   */
+  @Post('start')
+  @HttpCode(202)
+  async start(@CurrentUser() user: AuthUser): Promise<{ status: 'STARTING' }> {
+    const clinicId = assertClinicScope(user);
+    const clinic = await this.prisma.clinic.findUniqueOrThrow({
+      where: { id: clinicId },
+      select: { wahaSession: true },
+    });
+
+    try {
+      await this.waha.startSession(clinic.wahaSession);
+    } catch (err) {
+      this.logger.error({
+        event: 'waha.start.failed',
+        clinicId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      throw new BadGatewayException('WAHA start failed');
+    }
+
+    this.logger.log({ event: 'waha.start', clinicId });
+    return { status: 'STARTING' };
+  }
+
+  /**
+   * Termina la sesión WAHA de la clínica del user y borra credenciales en WAHA.
+   * El próximo `start` volverá a exigir escaneo de QR (comportamiento buscado).
+   *
+   * Response shape: `{ status: 'STOPPED' }`.
+   *
+   * Errores: mismo pattern que `start` — WAHA 5xx → `BadGatewayException` (502).
+   */
+  @Post('logout')
+  @HttpCode(200)
+  async logout(@CurrentUser() user: AuthUser): Promise<{ status: 'STOPPED' }> {
+    const clinicId = assertClinicScope(user);
+    const clinic = await this.prisma.clinic.findUniqueOrThrow({
+      where: { id: clinicId },
+      select: { wahaSession: true },
+    });
+
+    try {
+      await this.waha.logoutSession(clinic.wahaSession);
+    } catch (err) {
+      this.logger.error({
+        event: 'waha.logout.failed',
+        clinicId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      throw new BadGatewayException('WAHA logout failed');
+    }
+
+    this.logger.log({ event: 'waha.logout', clinicId });
+    return { status: 'STOPPED' };
   }
 }
