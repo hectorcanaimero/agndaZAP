@@ -1,10 +1,17 @@
 import 'reflect-metadata';
 import { Logger, RequestMethod, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { Queue } from 'bullmq';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
 import { WahaService } from './whatsapp/waha.service';
+import { WahaHealthMonitor } from './whatsapp/health-monitor.service';
+import {
+  WAHA_HEALTH_JOB,
+  WAHA_HEALTH_QUEUE_TOKEN,
+  createHealthMonitorWorker,
+} from './whatsapp/health-monitor.processor';
 import { createRemindersWorker } from './reminders/reminders.processor';
 import { parseRedis } from './reminders/reminders.module';
 
@@ -121,12 +128,51 @@ async function bootstrap(): Promise<void> {
     logger.error(`Job ${job?.id} falló: ${err?.message ?? 'unknown'}`);
   });
 
+  // Health-monitor de sesiones WAHA. Repeatable job cada N minutos que corre
+  // `WahaHealthMonitor.checkAll()`. El `jobId` fijo hace que BullMQ dedupe el
+  // repeatable a través de restarts del backend (idempotente). Si se revierte
+  // este bloque, limpiar el estado del repeatable con:
+  //   docker exec agendazap-redis-1 redis-cli DEL bull:waha-health:*
+  const healthQueue = app.get<Queue>(WAHA_HEALTH_QUEUE_TOKEN);
+  const healthMonitor = app.get(WahaHealthMonitor);
+  const intervalMin = Number(process.env.WAHA_HEALTH_INTERVAL_MIN ?? 5);
+  await healthQueue.add(
+    WAHA_HEALTH_JOB,
+    {},
+    {
+      repeat: { every: intervalMin * 60_000 },
+      jobId: 'waha-health-monitor-tick',
+      removeOnComplete: 100,
+      removeOnFail: 100,
+    },
+  );
+  const healthWorker = createHealthMonitorWorker(parseRedis(), healthMonitor);
+  healthWorker.on('ready', () => logger.log('HealthMonitorWorker listo'));
+  healthWorker.on('failed', (job, err) => {
+    logger.error(
+      `HealthMonitor job ${job?.id} falló: ${err?.message ?? 'unknown'}`,
+    );
+  });
+  logger.log(`waha-health-monitor programado cada ${intervalMin}m`);
+
   const shutdown = async (signal: string): Promise<void> => {
     logger.log(`Recibido ${signal}, cerrando…`);
     try {
       await worker.close();
     } catch (e) {
       logger.error(`Error cerrando worker: ${(e as Error).message}`);
+    }
+    try {
+      await healthWorker.close();
+    } catch (e) {
+      logger.error(
+        `Error cerrando health worker: ${(e as Error).message}`,
+      );
+    }
+    try {
+      await healthQueue.close();
+    } catch (e) {
+      logger.error(`Error cerrando health queue: ${(e as Error).message}`);
     }
     try {
       await app.close();
