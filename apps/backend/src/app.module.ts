@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { LlmRouterModule } from './common/llm/llm-router.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { SchedulingModule } from './scheduling/scheduling.module';
@@ -29,6 +30,7 @@ import { HealthModule } from './health/health.module';
 @Module({
   imports: [
     PrismaModule,
+    LlmRouterModule,
     WhatsappModule,
     SchedulingModule,
     RemindersModule,

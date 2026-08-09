@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { LlmRouterService } from '../common/llm/llm-router.service';
 
 export enum Intent {
   AGENDAR = 'agendar',
@@ -11,32 +12,27 @@ export enum Intent {
 }
 
 /**
- * Detección de intención con LLM barata (DeepSeek primario, Gemini fallback).
- * Reutiliza el patrón del router LLM de Blog Condor: fetch nativo, sin SDK.
- * Devuelve una de las intenciones del enum.
+ * Clasifica intención con LLM barato vía `LlmRouterService`. Si todos los
+ * providers fallan, degrada a `Intent.OTRO` (el bot responde el flujo genérico
+ * "no te entendí" en vez de romper el webhook).
  */
 @Injectable()
 export class IntentService {
   private readonly logger = new Logger(IntentService.name);
 
-  async detect(text: string, locale = 'es'): Promise<Intent> {
+  constructor(private readonly llm: LlmRouterService) {}
+
+  async detect(text: string, _locale = 'es'): Promise<Intent> {
     const system =
       'Clasifica el mensaje del paciente de una clínica en UNA de estas categorías ' +
       'y responde SOLO con la palabra exacta: agendar, reprogramar, cancelar, ' +
       'confirmar, pregunta_faq, hablar_humano, otro.';
-
     try {
-      const raw = await this.callDeepSeek(system, text);
+      const raw = await this.llm.complete({ system, user: text, maxTokens: 5 });
       return this.parse(raw);
     } catch (e) {
-      this.logger.warn(`DeepSeek falló, intento Gemini: ${e}`);
-      try {
-        const raw = await this.callGemini(system, text);
-        return this.parse(raw);
-      } catch (e2) {
-        this.logger.error(`Ambos LLM fallaron: ${e2}`);
-        return Intent.OTRO;
-      }
+      this.logger.error(`intent detect: todos los LLM fallaron: ${e}`);
+      return Intent.OTRO;
     }
   }
 
@@ -44,45 +40,5 @@ export class IntentService {
     const v = raw.trim().toLowerCase();
     const found = Object.values(Intent).find((i) => v.includes(i));
     return (found as Intent) ?? Intent.OTRO;
-  }
-
-  private async callDeepSeek(system: string, user: string): Promise<string> {
-    const key = process.env.DEEPSEEK_API_KEY;
-    if (!key) throw new Error('DEEPSEEK_API_KEY missing');
-    const res = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user },
-        ],
-        temperature: 0,
-        max_tokens: 5,
-      }),
-    });
-    if (!res.ok) throw new Error(`deepseek ${res.status}`);
-    const data = (await res.json()) as any;
-    return data.choices?.[0]?.message?.content ?? '';
-  }
-
-  private async callGemini(system: string, user: string): Promise<string> {
-    const key = process.env.GEMINI_API_KEY;
-    if (!key) throw new Error('GEMINI_API_KEY missing');
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: `${system}\n\nMensaje: ${user}` }] }],
-          generationConfig: { temperature: 0, maxOutputTokens: 5 },
-        }),
-      },
-    );
-    if (!res.ok) throw new Error(`gemini ${res.status}`);
-    const data = (await res.json()) as any;
-    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
   }
 }
