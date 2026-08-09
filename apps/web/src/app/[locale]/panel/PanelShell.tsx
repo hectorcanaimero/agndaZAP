@@ -140,9 +140,18 @@ export function PanelShell({ locale, me, children }: PanelShellProps) {
 
   const initials = getInitials(me.name);
   const roleLabel = getRoleLabel(t, me.role);
+  const fullBleed = isFullBleedRoute(pathname);
 
   return (
-    <div className="flex min-h-screen bg-muted/40 text-foreground">
+    <div
+      className={cn(
+        'flex bg-muted/40 text-foreground',
+        // En full-bleed, altura fija al viewport para que el hijo `<main>` con
+        // `flex-1` pueda propagar `h-full` a la pantalla que ocupa toda la ventana.
+        // En modo normal, `min-h-screen` para permitir contenido más largo.
+        fullBleed ? 'h-dvh overflow-hidden' : 'min-h-screen',
+      )}
+    >
       {/* Sidebar desktop */}
       <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-card md:flex">
         {/* Brand + clinic */}
@@ -312,23 +321,34 @@ export function PanelShell({ locale, me, children }: PanelShellProps) {
           </DropdownMenu>
         </header>
 
-        <main className="flex-1 overflow-x-hidden px-4 py-6 md:px-8 md:py-8">
-          {/*
-            max-w-[1600px] — antes `max-w-7xl` (1280px). Se subió porque el
-            split view de FAQ (lista + editor markdown con preview live)
-            queda muy comprimido a 1280px, y en pantallas ≥1600px sobra
-            espacio. El resto de las páginas del panel (agenda semanal,
-            tablas de servicios/profesionales/conversaciones, dashboard con
-            gráficos) también se benefician de más ancho — todas están
-            hechas con cards/tablas elásticas. Si en el futuro alguna
-            página de texto largo (settings, textos legales) necesita
-            legibilidad tipográfica, envolvela localmente con `max-w-3xl`.
-          */}
-          <div className="mx-auto w-full max-w-[1600px]">{children}</div>
-        </main>
+        {/*
+          Rutas full-bleed (ej. /panel/conversaciones): la pantalla necesita
+          ocupar todo el viewport, sin padding ni max-width del shell. En vez de
+          duplicar cascadas de layouts, la shell detecta la ruta y omite la
+          jaula. Cualquier otra ruta mantiene el contenedor con `max-w-[1600px]`.
+        */}
+        {isFullBleedRoute(pathname) ? (
+          <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
+        ) : (
+          <main className="flex-1 overflow-x-hidden px-4 py-6 md:px-8 md:py-8">
+            <div className="mx-auto w-full max-w-[1600px]">{children}</div>
+          </main>
+        )}
       </div>
     </div>
   );
+}
+
+/**
+ * Rutas que necesitan ocupar el viewport entero sin la jaula del contenedor
+ * (padding + max-width). Hoy: bandeja de conversaciones. Agregar acá cuando
+ * aparezca otra pantalla que lo pida.
+ */
+const FULL_BLEED_SEGMENTS = ['/panel/conversaciones'] as const;
+
+function isFullBleedRoute(pathname: string | null): boolean {
+  if (!pathname) return false;
+  return FULL_BLEED_SEGMENTS.some((seg) => pathname.includes(seg));
 }
 
 /** Toma iniciales — hasta 2 letras — para el avatar. */
