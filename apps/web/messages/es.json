@@ -336,6 +336,32 @@
       "errors": {
         "content": "El contenido debe tener entre 5 y 4000 caracteres."
       }
+    },
+    "whatsapp": {
+      "title": "Conexión de WhatsApp",
+      "subtitle": "Estado de la sesión del bot para esta clínica.",
+      "loadError": "No se pudo cargar el estado ({status}).",
+      "sessionLabel": "sesión",
+      "status": {
+        "WORKING": "Conectado",
+        "STARTING": "Iniciando…",
+        "SCAN_QR_CODE": "Esperando QR",
+        "STOPPED": "Desconectado",
+        "FAILED": "Falló",
+        "UNKNOWN": "Sin info"
+      },
+      "qr": {
+        "alt": "Código QR para escanear con WhatsApp",
+        "help": "Escaneá con el WhatsApp del número dedicado de la clínica."
+      },
+      "empty": {
+        "title": "Sin QR activo",
+        "help": "Presioná Conectar para iniciar la sesión."
+      },
+      "actions": {
+        "connect": "Conectar",
+        "disconnect": "Desconectar"
+      }
     }
   }
 }
