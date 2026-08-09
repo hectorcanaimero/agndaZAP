@@ -567,6 +567,110 @@ export function AgendaClient({
 }
 
 /* ═══════════════════════════════════════════════════════════════════
+ *                        STATUS FILTER DROPDOWN
+ * ═══════════════════════════════════════════════════════════════════ */
+
+/**
+ * Dropdown multi-select para filtrar por estado. Reemplaza a la fila de
+ * chips previa — mantiene semántica de multi-select (checkboxes) y suma
+ * acciones rápidas (todos / limpiar / preset).
+ *
+ * IMPORTANTE: usamos `onSelect={(e) => e.preventDefault()}` en cada
+ * CheckboxItem para que Radix NO cierre el menú al toggelear — la
+ * intención UX en un multi-select es que el usuario marque varios estados
+ * en una sola apertura y cierre cuando quiera.
+ */
+function StatusFilterDropdown({
+  statusSet,
+  onToggle,
+  onClear,
+  onPresetPending,
+  onSelectAll,
+}: {
+  statusSet: Set<AppointmentStatus>;
+  onToggle: (s: AppointmentStatus) => void;
+  onClear: () => void;
+  onPresetPending: () => void;
+  onSelectAll: () => void;
+}) {
+  const t = useTranslations('panel.agenda');
+  const tStatus = useTranslations('panel.dashboard.status');
+  const count = statusSet.size;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-9 shrink-0 gap-2"
+        >
+          <Filter className="h-3.5 w-3.5" aria-hidden="true" />
+          <span>{t('filters.status')}</span>
+          {count > 0 ? (
+            <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand-600 px-1.5 text-[11px] font-semibold tabular-nums text-white">
+              {count}
+            </span>
+          ) : null}
+          <ChevronDown
+            className="h-3.5 w-3.5 opacity-60"
+            aria-hidden="true"
+          />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-60">
+        <DropdownMenuLabel className="flex items-center justify-between">
+          <span>{t('filters.status')}</span>
+          {count > 0 ? (
+            <button
+              type="button"
+              onClick={onClear}
+              className="text-xs font-normal text-muted-foreground hover:text-foreground"
+            >
+              {t('filters.clearAll')}
+            </button>
+          ) : null}
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {ALL_STATUSES.map((s) => {
+          const checked = statusSet.has(s);
+          return (
+            <DropdownMenuCheckboxItem
+              key={s}
+              checked={checked}
+              onCheckedChange={() => onToggle(s)}
+              onSelect={(e) => e.preventDefault()}
+              className="gap-2"
+            >
+              <span
+                className={cn(
+                  'h-1.5 w-1.5 shrink-0 rounded-full',
+                  APPOINTMENT_STATUS_TOKENS[s].dot,
+                )}
+                aria-hidden="true"
+              />
+              {tStatus(s)}
+            </DropdownMenuCheckboxItem>
+          );
+        })}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={onSelectAll}>
+          {t('filters.selectAll')}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onSelect={onPresetPending}
+          className="text-brand-700 focus:text-brand-700"
+        >
+          <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+          {t('filters.presets.pending')}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
  *                             MONTH VIEW
  * ═══════════════════════════════════════════════════════════════════ */
 

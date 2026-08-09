@@ -217,6 +217,7 @@
         "allStatuses": "Todos los estados",
         "toggle": "Filtros",
         "clearAll": "Limpiar filtros",
+        "selectAll": "Seleccionar todos",
         "presets": {
           "pending": "Solo pendientes de confirmar"
         }
