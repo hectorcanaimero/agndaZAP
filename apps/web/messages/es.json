@@ -360,7 +360,21 @@
       },
       "actions": {
         "connect": "Conectar",
-        "disconnect": "Desconectar"
+        "disconnect": "Desconectar",
+        "connecting": "Iniciando…",
+        "disconnecting": "Desconectando…",
+        "confirmDisconnect": "¿Seguro que querés desconectar la sesión de WhatsApp? Vas a tener que escanear el QR de nuevo."
+      },
+      "polling": {
+        "fast": "Actualizando cada 3s",
+        "slow": "Actualizando cada 15s",
+        "off": "Sin actualización"
+      },
+      "toast": {
+        "startFailed": "No se pudo iniciar la sesión (WAHA no respondió)",
+        "logoutFailed": "No se pudo desconectar la sesión (WAHA no respondió). Refrescando estado…",
+        "rateLimited": "Muchas peticiones seguidas. Reintentando en unos segundos…",
+        "statusFetchFailed": "No se pudo consultar el estado (reintentando…)"
       }
     }
   }
