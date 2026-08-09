@@ -40,6 +40,11 @@ export function PanelShell({ locale, me, children }: PanelShellProps) {
     { key: 'horarios', href: `/${locale}/panel/horarios`, label: t('businessHours') },
     { key: 'bloqueos', href: `/${locale}/panel/bloqueos`, label: t('timeOff') },
     { key: 'faq', href: `/${locale}/panel/faq`, label: t('faq') },
+    {
+      key: 'whatsapp',
+      href: `/${locale}/panel/config/whatsapp`,
+      label: t('whatsapp'),
+    },
   ];
 
   return (
