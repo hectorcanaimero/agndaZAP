@@ -1,6 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { PublicModule } from '../public/public.module';
 import { WahaService } from './waha.service';
+import { WahaHealthMonitor } from './health-monitor.service';
 import { WebhookController } from './webhook.controller';
 import { WhatsappPanelController } from './whatsapp-panel.controller';
 import { BotModule } from '../bot/bot.module';
@@ -18,11 +19,15 @@ import { BotModule } from '../bot/bot.module';
  * singleton (misma conexión Redis que el resto del backend). No expone nada
  * más de PublicModule.
  *
+ * `WahaHealthMonitor` es la lógica pura del health-check periódico. Se
+ * registra aquí como provider interno; el wiring BullMQ (queue + worker) lo
+ * hace T8 y sólo entonces se exportará si otro módulo lo necesita.
+ *
  * `PrismaModule` es global (`@Global()`) — no requiere import explícito.
  */
 @Module({
   imports: [forwardRef(() => BotModule), PublicModule],
-  providers: [WahaService],
+  providers: [WahaService, WahaHealthMonitor],
   controllers: [WebhookController, WhatsappPanelController],
   exports: [WahaService],
 })
