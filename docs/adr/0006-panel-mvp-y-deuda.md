@@ -190,6 +190,17 @@ Numerada para poder referenciar en PRs y en la bitácora.
    bandeja cuando el volumen lo exija (>10 clínicas activas concurrentes).
    NestJS soporta WS nativamente. **Post-piloto por carga**.
 
+10. **Alerting externo sobre sesiones WAHA en FAILED** — hoy el
+    `WahaHealthMonitor` ([[0008-panel-conexion-waha-y-observabilidad]])
+    loguea `warn` cuando una sesión pasa a FAILED. No hay canal de
+    notificación externo (Slack, email, PagerDuty). Post-piloto o cuando la
+    primera clínica reporte un no-show por sesión caída no detectada, agregar:
+    (a) integración con un webhook Slack por clínica en
+    `Clinic.alertsWebhookUrl?` (nullable), (b) throttle: máximo 1 alerta
+    cada 30 min por clínica para no spamear si WAHA fluctúa. Hasta entonces,
+    monitoreo manual del log del backend con
+    `docker compose logs backend | rg waha.health.failed`.
+
 ## Consecuencias
 
 - El piloto puede correr con la deuda documentada siempre que sea con

@@ -127,28 +127,54 @@ persona con auto-borrado, o entregalo en persona).
 WAHA es el gateway a WhatsApp. Cada clínica tiene su propia **session**
 (nombre igual al `wahaSession` del `Clinic`).
 
-### 3.a. Crear la sesión
+### 3.a. Crear la sesión (flujo primario: desde el panel)
 
-En dev/prod, WAHA expone su dashboard en `http://<host>:3000/dashboard`
-(protegido por `WAHA_DASHBOARD_USERNAME` / `WAHA_DASHBOARD_PASSWORD`).
+Desde que se cerró el bloque [[adr/0008-panel-conexion-waha-y-observabilidad]],
+el flujo recomendado es hacer todo desde el propio panel de la clínica —
+el `CLINIC_ADMIN` no necesita acceso al dashboard nativo de WAHA.
 
-Alternativa via API (necesitás `WAHA_API_KEY`):
+1. Login en el panel con el user `CLINIC_ADMIN` creado en 2.c
+   (`https://<panel-host>/es/login`).
+2. Ir a `/panel/config/whatsapp`.
+3. Presionar **Conectar**. El backend hace `POST /api/clinics/me/waha/start`
+   contra la sesión derivada de `clinic.wahaSession` (nunca se acepta el
+   nombre de sesión del cliente).
+4. El panel entra en polling adaptativo (2s en transiente, 15s cuando ya
+   está WORKING). Cuando el status pasa a `SCAN_QR_CODE`, el QR aparece
+   embebido en la pantalla del panel.
 
-```bash
-curl -X POST http://<host>:3000/api/sessions \
-  -H "Content-Type: application/json" \
-  -H "X-Api-Key: $WAHA_API_KEY" \
-  -d '{"name": "clinica-santa-fe", "start": true}'
-```
+Ventaja frente al dashboard de WAHA: aislamiento multi-tenant real
+(cada admin ve **sólo** su sesión, no las del resto de clínicas).
+
+### 3.a.bis. Fallback avanzado — dashboard/API de WAHA
+
+Sólo para el equipo técnico de AgendaZap cuando el panel no alcanza
+(troubleshooting, automatizaciones, provisioning masivo):
+
+- Dashboard: `http://<host>:3000/dashboard`, protegido por
+  `WAHA_DASHBOARD_USERNAME` / `WAHA_DASHBOARD_PASSWORD`.
+- API directa (necesita `WAHA_API_KEY`):
+
+  ```bash
+  curl -X POST http://<host>:3000/api/sessions \
+    -H "Content-Type: application/json" \
+    -H "X-Api-Key: $WAHA_API_KEY" \
+    -d '{"name": "clinica-santa-fe", "start": true}'
+  ```
+
+No usar estos accesos para operar clínicas reales — todo el operativo
+diario va por el panel.
 
 ### 3.b. Escanear el QR
 
-Desde el dashboard de WAHA (`/dashboard`), seleccioná la sesión creada y
-mostrá el QR. Escanealo con el WhatsApp del **número dedicado de la
-clínica**.
+Con el flujo del panel, el QR aparece directamente en
+`/panel/config/whatsapp` cuando el status es `SCAN_QR_CODE`. Escanealo
+con el WhatsApp del **número dedicado de la clínica** (no del dashboard
+de WAHA — el QR es exactamente el mismo, pero servido con el aislamiento
+por clínica del panel).
 
-Confirmación: el estado de la sesión pasa a `WORKING` (verde). El bot ya
-puede recibir y enviar mensajes.
+Confirmación: el status en el panel pasa a `WORKING` (badge verde
+"Conectado"). El bot ya puede recibir y enviar mensajes.
 
 ### 3.c. Configurar el webhook
 
@@ -164,22 +190,29 @@ para que el backend valide el header custom.
 
 ## 4. Verificar la conexión WAHA
 
-> **Deuda documentada**: no hay `GET /api/clinics/:id/waha/status` todavía
-> (spec lo menciona pero está pendiente). Por ahora, verificamos directo
-> contra WAHA.
+Verificación primaria desde el panel: entrar a `/panel/config/whatsapp`
+y confirmar que el badge muestra **Conectado** (verde). Ese badge es el
+proxy visual de `GET /api/clinics/me/waha/status` devolviendo
+`{ status: 'WORKING' }`.
+
+Si el badge queda en `STARTING` / `SCAN_QR_CODE` / `FAILED` / `UNKNOWN`,
+seguir el flujo del panel (re-escanear el QR o presionar Conectar). Ver
+[[adr/0008-panel-conexion-waha-y-observabilidad]] para el detalle de
+cada estado y el polling adaptativo.
+
+Alternativa para el equipo técnico (backend engineers con acceso a la
+API de WAHA):
 
 ```bash
 curl -H "X-Api-Key: $WAHA_API_KEY" \
   http://<host>:3000/api/sessions/clinica-santa-fe
 ```
 
-Esperado: JSON con `"status": "WORKING"`. Cualquier otro estado
-(`STARTING`, `SCAN_QR_CODE`, `FAILED`) indica que hay que re-escanear o
-reiniciar la sesión.
+Esperado: JSON con `"status": "WORKING"`.
 
-Smoke: mandale "hola" al número desde tu WhatsApp personal. En el panel,
-en la Bandeja, tenés que ver aparecer la conversación con la respuesta
-del bot.
+Smoke funcional: mandale "hola" al número desde tu WhatsApp personal. En
+el panel, en la Bandeja, tenés que ver aparecer la conversación con la
+respuesta del bot.
 
 ---
 
@@ -394,14 +427,16 @@ recepción física.
 
 ## 14. Deuda del onboarding (endpoints faltantes)
 
+> Actualizado 2026-08-09: items 3 y 4 (endpoints WAHA) cerrados por
+> [[adr/0008-panel-conexion-waha-y-observabilidad]]. La lista se
+> renumeró en consecuencia.
+
 Documentado para post-piloto:
 
 1. `POST /api/clinics` (SUPERADMIN) — hoy via Prisma Studio o SQL.
 2. `POST /api/clinics/:id/users` (SUPERADMIN) — hoy via Studio + bcrypt CLI.
-3. `GET /api/clinics/:id/waha/status` — hoy via WAHA API directa.
-4. `POST /api/clinics/:id/waha/start` — hoy via WAHA API o dashboard.
-5. UI `/panel/config` para editar `reminderOffsetsH`, `confirmThresholdH`,
+3. UI `/panel/config` para editar `reminderOffsetsH`, `confirmThresholdH`,
    `autoConfirm` — hoy via SQL/Studio.
-6. Password reset flow — hoy via SQL + bcrypt CLI.
+4. Password reset flow — hoy via SQL + bcrypt CLI.
 
 Referencias: [[SPEC]] §1 (Clínicas), [[adr/0005-auth-mvp-y-deuda]].
