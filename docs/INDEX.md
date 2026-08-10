@@ -25,6 +25,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[adr/0007-rate-limit-bot|0007 — Rate-limit del bot de WhatsApp (protección LLM budget)]]
 - [[adr/0008-panel-conexion-waha-y-observabilidad|0008 — Panel de conexión WAHA + observabilidad]]
 - [[adr/0009-faq-title-y-markdown-strip|0009 — FAQ: `title` opcional y strip de markdown antes del embedding]]
+- [[adr/0010-lid-y-contacto-whatsapp|0010 — WhatsApp LID, identidad del contacto y perfil visible]]
 
 ## Notas y descubrimientos
 - [[notas/2026-08-08-prisma-pgvector-y-env|2026-08-08 — Prisma + pgvector y carga de `.env` en el monorepo]]
