@@ -47,11 +47,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { MarkdownEditor } from '@/components/ui/markdown-editor';
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
+  MasterDetailShell,
+  useMobileSheet,
+} from '@/components/panel/master-detail';
 import { apiMutation, apiQuery } from '@/lib/query-fn';
 import { queryKeys } from '@/lib/query-keys';
 import { cn } from '@/lib/utils';
@@ -128,7 +126,7 @@ export function FaqClient({
   const [onlyPending, setOnlyPending] = useState(false);
   const [panel, setPanel] = useState<PanelMode>({ kind: 'empty' });
   const [deleteTarget, setDeleteTarget] = useState<FaqChunk | null>(null);
-  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
+  const mobileSheet = useMobileSheet();
 
   const { data: rows = initialRows } = useQuery({
     queryKey: queryKeys.faq,
@@ -150,9 +148,9 @@ export function FaqClient({
       !rows.some((r) => r.id === panel.row.id)
     ) {
       setPanel({ kind: 'empty' });
-      setMobileSheetOpen(false);
+      mobileSheet.close();
     }
-  }, [rows, panel]);
+  }, [rows, panel, mobileSheet]);
 
   const filtered = useMemo(() => {
     let out = rows;
@@ -178,7 +176,7 @@ export function FaqClient({
       void qc.invalidateQueries({ queryKey: queryKeys.faq });
       if (panel.kind === 'edit' && panel.row.id === deletedId) {
         setPanel({ kind: 'empty' });
-        setMobileSheetOpen(false);
+        mobileSheet.close();
       }
     },
     onError: () => {
@@ -187,29 +185,24 @@ export function FaqClient({
     onSettled: () => setDeleteTarget(null),
   });
 
-  function isMobileViewport(): boolean {
-    if (typeof window === 'undefined') return false;
-    return window.matchMedia('(max-width: 767.98px)').matches;
-  }
-
   function openCreate() {
     setPanel({ kind: 'create' });
-    if (isMobileViewport()) setMobileSheetOpen(true);
+    mobileSheet.openIfMobile();
   }
 
   function openEdit(r: FaqChunk) {
     setPanel({ kind: 'edit', row: r });
-    if (isMobileViewport()) setMobileSheetOpen(true);
+    mobileSheet.openIfMobile();
   }
 
   function closePanel() {
     setPanel({ kind: 'empty' });
-    setMobileSheetOpen(false);
+    mobileSheet.close();
   }
 
   function handleFormSuccess(saved: FaqChunk, wasCreate: boolean) {
     setPanel({ kind: 'edit', row: saved });
-    if (wasCreate) setMobileSheetOpen(false);
+    if (wasCreate) mobileSheet.close();
   }
 
   const panelContent =
@@ -225,27 +218,24 @@ export function FaqClient({
       />
     );
 
-  return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
-      {/* Banner "sin embedding" — arriba del split card. Info de la clínica,
-          no de la lista. Se auto-oculta cuando todo está indexado. */}
-      {pendingCount > 0 ? (
-        <div
-          role="status"
-          className="shrink-0 rounded-md border border-amber-300 bg-amber-50 p-3"
-        >
-          <p className="text-sm font-medium text-amber-900">
-            {t('notIndexedBanner', { count: pendingCount })}
-          </p>
-          <p className="mt-1 text-sm text-amber-800">{t('notIndexedHint')}</p>
-        </div>
-      ) : null}
+  // Banner "sin embedding" — arriba del split card via headerSlot del shell.
+  // Se auto-oculta cuando todo está indexado.
+  const headerSlot =
+    pendingCount > 0 ? (
+      <div
+        role="status"
+        className="shrink-0 rounded-md border border-amber-300 bg-amber-50 p-3"
+      >
+        <p className="text-sm font-medium text-amber-900">
+          {t('notIndexedBanner', { count: pendingCount })}
+        </p>
+        <p className="mt-1 text-sm text-amber-800">{t('notIndexedHint')}</p>
+      </div>
+    ) : null;
 
-      {/* Split card */}
-      <div className="flex min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        {/* ─────────  IZQUIERDA — LISTA  ───────── */}
-        <aside className="flex min-h-0 w-full flex-col border-r border-border/60 md:w-[380px] md:shrink-0">
-          <div className="shrink-0 space-y-2 border-b border-border/60 p-3">
+  const sidebar = (
+    <>
+      <div className="shrink-0 space-y-2 border-b border-border/60 p-3">
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
                 <Search
@@ -339,37 +329,26 @@ export function FaqClient({
               ))}
             </ul>
           )}
-        </aside>
+    </>
+  );
 
-        {/* ─────────  DERECHA — PANEL (solo md+)  ───────── */}
-        <section className="hidden min-h-0 flex-1 md:flex md:flex-col">
-          {panelContent}
-        </section>
-      </div>
-
-      {/* ─────────  MOBILE — SHEET DRAWER  ───────── */}
-      <Sheet
-        open={mobileSheetOpen}
-        onOpenChange={(o) => {
-          if (!o) closePanel();
-        }}
-      >
-        <SheetContent
-          side="right"
-          className="w-full overflow-y-auto p-0 sm:max-w-2xl md:hidden"
-        >
-          <SheetHeader className="sr-only">
-            <SheetTitle>
-              {panel.kind === 'create'
-                ? t('newTitle')
-                : panel.kind === 'edit'
-                  ? t('editTitle')
-                  : ''}
-            </SheetTitle>
-          </SheetHeader>
-          {panel.kind !== 'empty' ? panelContent : null}
-        </SheetContent>
-      </Sheet>
+  return (
+    <>
+      <MasterDetailShell
+        sidebar={sidebar}
+        panel={panelContent}
+        mobile={mobileSheet}
+        mobileTitle={
+          panel.kind === 'create'
+            ? t('newTitle')
+            : panel.kind === 'edit'
+              ? t('editTitle')
+              : ''
+        }
+        hidePanelInSheet={panel.kind === 'empty'}
+        mobileSheetMaxWidth="sm:max-w-2xl"
+        headerSlot={headerSlot}
+      />
 
       <ConfirmDialog
         open={deleteTarget !== null}
@@ -392,7 +371,7 @@ export function FaqClient({
         cancelLabel={tCommon('cancel')}
         variant="destructive"
       />
-    </div>
+    </>
   );
 }
 

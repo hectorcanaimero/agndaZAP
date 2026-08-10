@@ -23,11 +23,11 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
+  EmptyStatePanel,
+  MasterDetailRow,
+  MasterDetailShell,
+  useMobileSheet,
+} from '@/components/panel/master-detail';
 import { apiMutation, apiQuery } from '@/lib/query-fn';
 import { queryKeys } from '@/lib/query-keys';
 import { cn } from '@/lib/utils';
@@ -101,7 +101,7 @@ export function ServicesClient({
   const [search, setSearch] = useState('');
   const [panel, setPanel] = useState<PanelMode>({ kind: 'empty' });
   const [deleteTarget, setDeleteTarget] = useState<Service | null>(null);
-  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
+  const mobileSheet = useMobileSheet();
 
   const { data: services = initialServices } = useQuery({
     queryKey: queryKeys.services,
@@ -137,7 +137,7 @@ export function ServicesClient({
       // datos de un servicio inexistente hasta el próximo click).
       if (panel.kind === 'edit' && panel.service.id === deletedId) {
         setPanel({ kind: 'empty' });
-        setMobileSheetOpen(false);
+        mobileSheet.close();
       }
     },
     onError: () => {
@@ -148,29 +148,19 @@ export function ServicesClient({
 
   /* ─────── Handlers ─────── */
 
-  // El Sheet mobile es controlled → si lo abrimos en desktop, Radix igual
-  // renderiza el overlay/backdrop del portal aunque el content tenga md:hidden
-  // (el overlay NO hereda esa clase). Guard con matchMedia para abrir solo
-  // cuando corresponde. En desktop el panel derecho ya es visible, no hace
-  // falta drawer.
-  function isMobileViewport(): boolean {
-    if (typeof window === 'undefined') return false;
-    return window.matchMedia('(max-width: 767.98px)').matches;
-  }
-
   function openCreate() {
     setPanel({ kind: 'create' });
-    if (isMobileViewport()) setMobileSheetOpen(true);
+    mobileSheet.openIfMobile();
   }
 
   function openEdit(s: Service) {
     setPanel({ kind: 'edit', service: s });
-    if (isMobileViewport()) setMobileSheetOpen(true);
+    mobileSheet.openIfMobile();
   }
 
   function closePanel() {
     setPanel({ kind: 'empty' });
-    setMobileSheetOpen(false);
+    mobileSheet.close();
   }
 
   function handleFormSuccess(saved: Service, wasCreate: boolean) {
@@ -180,7 +170,7 @@ export function ServicesClient({
     if (wasCreate) {
       // En mobile, tras crear cerramos el sheet para que el user vea la lista
       // actualizada. En desktop lo dejamos abierto para permitir tweaks.
-      setMobileSheetOpen(false);
+      mobileSheet.close();
     }
   }
 
@@ -202,117 +192,101 @@ export function ServicesClient({
       />
     );
 
-  return (
+  const sidebar = (
     <>
-      <div className="flex h-full min-h-0 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        {/* ─────────  IZQUIERDA — LISTA  ───────── */}
-        <aside className="flex min-h-0 w-full flex-col border-r border-border/60 md:w-[380px] md:shrink-0">
-          {/* Toolbar: search + count + CTA */}
-          <div className="shrink-0 space-y-2 border-b border-border/60 p-3">
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <Search
-                  className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                <Input
-                  type="search"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder={t('searchPlaceholder')}
-                  className="h-9 pl-8"
-                  aria-label={t('searchPlaceholder')}
-                />
-              </div>
-              <Button
-                size="sm"
-                className="h-9 shrink-0 gap-1.5"
-                onClick={openCreate}
-                aria-label={t('new')}
-              >
-                <Plus className="h-4 w-4" aria-hidden="true" />
-                <span className="hidden sm:inline">{t('new')}</span>
-              </Button>
-            </div>
-            <p className="px-0.5 text-[11px] tabular-nums text-muted-foreground">
-              {t('countLabel', { n: services.length })}
-              {search && filtered.length !== services.length ? (
-                <>
-                  {' '}
-                  ·{' '}
-                  <span className="text-foreground">
-                    {t('countMatch', { n: filtered.length })}
-                  </span>
-                </>
-              ) : null}
-            </p>
+      {/* Toolbar: search + count + CTA */}
+      <div className="shrink-0 space-y-2 border-b border-border/60 p-3">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search
+              className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t('searchPlaceholder')}
+              className="h-9 pl-8"
+              aria-label={t('searchPlaceholder')}
+            />
           </div>
-
-          {/* Lista */}
-          {filtered.length === 0 ? (
-            <div className="flex flex-1 items-center justify-center p-6">
-              <div className="text-center">
-                <p className="text-sm text-muted-foreground">
-                  {search ? t('noSearchResults') : t('emptyList')}
-                </p>
-                {!search ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="mt-3"
-                    onClick={openCreate}
-                  >
-                    <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                    {t('createFirst')}
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-          ) : (
-            <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-1">
-              {filtered.map((s) => (
-                <li key={s.id}>
-                  <ServiceRow
-                    service={s}
-                    active={s.id === activeId}
-                    onSelect={() => openEdit(s)}
-                    t={t}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
-        </aside>
-
-        {/* ─────────  DERECHA — PANEL (solo md+)  ───────── */}
-        <section className="hidden min-h-0 flex-1 md:flex md:flex-col">
-          {panelContent}
-        </section>
+          <Button
+            size="sm"
+            className="h-9 shrink-0 gap-1.5"
+            onClick={openCreate}
+            aria-label={t('new')}
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            <span className="hidden sm:inline">{t('new')}</span>
+          </Button>
+        </div>
+        <p className="px-0.5 text-[11px] tabular-nums text-muted-foreground">
+          {t('countLabel', { n: services.length })}
+          {search && filtered.length !== services.length ? (
+            <>
+              {' '}
+              ·{' '}
+              <span className="text-foreground">
+                {t('countMatch', { n: filtered.length })}
+              </span>
+            </>
+          ) : null}
+        </p>
       </div>
 
-      {/* ─────────  MOBILE — SHEET DRAWER  ───────── */}
-      <Sheet
-        open={mobileSheetOpen}
-        onOpenChange={(o) => {
-          if (!o) closePanel();
-        }}
-      >
-        <SheetContent
-          side="right"
-          className="w-full overflow-y-auto p-0 sm:max-w-md md:hidden"
-        >
-          <SheetHeader className="sr-only">
-            <SheetTitle>
-              {panel.kind === 'create'
-                ? t('newTitle')
-                : panel.kind === 'edit'
-                  ? t('editTitle')
-                  : ''}
-            </SheetTitle>
-          </SheetHeader>
-          {panel.kind !== 'empty' ? panelContent : null}
-        </SheetContent>
-      </Sheet>
+      {/* Lista */}
+      {filtered.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center p-6">
+          <div className="text-center">
+            <p className="text-sm text-muted-foreground">
+              {search ? t('noSearchResults') : t('emptyList')}
+            </p>
+            {!search ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-3"
+                onClick={openCreate}
+              >
+                <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                {t('createFirst')}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : (
+        <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-1">
+          {filtered.map((s) => (
+            <li key={s.id}>
+              <ServiceRow
+                service={s}
+                active={s.id === activeId}
+                onSelect={() => openEdit(s)}
+                t={t}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+
+  return (
+    <>
+      <MasterDetailShell
+        sidebar={sidebar}
+        panel={panelContent}
+        mobile={mobileSheet}
+        mobileTitle={
+          panel.kind === 'create'
+            ? t('newTitle')
+            : panel.kind === 'edit'
+              ? t('editTitle')
+              : ''
+        }
+        hidePanelInSheet={panel.kind === 'empty'}
+      />
 
       <ConfirmDialog
         open={deleteTarget !== null}

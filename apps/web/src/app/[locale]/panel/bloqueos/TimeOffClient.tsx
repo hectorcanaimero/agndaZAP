@@ -29,11 +29,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
+  MasterDetailShell,
+  useMobileSheet,
+} from '@/components/panel/master-detail';
 import { apiMutation, apiQuery } from '@/lib/query-fn';
 import { queryKeys } from '@/lib/query-keys';
 import { cn } from '@/lib/utils';
@@ -113,7 +111,7 @@ export function TimeOffClient({
   const [search, setSearch] = useState('');
   const [panel, setPanel] = useState<PanelMode>({ kind: 'empty' });
   const [deleteTarget, setDeleteTarget] = useState<TimeOff | null>(null);
-  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
+  const mobileSheet = useMobileSheet();
 
   const { data: rows = initialRows } = useQuery({
     queryKey: queryKeys.timeOff(),
@@ -194,7 +192,7 @@ export function TimeOffClient({
       void qc.invalidateQueries({ queryKey: ['timeOff'] });
       if (panel.kind === 'edit' && panel.row.id === deletedId) {
         setPanel({ kind: 'empty' });
-        setMobileSheetOpen(false);
+        mobileSheet.close();
       }
     },
     onError: () => {
@@ -203,29 +201,24 @@ export function TimeOffClient({
     onSettled: () => setDeleteTarget(null),
   });
 
-  function isMobileViewport(): boolean {
-    if (typeof window === 'undefined') return false;
-    return window.matchMedia('(max-width: 767.98px)').matches;
-  }
-
   function openCreate() {
     setPanel({ kind: 'create' });
-    if (isMobileViewport()) setMobileSheetOpen(true);
+    mobileSheet.openIfMobile();
   }
 
   function openEdit(r: TimeOff) {
     setPanel({ kind: 'edit', row: r });
-    if (isMobileViewport()) setMobileSheetOpen(true);
+    mobileSheet.openIfMobile();
   }
 
   function closePanel() {
     setPanel({ kind: 'empty' });
-    setMobileSheetOpen(false);
+    mobileSheet.close();
   }
 
   function handleFormSuccess(saved: TimeOff, wasCreate: boolean) {
     setPanel({ kind: 'edit', row: saved });
-    if (wasCreate) setMobileSheetOpen(false);
+    if (wasCreate) mobileSheet.close();
   }
 
   const panelContent =
@@ -242,12 +235,9 @@ export function TimeOffClient({
       />
     );
 
-  return (
+  const sidebar = (
     <>
-      <div className="flex h-full min-h-0 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        {/* ─────────  IZQUIERDA — LISTA  ───────── */}
-        <aside className="flex min-h-0 w-full flex-col border-r border-border/60 md:w-[380px] md:shrink-0">
-          <div className="shrink-0 space-y-2 border-b border-border/60 p-3">
+      <div className="shrink-0 space-y-2 border-b border-border/60 p-3">
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
                 <Search
@@ -354,37 +344,24 @@ export function TimeOffClient({
               ) : null}
             </div>
           )}
-        </aside>
+    </>
+  );
 
-        {/* ─────────  DERECHA — PANEL (solo md+)  ───────── */}
-        <section className="hidden min-h-0 flex-1 md:flex md:flex-col">
-          {panelContent}
-        </section>
-      </div>
-
-      {/* ─────────  MOBILE — SHEET DRAWER  ───────── */}
-      <Sheet
-        open={mobileSheetOpen}
-        onOpenChange={(o) => {
-          if (!o) closePanel();
-        }}
-      >
-        <SheetContent
-          side="right"
-          className="w-full overflow-y-auto p-0 sm:max-w-md md:hidden"
-        >
-          <SheetHeader className="sr-only">
-            <SheetTitle>
-              {panel.kind === 'create'
-                ? t('newTitle')
-                : panel.kind === 'edit'
-                  ? t('editTitle')
-                  : ''}
-            </SheetTitle>
-          </SheetHeader>
-          {panel.kind !== 'empty' ? panelContent : null}
-        </SheetContent>
-      </Sheet>
+  return (
+    <>
+      <MasterDetailShell
+        sidebar={sidebar}
+        panel={panelContent}
+        mobile={mobileSheet}
+        mobileTitle={
+          panel.kind === 'create'
+            ? t('newTitle')
+            : panel.kind === 'edit'
+              ? t('editTitle')
+              : ''
+        }
+        hidePanelInSheet={panel.kind === 'empty'}
+      />
 
       <ConfirmDialog
         open={deleteTarget !== null}
