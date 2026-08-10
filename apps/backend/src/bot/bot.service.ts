@@ -79,13 +79,44 @@ export class BotService {
     return createHash('sha256').update(chatId).digest('hex').slice(0, 8);
   }
 
+  /**
+   * Actualiza `avatarUrl` + `avatarFetchedAt` de una conversación en background.
+   * Silencia errores (WAHA caido, contacto sin foto) — el fallback en frontend
+   * son las iniciales del contactName / phone.
+   */
+  private async refreshAvatar(
+    convoId: string,
+    wahaSession: string,
+    chatId: string,
+  ): Promise<void> {
+    try {
+      const url = await this.waha.getContactAvatar(wahaSession, chatId);
+      await this.prisma.conversation.update({
+        where: { id: convoId },
+        data: {
+          avatarUrl: url,
+          avatarFetchedAt: DateTime.now().toJSDate(),
+        },
+      });
+    } catch (e) {
+      this.logger.warn(
+        `refreshAvatar falló convoId=${convoId}: ${(e as Error).message}`,
+      );
+    }
+  }
+
   async handleIncoming(input: {
     clinicId: string;
     chatId: string;
-    phone: string;
+    /** E.164 sin sufijo, o null si `chatId` es un @lid (no conocemos el phone). */
+    phone: string | null;
+    /** LID de WhatsApp sin sufijo, si el chatId venia como @lid. */
+    lid?: string | null;
+    /** pushName visible del contacto (puede cambiar entre mensajes). */
+    contactName?: string | null;
     text: string;
   }): Promise<void> {
-    const { clinicId, chatId, phone, text } = input;
+    const { clinicId, chatId, phone, lid, contactName, text } = input;
 
     // ── Rate-limit por conversación + circuit breaker global (ADR 0007) ──
     // Fixed-window por minuto en `(clinicId, chatId)`. Silencio total al superar:
@@ -125,14 +156,34 @@ export class BotService {
       where: { id: clinicId },
     });
 
+    // Upsert de la conversación. En update solo tocamos `contactName` si vino
+    // uno nuevo (WhatsApp permite cambiarlo) — evita clobbears innecesarios.
     const convo = await this.prisma.conversation.upsert({
       where: { clinicId_chatId: { clinicId, chatId } },
-      create: { clinicId, chatId, phone, state: 'BOT' },
-      update: {},
+      create: {
+        clinicId,
+        chatId,
+        phone,
+        lid,
+        contactName,
+        state: 'BOT',
+      },
+      update: contactName ? { contactName } : {},
     });
     await this.prisma.message.create({
       data: { conversationId: convo.id, direction: 'IN', body: text },
     });
+
+    // Avatar: refresh en background si nunca lo trajimos o si expiró (>24h).
+    // Fire-and-forget: no bloqueamos el pipeline del bot por un avatar.
+    const AVATAR_TTL_MS = 24 * 60 * 60 * 1000;
+    const needsAvatar =
+      !convo.avatarFetchedAt ||
+      Date.now() - convo.avatarFetchedAt.getTime() > AVATAR_TTL_MS;
+    if (needsAvatar) {
+      // No await — errores se loggean dentro de refreshAvatar.
+      void this.refreshAvatar(convo.id, clinic.wahaSession, chatId);
+    }
 
     // Si un humano tomó la conversación, el bot no responde.
     if (convo.state === 'HUMAN') return;
@@ -184,7 +235,12 @@ export class BotService {
     }
 
     // 2) Confirmaciones deterministas (recordatorios) — solo si NO hay FSM.
-    if (['sí', 'si', 'confirmo', 'confirmar', 'ok', 'dale'].includes(normalized)) {
+    // Requiere phone conocido (buscamos Patient por phone). Si el contacto
+    // llegó con LID (phone=null) no podemos correlacionar → skip.
+    if (
+      phone &&
+      ['sí', 'si', 'confirmo', 'confirmar', 'ok', 'dale'].includes(normalized)
+    ) {
       const appt = await this.findUpcomingAppointment(clinicId, phone);
       if (appt) {
         await this.reminders.confirmAppointment(appt.id);
@@ -197,7 +253,7 @@ export class BotService {
         return;
       }
     }
-    if (['cancelar', 'cancela'].includes(normalized)) {
+    if (phone && ['cancelar', 'cancela'].includes(normalized)) {
       const appt = await this.findUpcomingAppointment(clinicId, phone);
       if (appt) {
         await this.prisma.appointment.update({
@@ -589,11 +645,17 @@ export class BotService {
 
     // Si ya tenemos el nombre del paciente registrado en DB, saltamos ASK_NAME.
     // Nunca pisamos un nombre existente (respetamos la privacidad + evitamos typos).
-    const existingPatient = await this.prisma.patient.findUnique({
-      where: {
-        clinicId_phone: { clinicId: clinic.id, phone: convo.phone },
-      },
-    });
+    // Requiere `convo.phone` (Patient se identifica por phone). En conversaciones
+    // que llegaron via LID (phone=null), forzamos ASK_NAME → mas abajo el flujo
+    // va a pedir el numero de contacto tambien. TODO: extender FSM con ASK_PHONE
+    // cuando phone no se conoce.
+    const existingPatient = convo.phone
+      ? await this.prisma.patient.findUnique({
+          where: {
+            clinicId_phone: { clinicId: clinic.id, phone: convo.phone },
+          },
+        })
+      : null;
     if (existingPatient?.name && existingPatient.name.trim().length > 0) {
       await this.prisma.conversation.update({
         where: { id: convo.id },
@@ -733,6 +795,19 @@ export class BotService {
         convo.chatId,
         convo.id,
         'Perdí el hilo del agendamiento. Escribime "agendar" y arrancamos de nuevo.',
+      );
+      return;
+    }
+
+    // Sin phone conocido no podemos crear el Patient. TODO: agregar ASK_PHONE
+    // al FSM para conversaciones que llegaron con LID.
+    if (!convo.phone) {
+      await this.resetFlow(convo.id);
+      await this.reply(
+        clinic.wahaSession,
+        convo.chatId,
+        convo.id,
+        'Para confirmar tu cita necesito tu número de teléfono. Por favor escribíme al número directo de la clínica desde tu contacto.',
       );
       return;
     }

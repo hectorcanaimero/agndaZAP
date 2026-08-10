@@ -107,7 +107,12 @@ describe('BotService — FSM de agendamiento', () => {
       appointment: { findFirst: jest.fn().mockResolvedValue(null) },
     };
 
-    waha = { sendText: jest.fn().mockResolvedValue(undefined) };
+    waha = {
+      sendText: jest.fn().mockResolvedValue(undefined),
+      // Avatar refresh corre en background en cada handleIncoming — mockeamos
+      // para no ensuciar los logs con warns de "getContactAvatar is not a function".
+      getContactAvatar: jest.fn().mockResolvedValue(null),
+    };
     reminders = {
       scheduleForAppointment: jest.fn(),
       cancelForAppointment: jest.fn(),

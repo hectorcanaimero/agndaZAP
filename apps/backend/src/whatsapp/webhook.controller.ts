@@ -25,11 +25,21 @@ interface WahaWebhookBody {
   [key: string]: unknown;
 }
 
-/** Shape mínima esperada dentro de `payload` cuando `event === 'message'`. */
+/**
+ * Shape mínima esperada dentro de `payload` cuando `event === 'message'`.
+ * `notifyName` es el pushName que el contacto tiene configurado en su perfil de
+ * WhatsApp — nos lo manda WAHA en cada mensaje (puede venir en `_data.pushName`
+ * en algunas versiones, se cubren ambos abajo).
+ */
 interface WahaMessagePayload {
   fromMe?: boolean;
   from?: string;
   body?: string;
+  notifyName?: string;
+  _data?: {
+    notifyName?: string;
+    pushName?: string;
+  };
 }
 
 /** Shape mínima esperada dentro de `payload` cuando `event === 'session.status'`. */
@@ -121,10 +131,39 @@ export class WebhookController {
       const body = msg?.body ?? '';
       if (!from) return { ok: true };
 
+      // WhatsApp está migrando de <phone>@c.us a <lid>@lid (Linked ID) para
+      // privacidad. Cuando llega un LID no tenemos forma pública de resolverlo
+      // al phone real (WAHA no expone endpoint). Loggeamos payload en dev para
+      // capturar qué campos alternativos manda Baileys (senderPn, remoteJidAlt)
+      // y refinar la resolución. Sin body para evitar PII.
+      if (
+        process.env.NODE_ENV !== 'production' &&
+        from.endsWith('@lid')
+      ) {
+        const { body: _b, ...msgSansBody } = (msg ?? {}) as Record<string, unknown>;
+        this.logger.log(
+          `[LID] chatId=${from} payload=${JSON.stringify(msgSansBody)}`,
+        );
+      }
+
+      // Separar identidad del contacto. El `chatId` de WAHA viene con sufijo
+      // `@c.us` (phone-based) o `@lid` (LID de privacidad). Guardamos ambos por
+      // separado para poder mostrar el número real cuando lo conocemos y no
+      // ensuciar la columna `phone` con LIDs.
+      const bareId = from.replace(/@(c\.us|lid|s\.whatsapp\.net)$/, '');
+      const isLid = from.endsWith('@lid');
+      const phone = isLid ? null : bareId;
+      const lid = isLid ? bareId : null;
+      // pushName: WAHA lo expone como `notifyName` top-level o dentro de `_data`.
+      const contactName =
+        msg?.notifyName ?? msg?._data?.notifyName ?? msg?._data?.pushName ?? null;
+
       await this.bot.handleIncoming({
         clinicId: clinic.id,
         chatId: from,
-        phone: from.replace('@c.us', ''),
+        phone,
+        lid,
+        contactName,
         text: body,
       });
     }

@@ -70,6 +70,9 @@ export class ConversationsController {
         id: true,
         chatId: true,
         phone: true,
+        lid: true,
+        contactName: true,
+        avatarUrl: true,
         state: true,
         updatedAt: true,
         createdAt: true,
@@ -91,6 +94,9 @@ export class ConversationsController {
       id: c.id,
       chatId: c.chatId,
       phone: c.phone,
+      lid: c.lid,
+      contactName: c.contactName,
+      avatarUrl: c.avatarUrl,
       state: c.state,
       updatedAt: c.updatedAt,
       createdAt: c.createdAt,
@@ -114,13 +120,18 @@ export class ConversationsController {
           orderBy: { createdAt: 'desc' },
           take: limit,
         },
+        // Necesario para `messageCount` en el header del chat — sin esto el
+        // frontend renderiza "NaN mensajes" (t('messagesCount', { n: undefined })).
+        _count: { select: { messages: true } },
       },
     });
     if (!convo) throw new NotFoundException('conversación no encontrada');
     // Devolvemos los mensajes en orden cronológico ascendente (el .desc + take
     // arriba fue solo para tomar los últimos N).
+    const { _count, ...rest } = convo;
     return {
-      ...convo,
+      ...rest,
+      messageCount: _count.messages,
       messages: [...convo.messages].reverse(),
     };
   }
