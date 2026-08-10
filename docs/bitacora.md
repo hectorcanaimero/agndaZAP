@@ -9,6 +9,14 @@
 - Cambio en los 5 clientes: se reemplaza el JSX del shell (~40 líneas c/u de `<div><aside><section>` + `<Sheet>`) por `<MasterDetailShell>`. Se reemplazan `useState<boolean> + isMobileViewport()` (~10 líneas c/u) por `useMobileSheet()`. Total: **460 líneas removidas, 340 agregadas** (los helpers cuentan en las agregadas — neto ~120 menos de código duplicado, y todo el nuevo código vive en un solo lugar).
 - **Cero cambios de comportamiento** — mismo lenguaje visual, mismo behavior, mismo a11y. Verificado con typecheck limpio en toda la app web.
 - Archivos tocados: `apps/web/src/components/panel/master-detail/{MasterDetailShell,MasterDetailRow,EmptyStatePanel,useMobileSheet,index}.{tsx,ts}` (nuevos), y los 5 clientes CRUD.
+## 2026-08-10 — Type-safe next-intl (previene MISSING_MESSAGE + FORMATTING_ERROR)
+- Motivación concreta: 3 bugs post-merge del mismo patrón en esta sesión — MISSING_MESSAGE por keys inexistentes (`panel.conversations.live`, `panel.timeOff.empty.cta`, `roles.CLINIC_ADMIN`) + FORMATTING_ERROR por variables ICU no pasadas (`hints.botGreeting` con `{clinicName}` literal). El scan bash con `jq` atrapaba las primeras pero NO las segundas — TypeScript atrapa ambas de un saque.
+- Setup: `apps/web/global.d.ts` con `interface IntlMessages extends typeof esMessages`. next-intl v3 lee esa declaración automáticamente vía module augmentation. `es.json` es la source of truth (paridad estricta con `pt.json` sigue validándose con `diff <(jq)`).
+- **Un error real atrapado apenas se activó el chequeo**: `WhatsappConnectionClient.tsx:243` tenía `t(\`status.${statusKey}\`)` donde `statusKey` era `string` genérico (perdió el narrowing por venir de `Set.has`). TypeScript no podía verificar que la key era válida. Fix: `KNOWN_STATUSES` pasa de `Set<string>` a `readonly array as const` + tipo `KnownStatus` derivado; se mantiene un `KNOWN_STATUS_SET` interno para el chequeo O(1). Ahora `t(\`status.${statusKey}\`)` compila con la union completa.
+- Smoke test verificado: escribir `t('nonexistent.key')` da error TS. Escribir `t('countLabel')` (que requiere `{ n }`) sin pasar la variable también da error. Los `@ts-expect-error` pasaron limpios.
+- **Cero cambios de behavior** — solo agrega chequeo estático. Todo el i18n existente sigue funcionando idéntico.
+- Deuda: migrar a next-intl v4+ cuando salga estable — usa `AppConfig` interface en vez de `IntlMessages`, más clean. Follow-up documentado.
+- Archivos tocados: `apps/web/global.d.ts` (nuevo), `apps/web/src/app/[locale]/panel/config/whatsapp/WhatsappConnectionClient.tsx`.
 
 ## 2026-08-10 — Ajustes: consolidar WhatsApp como tab + URL query sync
 - Follow-up al PR de Ajustes: WhatsApp deja de ser página separada (`/panel/config/whatsapp`) y se consolida como el **4to tab** dentro de `/panel/ajustes`. "Todo lo que es configurar la clínica" queda en un solo lugar.
