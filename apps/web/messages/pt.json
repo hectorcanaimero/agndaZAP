@@ -348,16 +348,18 @@
       "title": "Serviços",
       "subtitle": "Serviços oferecidos pela clínica.",
       "loadError": "Não foi possível carregar os serviços ({status}).",
-      "empty": "Nenhum serviço cadastrado.",
+      "emptyList": "Nenhum serviço cadastrado.",
       "searchPlaceholder": "Buscar serviço…",
-      "new": "Novo serviço",
+      "new": "Novo",
       "newTitle": "Novo serviço",
+      "newSubtitle": "Sem título",
       "editTitle": "Editar serviço",
       "edit": "Editar",
       "delete": "Excluir",
+      "close": "Fechar",
       "actions": "Ações",
       "save": "Salvar",
-      "saving": "Salvando...",
+      "saving": "Salvando…",
       "saved": "Serviço salvo.",
       "saveFailed": "Não foi possível salvar o serviço.",
       "deleted": "Serviço desativado.",
@@ -368,6 +370,18 @@
       },
       "cancel": "Cancelar",
       "noProfessionals": "Nenhum profissional cadastrado.",
+      "noProfessionalsRow": "Sem profissionais atribuídos",
+      "noSearchResults": "Sem resultados para sua busca.",
+      "createFirst": "Criar o primeiro",
+      "countLabel": "{n, plural, one {# serviço} other {# serviços}}",
+      "countMatch": "{n} correspondem",
+      "selectedCount": "{n} selecionados",
+      "professionalCount": "{n, plural, one {# profissional} other {# profissionais}}",
+      "empty": {
+        "title": "Selecione um serviço ou crie um novo",
+        "description": "Os serviços definem o que você oferece, quanto tempo dura cada consulta e quais profissionais atendem.",
+        "cta": "Criar serviço"
+      },
       "fields": {
         "name": "Nome",
         "duration": "Duração",
@@ -376,8 +390,12 @@
         "price": "Preço",
         "professionals": "Profissionais"
       },
+      "placeholders": {
+        "name": "Ex: Consulta geral"
+      },
       "hints": {
-        "priceCents": "Em centavos. Ex: 1500 = R$ 15,00."
+        "priceCents": "Em centavos. Ex: 1500 = R$ 15,00.",
+        "buffer": "Tempo entre consultas consecutivas."
       },
       "errors": {
         "required": "Obrigatório."

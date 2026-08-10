@@ -1,5 +1,31 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-08-10 — Servicios: layout master-detail (prototipo del nuevo patrón CRUD)
+- Reescritura completa de `/panel/servicios` — antes era DataTable full-width + Dialog modal (patrón shadcn genérico), ahora master-detail 2-col alineado con agenda/conversaciones. Ver [[notas]] siguientes:
+  - **Diagnóstico**: la tabla tenía 4 columnas simples y ~5-15 filas por clínica típica → un DataTable con sorting + column-visibility era sobreingeniería. El form vivía en un dialog modal que tapaba la lista → contexto perdido al editar. Contra el resto del panel se veía "genérico".
+- Layout nuevo:
+  - Izquierda `w-[380px]`: search + CTA "Nuevo" + lista custom (no DataTable). Cada row muestra nombre grande + meta compacta (duración+buffer, precio) + chips de profesionales (max 3 visibles, "+N" resto). Row activo con marker vertical `bg-brand-600` + fondo `bg-brand-50` (mismo lenguaje que conversaciones).
+  - Derecha `flex-1`: panel dual-state — empty con SVG inline (reloj estilizado + sparkles decorativos) + CTA cuando no hay selección; `ServiceForm` inline (no modal) con header sticky (título + botón eliminar + botón cerrar), body scrollable con 5 campos, footer sticky con Cancelar + Guardar. El botón "Guardar" queda disabled hasta que hay `isDirty` en modo edit.
+  - Mobile `<md`: solo la lista full-width. Tap sobre row o CTA "Nuevo" abre `Sheet` desde la derecha con el mismo `ServiceForm` (respeta touch targets 44×44 del spec de mobile).
+- Detalles de UX (skill `/frontend-design` — dirección "refined minimalism con carácter en los detalles"):
+  - `ProfessionalChip` con inicial + color estable por hash djb2 modulado en paleta de 7 colores brand-safe (mismo nombre → mismo color siempre, sin librería).
+  - Números en `tabular-nums` para duración/precio/count (jerarquía visual del "producto").
+  - Empty state con SVG inline (120×120) — reloj + sparkles amber, no un ícono lucide sin contexto.
+  - Icons contextuales en labels del form (`Clock`, `DollarSign`, `Users`) para acelerar el escaneo visual.
+  - Transición de estados: sin animaciones dramáticas — todo con `transition-colors` estándar. El foco es la información, no el show.
+- Comportamiento no obvio:
+  - Al pasar de `edit A` → `edit B`, el `<ServiceForm>` remonta via `key={service.id}` para evitar defaults stale del `useForm`. Defensa extra con `useEffect(reset, [service?.id])`.
+  - Tras crear un servicio, el panel queda en `edit` con el servicio recién creado (permite tweaks inmediatos). En mobile cerramos el sheet igual para que el user vea la lista actualizada.
+  - Al eliminar el servicio activo desde el header del form, el panel vuelve a `empty` automáticamente (evita mostrar datos de un servicio inexistente).
+  - Búsqueda cliente-side (nombre + nombres de profesionales) — no toca URL.
+- Cambios de contrato: **cero**. La schema Zod, el endpoint API (`POST/PATCH/DELETE /api/services`), y el shape del `Service` quedan idénticos.
+- i18n: renombrada `panel.services.empty` (era string) a `emptyList` para liberar `empty.{title,description,cta}` como objeto del estado vacío del panel derecho. Agregadas ~10 keys nuevas (`newSubtitle`, `close`, `noProfessionalsRow`, `noSearchResults`, `createFirst`, `countLabel` con ICU plural, `countMatch`, `selectedCount`, `placeholders.name`, `hints.buffer`). Paridad estricta es/pt verificada con `diff <(jq)`.
+- Deuda / follow-ups:
+  - Aplicar el mismo patrón a `/panel/profesionales`, `/panel/horarios`, `/panel/bloqueos` (los 3 son CRUDs con la misma forma). PRs separados, uno por página, para mantener revisiones acotadas.
+  - Considerar sacar `ProfessionalChip` a `components/ui/` cuando aparezca el 2do consumidor (agenda o dashboard).
+  - Sin cambios de backend — no hay tests nuevos. Verificación por typecheck + smoke manual.
+- Archivos tocados: `apps/web/src/app/[locale]/panel/servicios/{page,ServicesClient}.tsx`, `apps/web/messages/{es,pt}.json`.
+
 ## 2026-08-10 — Agenda: agendar / reagendar / cancelar desde el panel
 - Feature CRUD sobre `/panel/agenda`. Antes solo se podía "cambiar status" (que incluye CANCELADA) desde el detalle; ahora hay un flow completo con:
   - **Nueva cita**: botón "Nueva cita" en el toolbar → dialog con form (paciente name+phone, servicio, profesional, slot picker de 7 días, consent obligatorio). Los selectores cross-filtran entre sí (elegir profesional filtra servicios que atiende, y viceversa).
