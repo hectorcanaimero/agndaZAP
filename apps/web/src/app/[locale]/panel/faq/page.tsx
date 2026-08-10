@@ -35,24 +35,31 @@ export default async function FaqPage({
   const res = await fetcher<FaqChunk[]>('/api/faq', { token });
 
   const rows = res.ok ? res.data : [];
-  // Contamos FAQs sin indexar (`hasEmbedding: false`) para el banner de aviso.
-  // Estas FAQs están en DB pero el `KnowledgeService.retrieve` las filtra
-  // porque el WHERE incluye `embedding IS NOT NULL` — el bot no puede
-  // responderlas y hace handoff silencioso.
   const pendingCount = rows.filter((r) => !r.hasEmbedding).length;
 
+  // Full-height layout (mismo patrón que agenda/servicios/profesionales).
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900">{t('titleKb')}</h1>
-        <p className="text-sm text-gray-500">{t('subtitleKb')}</p>
+    <div className="flex h-full min-h-0 flex-col gap-4">
+      <div className="shrink-0">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          {t('titleKb')}
+        </h1>
+        <p className="text-sm text-muted-foreground">{t('subtitleKb')}</p>
       </div>
+
       {!res.ok ? (
-        <div className="rounded-md bg-red-50 p-3 text-sm text-red-800">
+        <div className="shrink-0 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
           {t('loadError', { status: res.status })}
         </div>
       ) : null}
-      <FaqClient locale={locale} rows={rows} pendingCount={pendingCount} />
+
+      <div className="min-h-0 flex-1">
+        <FaqClient
+          locale={locale}
+          rows={rows}
+          pendingCount={pendingCount}
+        />
+      </div>
     </div>
   );
 }

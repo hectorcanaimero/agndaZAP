@@ -1,5 +1,29 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-08-10 — FAQ / Base de conocimiento: master-detail
+- 5to y último CRUD del panel migrado al patrón master-detail (después de servicios, profesionales, horarios, bloqueos).
+- **Contexto:** FAQ ya tenía un split view viejo (grid 30/70), pero con estilo pre-tokens (`bg-white`, `text-gray-*`, `max-w-5xl`) y mobile via `hidden`/`block` en lugar de Sheet drawer. Además faltaban features UX importantes: sin search, sin filtro por "solo sin indexar", empty state genérico.
+- **Preservado:**
+  - `MarkdownEditor` component (`@/components/ui/markdown-editor`).
+  - Banner amarillo "sin embedding" (bug fix P0 previo — `docs/ux/2026-08-09-faq-embedding-banner.md`).
+  - Badges "Indexada" / "Sin indexar" con AA color contrast.
+  - Schema Zod estricto (title max 200, content 5-4000).
+  - Vector `embedding` NUNCA viaja al cliente — el flag `hasEmbedding` se deriva server-side.
+- **Nuevo:**
+  - Layout full-height card + toolbar + list + panel, alineado con el resto del panel.
+  - **Búsqueda cliente-side** por title + content strippeado (usa `stripMarkdown` local para matchear texto plano sin ruido de sintaxis MD).
+  - **Toggle "Solo sin indexar"** — visible solo cuando hay al menos una. Útil tras subir `OPENAI_API_KEY` para batch fixing (encontrar las que quedaron sin embedding).
+  - Row activo con marker vertical brand (mismo lenguaje que conversaciones).
+  - Empty state SVG específico: libro abierto con líneas de texto + 2 sparkles.
+  - Mobile Sheet drawer con guard `matchMedia` (evita backdrop en desktop — el bug que aprendimos en servicios).
+  - Row más compacto: título + badge inline + excerpt de 2 líneas + fecha corta (día + mes).
+  - Botón "Volver" con `ArrowLeft` en el header, solo visible en mobile (`md:hidden`).
+- **Lección aplicada:** verifiqué el missing keys scan **antes** del commit (no después como en los PRs anteriores). Cero MISSING_MESSAGE.
+- **Cero cambios de contrato:** endpoints `/api/faq` (GET/POST/PATCH/DELETE) y shape del `FaqChunk` idénticos.
+- i18n: se renombró `panel.faq.empty` (era string) a `emptyList` para liberar `empty.{title,description,cta}` como objeto del panel derecho. ~10 keys nuevas (`newSubtitle`, `close`, `createFirst`, `listAriaLabel`, `onlyPending` con ICU, `countLabel`/`countMatch`, `noSearchResults`, `searchPlaceholder`, `empty.{title,description,cta}`). Paridad estricta es/pt validada con `diff <(jq)`.
+- **Deuda estable:** el patrón master-detail ya vive en **5 clientes** (servicios, profesionales, horarios, bloqueos, faq). Momento óptimo para extraer `<MasterDetailShell>` + `useMobileSheet()` hook + `<EmptyStatePanel>` — en un PR separado de refactor puro (cero cambios de comportamiento).
+- Archivos tocados: `apps/web/src/app/[locale]/panel/faq/{page,FaqClient}.tsx`, `apps/web/messages/{es,pt}.json`.
+
 ## 2026-08-10 — Horarios y Bloqueos: master-detail (cierre del patrón CRUD del panel)
 - Última migración del patrón master-detail: `/panel/horarios` y `/panel/bloqueos`. Cierra el rollout iniciado en servicios (PR #6) y continuado en profesionales (PR #7). Ahora los 4 CRUDs del panel comparten lenguaje visual: agenda, conversaciones, servicios, profesionales, horarios y bloqueos.
 - **Bloqueos (TimeOff)** — master-detail directo, mismo patrón que servicios/profesionales. Diferenciales:
