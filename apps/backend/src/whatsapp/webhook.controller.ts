@@ -10,7 +10,20 @@ import {
 import { Public } from '../auth/decorators/public.decorator';
 import { BotService } from '../bot/bot.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { WahaWebhookDto } from './dto/waha-webhook.dto';
+
+/**
+ * Shape del cuerpo del webhook. NO usamos DTO con class-validator porque el
+ * ValidationPipe global tiene `forbidNonWhitelisted: true` y WAHA envía muchos
+ * campos (id, timestamp, me, engine, environment…) que no controlamos. Un
+ * @UsePipes local no puede suavizar al pipe global — por eso validamos manual.
+ */
+interface WahaWebhookBody {
+  event?: string;
+  session?: string;
+  payload?: Record<string, unknown>;
+  // WAHA agrega: id, timestamp, me, engine, environment, etc. Los ignoramos.
+  [key: string]: unknown;
+}
 
 /** Shape mínima esperada dentro de `payload` cuando `event === 'message'`. */
 interface WahaMessagePayload {
@@ -48,24 +61,37 @@ export class WebhookController {
   @Post('waha')
   @HttpCode(200)
   async handleWaha(
-    @Body() dto: WahaWebhookDto,
+    @Body() body: WahaWebhookBody,
     @Headers('x-webhook-token') token?: string,
   ) {
     // Validación del webhook (evita inyección externa).
-    // NOTA: WAHA no envía headers custom por defecto. Debe configurarse con
-    // `WHATSAPP_HOOK_HEADERS='x-webhook-token: <token>'` para que este check
-    // funcione contra la instancia WAHA real. Alternativa futura: usar el
-    // `WEBHOOK_HMAC` de WAHA con verificación por firma en vez de token estático.
+    // WAHA (build noweb-arm/community) NO envía WHATSAPP_HOOK_HEADERS custom
+    // — es feature de WAHA Plus. Para prod, usar WEBHOOK_HMAC de WAHA con
+    // verificación por firma, o exponer el backend detrás de un reverse-proxy
+    // que valide auth antes de llegar al endpoint.
     const requiredToken = process.env.WEBHOOK_TOKEN;
-    if (process.env.NODE_ENV === 'production' && !requiredToken) {
+    const isProd = process.env.NODE_ENV === 'production';
+    if (isProd && !requiredToken) {
       // En prod, sin token configurado el webhook queda expuesto — fail-closed.
       throw new ForbiddenException('WEBHOOK_TOKEN no configurado en producción');
     }
     if (requiredToken && token !== requiredToken) {
-      throw new ForbiddenException('token de webhook inválido');
+      // En dev, si el header simplemente no llegó (WAHA community no lo manda),
+      // permitir con warning. Si vino con valor incorrecto, sigue rechazando.
+      if (!isProd && !token) {
+        this.logger.warn(
+          'webhook sin x-webhook-token en dev — permitiendo (fail-open dev only). Configurar WEBHOOK_HMAC en prod.',
+        );
+      } else {
+        throw new ForbiddenException('token de webhook inválido');
+      }
     }
 
-    const { event, session, payload } = dto;
+    const { event, session, payload } = body;
+    if (typeof event !== 'string' || typeof session !== 'string') {
+      this.logger.warn('webhook con event/session inválido');
+      return { ok: true };
+    }
 
     const clinic = await this.prisma.clinic.findUnique({
       where: { wahaSession: session },
