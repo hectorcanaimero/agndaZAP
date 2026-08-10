@@ -3,11 +3,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
-  ChevronRight,
   ExternalLink,
   Inbox,
   Loader2,
-  MessageCircle,
   MessageSquareText,
   Phone,
   Search,
@@ -28,7 +26,10 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { ApiError, apiMutation, apiQuery } from '@/lib/query-fn';
 import { queryKeys } from '@/lib/query-keys';
@@ -74,7 +75,6 @@ const POLL_INTERVAL_MS = 15000;
 const MAX_REPLY_LEN = 1500;
 const REPLY_COUNTER_THRESHOLD = 1200;
 
-/** Sanitiza defensa-en-profundidad el reply antes de mandarlo. */
 function sanitizeReply(text: string): string {
   // eslint-disable-next-line no-control-regex
   return text.replace(/[\x00-\x08\x0B-\x1F\x7F]/g, '').trim();
@@ -110,14 +110,15 @@ async function fetchConversations(
 }
 
 /**
- * Bandeja del panel — rediseño full-viewport tri-column.
+ * Bandeja del panel — split view (lista | chat | contacto) inscrito en el
+ * lenguaje visual del panel (mismos tokens que Agenda: `rounded-xl border
+ * border-border bg-card shadow-sm`, tipografía system, colores semánticos).
  *
- *  - Columna izquierda (bandeja): buscador + filtros + lista.
- *  - Columna central (chat): header con paciente + mensajes + composer.
- *  - Columna derecha (xl+): panel de contacto y actividad.
- *
- * Layout responsive: 1 col en mobile (drawer para volver a la lista),
- * 2 cols en lg (sin panel derecho), 3 cols en xl+.
+ * Responsive:
+ *   - < lg: una columna; al seleccionar conversación se muestra el chat con
+ *     botón "volver" hacia la lista.
+ *   - lg: dos columnas (lista + chat).
+ *   - xl+: tres columnas (lista + chat + panel de contacto).
  */
 export function ConversationsClient({
   locale,
@@ -137,7 +138,6 @@ export function ConversationsClient({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
 
-  /* Lista de conversaciones — polling cada 15s. */
   const conversationsQuery = useQuery({
     queryKey: queryKeys.conversations(stateFilter),
     queryFn: () => fetchConversations(stateFilter),
@@ -150,7 +150,6 @@ export function ConversationsClient({
   const convos = conversationsQuery.data ?? [];
   const refreshing = conversationsQuery.isFetching;
 
-  /* Filtrado client-side por búsqueda (teléfono o body del último mensaje). */
   const filteredConvos = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return convos;
@@ -161,7 +160,6 @@ export function ConversationsClient({
     );
   }, [convos, search]);
 
-  /* Contadores por estado — usados en las pills de filtro. */
   const counts = useMemo(
     () => ({
       inbox: convos.filter((c) => c.state !== 'BOT').length,
@@ -173,7 +171,6 @@ export function ConversationsClient({
     [convos],
   );
 
-  /* Detalle. */
   const detailQuery = useQuery({
     queryKey: queryKeys.conversation(selectedId ?? ''),
     queryFn: () =>
@@ -337,7 +334,6 @@ export function ConversationsClient({
   const canRelease = detail?.state === 'HUMAN';
   const replying = replyMutation.isPending;
 
-  /* Keyboard shortcut: ⌘K / Ctrl+K enfoca el buscador. */
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -350,13 +346,11 @@ export function ConversationsClient({
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  /* Auto-scroll al último mensaje cuando entra uno nuevo. */
   useEffect(() => {
     if (!detail) return;
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [detail?.messages.length, detail]);
 
-  /* Composer: ⌘Enter / Ctrl+Enter envía. */
   const onComposerKey = useCallback(
     (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
@@ -367,7 +361,6 @@ export function ConversationsClient({
     [sendReply],
   );
 
-  /* Textarea auto-grow (cap 200px). */
   useEffect(() => {
     const el = composerRef.current;
     if (!el) return;
@@ -375,126 +368,95 @@ export function ConversationsClient({
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
   }, [reply]);
 
-  const displayError = initialError;
-  const showBackToList = !!selectedId;
-
   return (
     <div
       className={cn(
-        'grid h-full min-h-0 w-full bg-[#fbfbfa] text-neutral-900',
-        'grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)_380px]',
-        'font-[family-name:var(--font-conv-sans)]',
+        'grid h-full min-h-0 gap-4',
+        'grid-cols-1 lg:grid-cols-[320px_1fr] xl:grid-cols-[320px_1fr_320px]',
       )}
     >
-      {/* ═════════ COLUMNA IZQUIERDA — BANDEJA ═════════ */}
+      {/* ═════════════ COLUMNA IZQUIERDA — BANDEJA ═════════════ */}
       <aside
         className={cn(
-          'flex min-h-0 flex-col border-r border-neutral-200/70 bg-white/60 backdrop-blur-sm',
-          'animate-in fade-in slide-in-from-left-2 duration-300',
-          // En mobile: si hay conversación seleccionada, ocultá la lista.
+          'flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm',
           selectedId ? 'hidden lg:flex' : 'flex',
         )}
       >
-        {/* Header con título + estado */}
-        <div className="border-b border-neutral-200/70 px-5 pt-6 pb-4">
-          <div className="flex items-baseline justify-between gap-3">
-            <h1 className="flex items-baseline gap-2 font-[family-name:var(--font-conv-display)] text-[28px] font-medium leading-none tracking-tight text-neutral-900">
-              {t('title')}
-              <span className="font-[family-name:var(--font-conv-mono)] text-[13px] font-normal text-neutral-400 tabular-nums">
-                {convos.length}
-              </span>
-            </h1>
-            <div className="flex h-5 items-center">
-              {refreshing ? (
-                <Loader2
-                  aria-label={t('refreshing')}
-                  className="h-3.5 w-3.5 animate-spin text-neutral-400"
-                />
-              ) : (
-                <span
-                  aria-hidden="true"
-                  className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.15)]"
-                />
-              )}
-            </div>
-          </div>
-          <p className="mt-1 text-[13px] text-neutral-500">{t('subtitle')}</p>
-        </div>
-
-        {/* Buscador */}
-        <div className="px-4 pt-4">
-          <div className="group relative">
+        {/* Toolbar: buscador + estado polling */}
+        <div className="flex items-center gap-2 border-b border-border/60 p-3">
+          <div className="relative flex-1">
             <Search
               aria-hidden="true"
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400 transition-colors group-focus-within:text-brand-600"
+              className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
             />
-            <input
+            <Input
               ref={searchInputRef}
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t('searchPlaceholder')}
-              className={cn(
-                'h-10 w-full rounded-lg border border-neutral-200 bg-white pl-9 pr-14 text-sm text-neutral-900 placeholder:text-neutral-400',
-                'transition-shadow focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/10',
-              )}
+              className="h-9 pl-8 pr-14 text-sm"
             />
             <kbd
               aria-hidden="true"
-              className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 rounded border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 font-[family-name:var(--font-conv-mono)] text-[10px] font-medium text-neutral-500 md:flex"
+              className="pointer-events-none absolute right-2 top-1/2 hidden -translate-y-1/2 items-center rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline-flex"
             >
               ⌘K
             </kbd>
           </div>
-        </div>
-
-        {/* Filtros segmented */}
-        <div className="px-4 pt-3">
-          <div
-            role="tablist"
-            aria-label={t('filters.inbox')}
-            className="flex items-center gap-1 rounded-lg bg-neutral-100/80 p-1"
-          >
-            {(['inbox', 'BOT', 'HUMAN', 'all'] as const).map((s) => {
-              const active = stateFilter === s;
-              const n = counts[s];
-              return (
-                <button
-                  key={s}
-                  role="tab"
-                  aria-selected={active}
-                  type="button"
-                  onClick={() => setStateFilter(s)}
-                  className={cn(
-                    'group relative flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[12px] font-medium transition-all',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1',
-                    active
-                      ? 'bg-white text-neutral-900 shadow-[0_1px_2px_rgba(0,0,0,0.06)]'
-                      : 'text-neutral-500 hover:text-neutral-800',
-                  )}
-                >
-                  <span>{t(`filters.${s}`)}</span>
-                  {n > 0 ? (
-                    <span
-                      className={cn(
-                        'font-[family-name:var(--font-conv-mono)] text-[10px] tabular-nums',
-                        active ? 'text-brand-600' : 'text-neutral-400',
-                      )}
-                    >
-                      {n}
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
+          <div className="flex h-9 items-center px-1">
+            {refreshing ? (
+              <Loader2
+                aria-label={t('refreshing')}
+                className="h-3.5 w-3.5 animate-spin text-muted-foreground"
+              />
+            ) : (
+              <span
+                aria-hidden="true"
+                title={t('live')}
+                className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.15)]"
+              />
+            )}
           </div>
         </div>
 
+        {/* Filtros — Tabs de shadcn como en Agenda */}
+        <div className="border-b border-border/60 px-3 py-2">
+          <Tabs value={stateFilter} onValueChange={setStateFilter}>
+            <TabsList className="h-9 w-full">
+              {(['inbox', 'BOT', 'HUMAN', 'all'] as const).map((s) => {
+                const n = counts[s];
+                return (
+                  <TabsTrigger
+                    key={s}
+                    value={s}
+                    className="flex-1 gap-1.5 px-2 text-xs"
+                  >
+                    <span>{t(`filters.${s}`)}</span>
+                    {n > 0 ? (
+                      <span
+                        className={cn(
+                          'rounded px-1 text-[10px] tabular-nums',
+                          stateFilter === s
+                            ? 'bg-brand-100 text-brand-700'
+                            : 'bg-muted text-muted-foreground',
+                        )}
+                      >
+                        {n}
+                      </span>
+                    ) : null}
+                  </TabsTrigger>
+                );
+              })}
+            </TabsList>
+          </Tabs>
+        </div>
+
         {/* Lista */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-2 pt-2 pb-4">
-          {displayError && convos.length === 0 ? (
-            <div className="mx-2 mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-800">
-              {t('loadError', { status: displayError })}
+        <div className="min-h-0 flex-1 overflow-y-auto p-2">
+          {initialError && convos.length === 0 ? (
+            <div className="m-1 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+              {t('loadError', { status: initialError })}
             </div>
           ) : null}
           {conversationsQuery.isLoading && convos.length === 0 ? (
@@ -518,11 +480,10 @@ export function ConversationsClient({
         </div>
       </aside>
 
-      {/* ═════════ COLUMNA CENTRAL — CHAT ═════════ */}
+      {/* ═════════════ COLUMNA CENTRAL — CHAT ═════════════ */}
       <section
         className={cn(
-          'relative flex min-h-0 flex-col bg-white',
-          'animate-in fade-in slide-in-from-bottom-1 duration-300 [animation-delay:60ms] [animation-fill-mode:backwards]',
+          'flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm',
           !selectedId ? 'hidden lg:flex' : 'flex',
         )}
       >
@@ -533,27 +494,27 @@ export function ConversationsClient({
         ) : detail ? (
           <>
             {/* Header chat */}
-            <header className="flex items-center gap-3 border-b border-neutral-200/70 bg-white/95 px-4 py-3 backdrop-blur-sm md:px-6 md:py-4">
-              {showBackToList ? (
+            <header className="flex items-center gap-3 border-b border-border/60 p-4">
+              {selectedId ? (
                 <button
                   type="button"
                   aria-label={t('backToList')}
                   onClick={() => setSelectedId(null)}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100 lg:hidden"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted lg:hidden"
                 >
                   <ArrowLeft className="h-4 w-4" aria-hidden="true" />
                 </button>
               ) : null}
               <ContactAvatar phone={detail.phone} state={detail.state} size="lg" />
               <div className="min-w-0 flex-1">
-                <p className="truncate font-[family-name:var(--font-conv-display)] text-[19px] font-medium leading-tight tracking-tight text-neutral-900">
+                <p className="truncate text-base font-semibold text-foreground">
                   {formatPhone(detail.phone)}
                 </p>
-                <p className="mt-0.5 flex items-center gap-2 text-[12px] text-neutral-500">
+                <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
                   <StateDot state={detail.state} />
                   <span>{t(`state.${detail.state}`)}</span>
-                  <span className="text-neutral-300">·</span>
-                  <span className="font-[family-name:var(--font-conv-mono)] tabular-nums">
+                  <span aria-hidden="true">·</span>
+                  <span className="tabular-nums">
                     {t('messagesCount', { n: detail.messageCount })}
                   </span>
                 </p>
@@ -564,7 +525,6 @@ export function ConversationsClient({
                     size="sm"
                     onClick={takeOver}
                     disabled={takeoverMutation.isPending}
-                    className="bg-brand-600 hover:bg-brand-700"
                   >
                     <UserCheck className="mr-1.5 h-4 w-4" aria-hidden="true" />
                     {t('takeover')}
@@ -581,7 +541,7 @@ export function ConversationsClient({
 
             {/* Mensajes */}
             <div
-              className="relative min-h-0 flex-1 overflow-y-auto bg-[radial-gradient(ellipse_at_top,_rgba(22,163,74,0.02),_transparent_40%)] px-4 py-6 md:px-8 md:py-8"
+              className="min-h-0 flex-1 overflow-y-auto bg-muted/30 p-4"
               aria-busy={detailLoading}
             >
               <div className="mx-auto flex max-w-3xl flex-col gap-3">
@@ -595,14 +555,9 @@ export function ConversationsClient({
             </div>
 
             {/* Composer */}
-            <footer className="border-t border-neutral-200/70 bg-white px-4 py-3 md:px-8 md:py-4">
+            <footer className="border-t border-border/60 p-3">
               <div className="mx-auto max-w-3xl">
-                <div
-                  className={cn(
-                    'group relative rounded-2xl border border-neutral-200 bg-white transition-all',
-                    'focus-within:border-brand-500 focus-within:ring-4 focus-within:ring-brand-500/10',
-                  )}
-                >
+                <div className="rounded-lg border border-border bg-background transition-shadow focus-within:border-ring focus-within:ring-1 focus-within:ring-ring">
                   <Textarea
                     ref={composerRef}
                     value={reply}
@@ -611,18 +566,18 @@ export function ConversationsClient({
                     placeholder={t('replyPlaceholder')}
                     maxLength={MAX_REPLY_LEN}
                     rows={1}
-                    className="min-h-[52px] resize-none border-0 bg-transparent px-4 py-3.5 text-[14px] text-neutral-900 shadow-none focus-visible:ring-0"
+                    className="min-h-[52px] resize-none border-0 bg-transparent px-3 py-2.5 text-sm shadow-none focus-visible:ring-0"
                     aria-describedby={
                       detail.state !== 'HUMAN' ? 'reply-hint' : undefined
                     }
                   />
-                  <div className="flex items-center justify-between gap-3 border-t border-neutral-100 px-3 py-2">
-                    <div className="flex items-center gap-2 text-[11px] text-neutral-500">
+                  <div className="flex items-center justify-between gap-3 border-t border-border/60 px-2.5 py-2">
+                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                       {detail.state !== 'HUMAN' ? (
                         <span
                           id="reply-hint"
                           role="note"
-                          className="inline-flex items-center gap-1.5 rounded-md bg-amber-50 px-2 py-1 text-amber-800"
+                          className="inline-flex items-center gap-1.5 rounded-md bg-amber-100/70 px-2 py-1 text-amber-800"
                         >
                           <Sparkles className="h-3 w-3" aria-hidden="true" />
                           {t('autoTakeoverHint')}
@@ -637,10 +592,10 @@ export function ConversationsClient({
                       {reply.length >= REPLY_COUNTER_THRESHOLD ? (
                         <span
                           className={cn(
-                            'font-[family-name:var(--font-conv-mono)] text-[11px] tabular-nums',
+                            'text-[11px] tabular-nums',
                             reply.length > MAX_REPLY_LEN - 100
-                              ? 'text-red-600'
-                              : 'text-neutral-400',
+                              ? 'text-destructive'
+                              : 'text-muted-foreground',
                           )}
                         >
                           {reply.length}/{MAX_REPLY_LEN}
@@ -648,7 +603,7 @@ export function ConversationsClient({
                       ) : null}
                       <kbd
                         aria-hidden="true"
-                        className="hidden items-center gap-1 rounded border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 font-[family-name:var(--font-conv-mono)] text-[10px] font-medium text-neutral-500 md:inline-flex"
+                        className="hidden items-center rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline-flex"
                       >
                         ⌘↵
                       </kbd>
@@ -656,7 +611,6 @@ export function ConversationsClient({
                         size="sm"
                         disabled={replying || !reply.trim()}
                         onClick={sendReply}
-                        className="bg-brand-600 hover:bg-brand-700"
                       >
                         {replying ? (
                           <Loader2
@@ -680,13 +634,8 @@ export function ConversationsClient({
         ) : null}
       </section>
 
-      {/* ═════════ COLUMNA DERECHA — DETALLE CONTACTO ═════════ */}
-      <aside
-        className={cn(
-          'hidden min-h-0 flex-col border-l border-neutral-200/70 bg-[#f7f6f2] xl:flex',
-          'animate-in fade-in slide-in-from-right-2 duration-300 [animation-delay:120ms] [animation-fill-mode:backwards]',
-        )}
-      >
+      {/* ═════════════ COLUMNA DERECHA — DETALLE CONTACTO (xl+) ═════════════ */}
+      <aside className="hidden min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm xl:flex">
         {detail ? (
           <ContactPanel detail={detail} locale={locale} t={t} />
         ) : (
@@ -722,49 +671,45 @@ function ConversationListRow({
       <button
         type="button"
         onClick={onSelect}
+        aria-current={selected ? 'true' : undefined}
         className={cn(
-          'group relative flex w-full items-start gap-3 rounded-lg px-2.5 py-2.5 text-left transition-all',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500',
+          'group relative flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left transition-colors',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           selected
-            ? 'bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_0_0_1px_rgba(22,163,74,0.15)]'
-            : 'hover:bg-white hover:shadow-[0_1px_2px_rgba(0,0,0,0.03)]',
+            ? 'bg-brand-50 text-foreground'
+            : 'hover:bg-accent hover:text-accent-foreground',
         )}
       >
         {selected ? (
           <span
             aria-hidden="true"
-            className="absolute left-0 top-3 h-8 w-0.5 rounded-r-full bg-brand-600"
+            className="absolute left-0 top-2.5 h-8 w-0.5 rounded-r-full bg-brand-600"
           />
         ) : null}
         <ContactAvatar phone={conv.phone} state={conv.state} size="md" />
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-2">
-            <p className="truncate font-[family-name:var(--font-conv-mono)] text-[13px] font-medium tabular-nums text-neutral-900">
+            <p className="truncate text-sm font-medium tabular-nums text-foreground">
               {formatPhoneShort(conv.phone)}
             </p>
             {time ? (
-              <span className="shrink-0 font-[family-name:var(--font-conv-mono)] text-[10.5px] tabular-nums text-neutral-400">
+              <span className="shrink-0 text-[10.5px] tabular-nums text-muted-foreground">
                 {time}
               </span>
             ) : null}
           </div>
-          <div className="mt-0.5 flex items-center gap-1.5">
+          <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground">
             {last?.direction === 'OUT' ? (
-              <span
-                aria-label={t('outbound')}
-                className="shrink-0 text-[10px] text-neutral-400"
-              >
+              <span aria-label={t('outbound')} className="text-[10px]">
                 ↗
               </span>
             ) : null}
-            <p className="truncate text-[12.5px] leading-snug text-neutral-500">
-              {last?.body ?? '—'}
-            </p>
-          </div>
-          <div className="mt-1.5 flex items-center gap-1.5">
+            <span className="truncate">{last?.body ?? '—'}</span>
+          </p>
+          <div className="mt-1 flex items-center gap-1.5">
             <StateBadge state={conv.state} t={t} />
             {conv.state === 'NEEDS_HUMAN' ? (
-              <span className="font-[family-name:var(--font-conv-mono)] text-[10px] font-medium uppercase tracking-wide text-amber-700">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-amber-700">
                 {t('needsAttention')}
               </span>
             ) : null}
@@ -785,13 +730,12 @@ function ContactAvatar({
   size: 'md' | 'lg';
 }) {
   const initials = getPhoneInitials(phone);
-  const dim = size === 'lg' ? 'h-11 w-11 text-[13px]' : 'h-9 w-9 text-[11px]';
+  const dim = size === 'lg' ? 'h-10 w-10 text-xs' : 'h-9 w-9 text-[11px]';
   return (
     <div className="relative shrink-0">
       <div
         className={cn(
-          'flex items-center justify-center rounded-full font-[family-name:var(--font-conv-mono)] font-semibold tabular-nums text-neutral-700',
-          'bg-gradient-to-br from-neutral-100 to-neutral-200',
+          'flex items-center justify-center rounded-full bg-muted font-semibold tabular-nums text-foreground',
           dim,
         )}
       >
@@ -799,7 +743,7 @@ function ContactAvatar({
       </div>
       <StateDot
         state={state}
-        className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 ring-2 ring-white"
+        className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 ring-2 ring-card"
       />
     </div>
   );
@@ -815,7 +759,7 @@ function StateDot({
   const map: Record<ConvState, string> = {
     BOT: 'bg-slate-400',
     NEEDS_HUMAN:
-      'bg-amber-500 shadow-[0_0_0_4px_rgba(245,158,11,0.18)] animate-pulse',
+      'bg-amber-500 shadow-[0_0_0_3px_rgba(245,158,11,0.18)] animate-pulse',
     HUMAN: 'bg-brand-600 shadow-[0_0_0_3px_rgba(22,163,74,0.15)]',
   };
   return (
@@ -834,14 +778,14 @@ function StateBadge({
   t: ReturnType<typeof useTranslations<'panel.conversations'>>;
 }) {
   const styles: Record<ConvState, string> = {
-    BOT: 'bg-slate-100 text-slate-600 border-slate-200/60',
-    NEEDS_HUMAN: 'bg-amber-50 text-amber-800 border-amber-200/70',
-    HUMAN: 'bg-brand-50 text-brand-700 border-brand-200/70',
+    BOT: 'bg-slate-100 text-slate-700 border-slate-200',
+    NEEDS_HUMAN: 'bg-amber-50 text-amber-800 border-amber-200',
+    HUMAN: 'bg-brand-50 text-brand-700 border-brand-200',
   };
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-full border px-1.5 py-0 text-[10px] font-medium',
+        'inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-medium',
         styles[state],
       )}
     >
@@ -852,12 +796,9 @@ function StateBadge({
 
 function ConversationSkeletons() {
   return (
-    <ul className="space-y-1 px-1 pt-1">
+    <ul className="space-y-1 p-1">
       {[0, 1, 2, 3, 4, 5].map((i) => (
-        <li
-          key={i}
-          className="flex items-start gap-3 rounded-lg px-2.5 py-2.5"
-        >
+        <li key={i} className="flex items-start gap-2.5 rounded-md px-2 py-2">
           <Skeleton className="h-9 w-9 shrink-0 rounded-full" />
           <div className="min-w-0 flex-1 space-y-1.5">
             <div className="flex items-center justify-between gap-2">
@@ -882,19 +823,19 @@ function EmptyList({
 }) {
   const isSearching = search.trim().length > 0;
   return (
-    <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
-      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-neutral-100">
+    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/50 px-4 py-10 text-center">
+      <div className="rounded-full bg-muted p-3">
         {isSearching ? (
-          <Search className="h-6 w-6 text-neutral-400" aria-hidden="true" />
+          <Search className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
         ) : (
-          <Inbox className="h-6 w-6 text-neutral-400" aria-hidden="true" />
+          <Inbox className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
         )}
       </div>
-      <p className="mt-3 font-[family-name:var(--font-conv-display)] text-[15px] text-neutral-700">
+      <p className="mt-3 text-sm font-medium text-foreground">
         {isSearching ? t('noResults') : t('emptyList')}
       </p>
       {isSearching ? (
-        <p className="mt-1 text-[12px] text-neutral-500">
+        <p className="mt-1 text-xs text-muted-foreground">
           {t('noResultsHint', { query: search })}
         </p>
       ) : null}
@@ -908,20 +849,17 @@ function EmptyChat({
   t: ReturnType<typeof useTranslations<'panel.conversations'>>;
 }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 text-center">
-      <div className="relative">
-        <div className="absolute inset-0 -z-10 rounded-full bg-brand-500/5 blur-2xl" />
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-neutral-200/70 bg-white shadow-[0_4px_16px_rgba(0,0,0,0.04)]">
-          <MessageSquareText
-            className="h-7 w-7 text-brand-600"
-            aria-hidden="true"
-          />
-        </div>
+    <div className="flex flex-1 flex-col items-center justify-center p-12 text-center">
+      <div className="rounded-full bg-muted p-3">
+        <MessageSquareText
+          className="h-6 w-6 text-muted-foreground"
+          aria-hidden="true"
+        />
       </div>
-      <h2 className="mt-6 font-[family-name:var(--font-conv-display)] text-[22px] font-medium tracking-tight text-neutral-800">
+      <p className="mt-3 text-sm font-medium text-foreground">
         {t('emptyDetailTitle')}
-      </h2>
-      <p className="mt-2 max-w-xs text-[13px] leading-relaxed text-neutral-500">
+      </p>
+      <p className="mt-1 max-w-xs text-sm text-muted-foreground">
         {t('emptyDetail')}
       </p>
     </div>
@@ -931,15 +869,15 @@ function EmptyChat({
 function ChatSkeleton() {
   return (
     <>
-      <header className="flex items-center gap-3 border-b border-neutral-200/70 px-6 py-4">
-        <Skeleton className="h-11 w-11 rounded-full" />
+      <header className="flex items-center gap-3 border-b border-border/60 p-4">
+        <Skeleton className="h-10 w-10 rounded-full" />
         <div className="flex-1 space-y-1.5">
           <Skeleton className="h-4 w-40" />
           <Skeleton className="h-3 w-24" />
         </div>
         <Skeleton className="h-8 w-20" />
       </header>
-      <div className="min-h-0 flex-1 space-y-3 overflow-hidden px-8 py-8">
+      <div className="min-h-0 flex-1 space-y-3 overflow-hidden p-6">
         {[0, 1, 2, 3].map((i) => (
           <MessageBubbleSkeleton key={i} inbound={i % 2 === 0} />
         ))}
@@ -978,17 +916,12 @@ function MessageBubble({
   }).format(new Date(message.createdAt));
 
   return (
-    <div
-      className={cn(
-        'flex animate-in fade-in slide-in-from-bottom-1 duration-200',
-        isIn ? 'justify-start' : 'justify-end',
-      )}
-    >
+    <div className={cn('flex', isIn ? 'justify-start' : 'justify-end')}>
       <div
         className={cn(
-          'max-w-[78%] px-3.5 py-2.5 text-[13.5px] leading-relaxed whitespace-pre-wrap break-words shadow-[0_1px_2px_rgba(0,0,0,0.04)]',
+          'max-w-[78%] whitespace-pre-wrap break-words px-3.5 py-2.5 text-sm leading-relaxed shadow-sm',
           isIn
-            ? 'rounded-2xl rounded-bl-md border border-neutral-200/70 bg-white text-neutral-900'
+            ? 'rounded-2xl rounded-bl-md border border-border bg-card text-foreground'
             : 'rounded-2xl rounded-br-md bg-brand-600 text-white',
         )}
       >
@@ -996,8 +929,8 @@ function MessageBubble({
         {showTimestamp ? (
           <p
             className={cn(
-              'mt-1 font-[family-name:var(--font-conv-mono)] text-[10px] tabular-nums',
-              isIn ? 'text-neutral-400' : 'text-white/70',
+              'mt-1 text-[10px] tabular-nums',
+              isIn ? 'text-muted-foreground' : 'text-white/75',
             )}
           >
             {time}
@@ -1024,11 +957,11 @@ function renderMessagesWithSeparators(messages: Message[], locale: string) {
       nodes.push(
         <div
           key={`sep-${dayKey}`}
-          className="my-2 flex items-center gap-3 text-[11px] font-medium text-neutral-400"
+          className="my-2 flex items-center gap-3 text-[11px] font-medium text-muted-foreground"
         >
-          <span className="h-px flex-1 bg-neutral-200/60" />
+          <Separator className="flex-1" />
           <span className="capitalize">{dayFmt.format(d)}</span>
-          <span className="h-px flex-1 bg-neutral-200/60" />
+          <Separator className="flex-1" />
         </div>,
       );
     }
@@ -1071,16 +1004,15 @@ function ContactPanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Header */}
-      <div className="border-b border-neutral-200/70 px-5 pt-6 pb-4">
-        <p className="font-[family-name:var(--font-conv-display)] text-[11px] font-semibold uppercase tracking-[0.14em] text-neutral-500">
+      <header className="border-b border-border/60 p-4">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           {t('contactPanelTitle')}
         </p>
-      </div>
+      </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {/* Identidad */}
-        <div className="border-b border-neutral-200/70 px-5 py-5">
+        <section className="border-b border-border/60 p-4">
           <div className="flex items-center gap-3">
             <ContactAvatar
               phone={detail.phone}
@@ -1088,91 +1020,96 @@ function ContactPanel({
               size="lg"
             />
             <div className="min-w-0">
-              <p className="truncate font-[family-name:var(--font-conv-display)] text-[16px] font-medium text-neutral-900">
+              <p className="truncate text-sm font-semibold text-foreground">
                 {formatPhone(detail.phone)}
               </p>
-              <p className="mt-0.5 flex items-center gap-1.5 text-[11.5px] text-neutral-500">
+              <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
                 <UserRound className="h-3 w-3" aria-hidden="true" />
                 {t('unknownContact')}
               </p>
             </div>
           </div>
-          <a
-            href={`https://wa.me/${waPhone}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={cn(
-              'mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-[12.5px] font-medium text-neutral-700 shadow-[0_1px_2px_rgba(0,0,0,0.03)]',
-              'transition-colors hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800',
-            )}
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="mt-3 w-full justify-center gap-1.5"
           >
-            <Phone className="h-3.5 w-3.5" aria-hidden="true" />
-            {t('openInWhatsApp')}
-            <ExternalLink className="h-3 w-3 opacity-60" aria-hidden="true" />
-          </a>
-        </div>
+            <a
+              href={`https://wa.me/${waPhone}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Phone className="h-3.5 w-3.5" aria-hidden="true" />
+              {t('openInWhatsApp')}
+              <ExternalLink
+                className="h-3 w-3 opacity-60"
+                aria-hidden="true"
+              />
+            </a>
+          </Button>
+        </section>
 
         {/* Estado */}
-        <div className="border-b border-neutral-200/70 px-5 py-5">
-          <p className="font-[family-name:var(--font-conv-display)] text-[10.5px] font-semibold uppercase tracking-[0.14em] text-neutral-500">
+        <section className="border-b border-border/60 p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             {t('sectionState')}
           </p>
-          <div className="mt-3 flex items-center gap-2.5">
+          <div className="mt-2.5 flex items-center gap-2">
             <StateDot state={detail.state} className="h-2.5 w-2.5" />
-            <p className="text-[13px] font-medium text-neutral-800">
+            <p className="text-sm font-medium text-foreground">
               {t(`state.${detail.state}`)}
             </p>
           </div>
-          <p className="mt-2 text-[12px] leading-relaxed text-neutral-500">
+          <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
             {t(`stateDescription.${detail.state}`)}
           </p>
-        </div>
+        </section>
 
         {/* Actividad */}
-        <div className="border-b border-neutral-200/70 px-5 py-5">
-          <p className="font-[family-name:var(--font-conv-display)] text-[10.5px] font-semibold uppercase tracking-[0.14em] text-neutral-500">
+        <section className="border-b border-border/60 p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             {t('sectionActivity')}
           </p>
-          <dl className="mt-3 space-y-2.5 text-[12.5px]">
+          <dl className="mt-2.5 space-y-2 text-xs">
             <div className="flex items-baseline justify-between gap-3">
-              <dt className="text-neutral-500">{t('firstSeen')}</dt>
-              <dd className="font-[family-name:var(--font-conv-mono)] text-right tabular-nums text-neutral-700">
+              <dt className="text-muted-foreground">{t('firstSeen')}</dt>
+              <dd className="text-right tabular-nums text-foreground">
                 {dtFmt.format(created)}
               </dd>
             </div>
             <div className="flex items-baseline justify-between gap-3">
-              <dt className="text-neutral-500">{t('lastMessageAt')}</dt>
-              <dd className="font-[family-name:var(--font-conv-mono)] text-right tabular-nums text-neutral-700">
+              <dt className="text-muted-foreground">{t('lastMessageAt')}</dt>
+              <dd className="text-right tabular-nums text-foreground">
                 {dtFmt.format(lastAt)}
               </dd>
             </div>
             <div className="flex items-baseline justify-between gap-3">
-              <dt className="text-neutral-500">{t('totalMessages')}</dt>
-              <dd className="font-[family-name:var(--font-conv-mono)] tabular-nums text-neutral-700">
+              <dt className="text-muted-foreground">{t('totalMessages')}</dt>
+              <dd className="tabular-nums text-foreground">
                 {detail.messageCount}
               </dd>
             </div>
           </dl>
-        </div>
+        </section>
 
-        {/* Placeholder futuras integraciones */}
-        <div className="px-5 py-5">
-          <p className="font-[family-name:var(--font-conv-display)] text-[10.5px] font-semibold uppercase tracking-[0.14em] text-neutral-500">
+        {/* Citas relacionadas (placeholder) */}
+        <section className="p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             {t('sectionAppointments')}
           </p>
-          <div className="mt-3 rounded-lg border border-dashed border-neutral-300 bg-white/50 px-3 py-4 text-center">
-            <p className="text-[12px] text-neutral-500">{t('comingSoon')}</p>
+          <div className="mt-2.5 rounded-md border border-dashed border-border bg-muted/30 px-3 py-4 text-center">
+            <p className="text-xs text-muted-foreground">{t('comingSoon')}</p>
           </div>
-        </div>
+        </section>
       </div>
 
-      {/* Footer con chatId */}
-      <div className="border-t border-neutral-200/70 px-5 py-3">
-        <p className="flex items-center justify-between gap-2 font-[family-name:var(--font-conv-mono)] text-[10.5px] text-neutral-400">
+      <footer className="border-t border-border/60 p-3">
+        <p className="flex items-center justify-between gap-2 text-[10.5px] text-muted-foreground">
           <span className="uppercase tracking-wider">chat</span>
           <span className="truncate tabular-nums">{detail.chatId}</span>
         </p>
-      </div>
+      </footer>
     </div>
   );
 }
@@ -1183,20 +1120,16 @@ function ContactPanelEmpty({
   t: ReturnType<typeof useTranslations<'panel.conversations'>>;
 }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/70">
-        <MessageCircle
-          className="h-5 w-5 text-neutral-400"
+    <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
+      <div className="rounded-full bg-muted p-3">
+        <UserRound
+          className="h-5 w-5 text-muted-foreground"
           aria-hidden="true"
         />
       </div>
-      <p className="mt-3 max-w-[220px] text-[12px] leading-relaxed text-neutral-500">
+      <p className="mt-3 max-w-[220px] text-xs leading-relaxed text-muted-foreground">
         {t('contactPanelEmpty')}
       </p>
-      <ChevronRight
-        aria-hidden="true"
-        className="mt-4 h-4 w-4 rotate-180 text-neutral-300"
-      />
     </div>
   );
 }
@@ -1208,12 +1141,11 @@ function ContactPanelEmpty({
 /**
  * Formatea "5491135551234" → "+54 9 11 3555 1234" (fallback: agrega + adelante
  * si empieza con dígito). No pretende ser libphonenumber-perfect — solo mejorar
- * legibilidad.
+ * legibilidad. Cubre AR (54 9) y BR (55) que son las clínicas objetivo.
  */
 function formatPhone(raw: string): string {
   const digits = raw.replace(/[^0-9]/g, '');
   if (digits.length < 8) return raw;
-  // Argentina: 54 9 [area] [num]
   if (digits.startsWith('549') && digits.length >= 12) {
     const rest = digits.slice(3);
     return `+54 9 ${rest.slice(0, 2)} ${rest.slice(2, 6)} ${rest.slice(6)}`;
@@ -1225,7 +1157,6 @@ function formatPhone(raw: string): string {
   return `+${digits}`;
 }
 
-/** Versión compacta para la lista (últimos 4-6 dígitos + prefijo corto). */
 function formatPhoneShort(raw: string): string {
   const d = raw.replace(/[^0-9]/g, '');
   if (d.length < 8) return raw;
@@ -1233,13 +1164,11 @@ function formatPhoneShort(raw: string): string {
   return `+${d}`;
 }
 
-/** Iniciales del teléfono para el avatar — últimos 2 dígitos. */
 function getPhoneInitials(raw: string): string {
   const d = raw.replace(/[^0-9]/g, '');
   return d.slice(-2) || '··';
 }
 
-/** "hace 3m" / "2h" / "ayer" / "12 abr" — versión ligera. */
 function formatRelativeTime(iso: string, locale: string): string {
   const d = new Date(iso);
   const diff = Date.now() - d.getTime();
