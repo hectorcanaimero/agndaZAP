@@ -376,6 +376,7 @@
       "countLabel": "{n, plural, one {# serviço} other {# serviços}}",
       "countMatch": "{n} correspondem",
       "selectedCount": "{n} selecionados",
+      "professionalCount": "{n, plural, one {# profissional} other {# profissionais}}",
       "empty": {
         "title": "Selecione um serviço ou crie um novo",
         "description": "Os serviços definem o que você oferece, quanto tempo dura cada consulta e quais profissionais atendem.",

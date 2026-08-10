@@ -9,6 +9,7 @@ import {
   Search,
   Sparkles,
   Trash2,
+  User,
   Users,
   X,
 } from 'lucide-react';
@@ -147,14 +148,24 @@ export function ServicesClient({
 
   /* ─────── Handlers ─────── */
 
+  // El Sheet mobile es controlled → si lo abrimos en desktop, Radix igual
+  // renderiza el overlay/backdrop del portal aunque el content tenga md:hidden
+  // (el overlay NO hereda esa clase). Guard con matchMedia para abrir solo
+  // cuando corresponde. En desktop el panel derecho ya es visible, no hace
+  // falta drawer.
+  function isMobileViewport(): boolean {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(max-width: 767.98px)').matches;
+  }
+
   function openCreate() {
     setPanel({ kind: 'create' });
-    setMobileSheetOpen(true);
+    if (isMobileViewport()) setMobileSheetOpen(true);
   }
 
   function openEdit(s: Service) {
     setPanel({ kind: 'edit', service: s });
-    setMobileSheetOpen(true);
+    if (isMobileViewport()) setMobileSheetOpen(true);
   }
 
   function closePanel() {
@@ -382,70 +393,32 @@ function ServiceRow({
             </>
           ) : null}
         </p>
-        {service.professionals.length > 0 ? (
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {service.professionals.slice(0, 3).map((p) => (
-              <ProfessionalChip key={p.id} name={p.name} />
-            ))}
-            {service.professionals.length > 3 ? (
-              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
-                +{service.professionals.length - 3}
+        <p
+          className={cn(
+            'mt-1 flex items-center gap-1 text-[11px]',
+            service.professionals.length === 0
+              ? 'italic text-muted-foreground'
+              : 'text-muted-foreground',
+          )}
+        >
+          {service.professionals.length === 0 ? (
+            <>
+              <User className="h-3 w-3" aria-hidden="true" />
+              {t('noProfessionalsRow')}
+            </>
+          ) : (
+            <>
+              <Users className="h-3 w-3" aria-hidden="true" />
+              <span className="tabular-nums">
+                {t('professionalCount', {
+                  n: service.professionals.length,
+                })}
               </span>
-            ) : null}
-          </div>
-        ) : (
-          <p className="mt-1 text-[11px] italic text-muted-foreground">
-            {t('noProfessionalsRow')}
-          </p>
-        )}
+            </>
+          )}
+        </p>
       </div>
     </button>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════
- *                        PROFESSIONAL CHIP
- * ═══════════════════════════════════════════════════════════════════ */
-
-/**
- * Chip minimal con inicial + color estable por hash del nombre.
- * NO usa librería externa — hash simple djb2 modulado en una paleta acotada
- * (7 colores brand-safe). Determinístico: mismo nombre → mismo color siempre.
- */
-const CHIP_PALETTE = [
-  'bg-brand-100 text-brand-800',
-  'bg-amber-100 text-amber-800',
-  'bg-sky-100 text-sky-800',
-  'bg-violet-100 text-violet-800',
-  'bg-rose-100 text-rose-800',
-  'bg-emerald-100 text-emerald-800',
-  'bg-slate-200 text-slate-700',
-] as const;
-
-function chipColor(name: string): string {
-  let h = 5381;
-  for (let i = 0; i < name.length; i++) {
-    h = (h * 33) ^ name.charCodeAt(i);
-  }
-  return CHIP_PALETTE[Math.abs(h) % CHIP_PALETTE.length]!;
-}
-
-function ProfessionalChip({ name }: { name: string }) {
-  const initial = name.trim().charAt(0).toUpperCase() || '?';
-  const color = chipColor(name);
-  return (
-    <span
-      className={cn(
-        'inline-flex max-w-[110px] items-center gap-1 rounded-full py-0.5 pl-0.5 pr-1.5 text-[10px] font-medium',
-        color,
-      )}
-      title={name}
-    >
-      <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-white/60 text-[9px] font-semibold">
-        {initial}
-      </span>
-      <span className="truncate">{name}</span>
-    </span>
   );
 }
 
