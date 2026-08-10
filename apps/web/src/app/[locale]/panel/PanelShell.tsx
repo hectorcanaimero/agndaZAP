@@ -145,11 +145,12 @@ export function PanelShell({ locale, me, children }: PanelShellProps) {
   return (
     <div
       className={cn(
-        'flex bg-muted/40 text-foreground',
-        // En full-bleed, altura fija al viewport para que el hijo `<main>` con
-        // `flex-1` pueda propagar `h-full` a la pantalla que ocupa toda la ventana.
-        // En modo normal, `min-h-screen` para permitir contenido más largo.
-        fullBleed ? 'h-dvh overflow-hidden' : 'min-h-screen',
+        // Altura fija al viewport: el `<main>` es el único scroller. Esto le
+        // permite a rutas tipo bandeja/split-view usar `h-full` y darle scroll
+        // independiente a cada columna, mientras que las rutas "documento"
+        // (agenda, tablas, forms) siguen scrolleando dentro del main con el
+        // padding y max-width intactos.
+        'flex h-dvh overflow-hidden bg-muted/40 text-foreground',
       )}
     >
       {/* Sidebar desktop */}
@@ -322,16 +323,21 @@ export function PanelShell({ locale, me, children }: PanelShellProps) {
         </header>
 
         {/*
-          Rutas full-bleed (ej. /panel/conversaciones): la pantalla necesita
-          ocupar todo el viewport, sin padding ni max-width del shell. En vez de
-          duplicar cascadas de layouts, la shell detecta la ruta y omite la
-          jaula. Cualquier otra ruta mantiene el contenedor con `max-w-[1600px]`.
+          Modo normal: el `<main>` es el scroller (root es h-dvh
+          overflow-hidden), con el padding y max-width del panel intactos.
+          Cualquier ruta que necesite full-viewport puede usar `h-full` en
+          su hijo directo — la cadena de contenedores lo permite.
+          Modo full-bleed opt-in: para rutas registradas en
+          FULL_BLEED_SEGMENTS, se omite padding y max-width para pegar al
+          borde de la sidebar del panel.
         */}
         {isFullBleedRoute(pathname) ? (
           <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
         ) : (
-          <main className="flex-1 overflow-x-hidden px-4 py-6 md:px-8 md:py-8">
-            <div className="mx-auto w-full max-w-[1600px]">{children}</div>
+          <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 md:px-8 md:py-8">
+            <div className="mx-auto flex h-full w-full max-w-[1600px] flex-col">
+              {children}
+            </div>
           </main>
         )}
       </div>
@@ -341,13 +347,13 @@ export function PanelShell({ locale, me, children }: PanelShellProps) {
 
 /**
  * Rutas que necesitan ocupar el viewport entero sin la jaula del contenedor
- * (padding + max-width). Hoy: bandeja de conversaciones. Agregar acá cuando
- * aparezca otra pantalla que lo pida.
+ * (padding + max-width). Vacío por ahora — el mecanismo queda armado para
+ * cuando aparezca una ruta que realmente lo justifique.
  */
-const FULL_BLEED_SEGMENTS = ['/panel/conversaciones'] as const;
+const FULL_BLEED_SEGMENTS: readonly string[] = [];
 
 function isFullBleedRoute(pathname: string | null): boolean {
-  if (!pathname) return false;
+  if (!pathname || FULL_BLEED_SEGMENTS.length === 0) return false;
   return FULL_BLEED_SEGMENTS.some((seg) => pathname.includes(seg));
 }
 
