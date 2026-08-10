@@ -125,6 +125,7 @@
       "timeOff": "Bloqueos",
       "faq": "Base de conocimiento",
       "whatsapp": "WhatsApp",
+      "settings": "Ajustes",
       "logout": "Cerrar sesión",
       "openMenu": "Abrir menú",
       "closeMenu": "Cerrar menú",
@@ -680,6 +681,79 @@
       "counters": {
         "chars": "{current}/{max} caracteres"
       }
+    },
+    "settings": {
+      "title": "Ajustes",
+      "subtitle": "Configuración general de la clínica, recordatorios y bot.",
+      "loadError": "No se pudieron cargar los ajustes ({status}).",
+      "saved": "Ajustes guardados.",
+      "saveFailed": "No se pudieron guardar los ajustes.",
+      "save": "Guardar cambios",
+      "saving": "Guardando…",
+      "sidebarAriaLabel": "Secciones de ajustes",
+      "tabs": {
+        "general": "General",
+        "reminders": "Recordatorios",
+        "bot": "Bot / Chatbot"
+      },
+      "general": {
+        "title": "General",
+        "description": "Información visible de la clínica y preferencias regionales."
+      },
+      "reminders": {
+        "title": "Recordatorios",
+        "description": "Cuándo avisar al paciente antes de la cita y cuándo marcar en riesgo si no confirmó."
+      },
+      "bot": {
+        "title": "Bot",
+        "description": "Personalizá los mensajes que el bot envía a tus pacientes por WhatsApp."
+      },
+      "fields": {
+        "name": "Nombre de la clínica",
+        "address": "Dirección",
+        "timezone": "Zona horaria",
+        "locale": "Idioma",
+        "autoConfirm": "Confirmación automática de citas",
+        "offsets": "Recordatorios antes de la cita",
+        "threshold": "Umbral \"en riesgo\"",
+        "tone": "Tono del bot",
+        "botGreeting": "Mensaje de saludo",
+        "botFallback": "Respuesta por defecto (fallback)",
+        "botHandoffMsg": "Mensaje al escalar a humano"
+      },
+      "hints": {
+        "address": "Se muestra a los pacientes en la página pública de agendamiento.",
+        "timezone": "Todas las horas del panel se muestran en esta TZ. Formato IANA.",
+        "autoConfirm": "Si está activo, las citas nacen confirmadas — no se pide confirmación explícita al paciente.",
+        "offsets": "Podés configurar hasta 5 recordatorios. Ej: 24 (un día antes) y 3 (tres horas antes).",
+        "threshold": "Horas antes de la cita sin confirmar tras las cuales la cita pasa a EN_RIESGO.",
+        "tone": "Modula el estilo de las respuestas del bot (solo afecta el cómo, no el qué).",
+        "botGreeting": "Cuando el paciente saluda (\"hola\", \"buenas\"). Placeholders: {clinicName}, {patientName}.",
+        "botFallback": "Cuando el bot no entiende la intención del mensaje. Placeholders: {clinicName}, {patientName}.",
+        "botHandoffMsg": "Cuando la conversación pasa a una persona del equipo. Placeholders: {clinicName}, {patientName}."
+      },
+      "errors": {
+        "required": "Requerido.",
+        "offsetRange": "El recordatorio debe estar entre 1h y 168h (7 días).",
+        "offsetDuplicate": "Ya agregaste ese recordatorio.",
+        "offsetMax": "Máximo 5 recordatorios.",
+        "thresholdRange": "El umbral debe estar entre 1h y 72h."
+      },
+      "warnings": {
+        "timezoneChange": "Cambiar la zona horaria afecta cómo se ven las citas futuras. Verificá antes de guardar."
+      },
+      "timezoneCustom": "Otra (personalizada)",
+      "offsetChip": "{h}h antes",
+      "removeOffset": "Quitar recordatorio de {h}h",
+      "addOffset": "Agregar",
+      "offsetsEmpty": "Sin recordatorios configurados — el bot no va a avisar antes de las citas.",
+      "hoursSuffix": "horas",
+      "toneDefault": "Por defecto (cercano)",
+      "toneCercano": "Cercano",
+      "toneFormal": "Formal",
+      "toneTecnico": "Técnico",
+      "placeholdersTitle": "Placeholders disponibles",
+      "placeholdersBody": "Se reemplazan al enviar: <clinicName></clinicName> por el nombre de la clínica, <patientName></patientName> por el nombre del paciente si lo conocemos."
     },
     "whatsapp": {
       "title": "Conexión de WhatsApp",

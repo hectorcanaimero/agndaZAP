@@ -125,6 +125,7 @@
       "timeOff": "Bloqueios",
       "faq": "Base de conhecimento",
       "whatsapp": "WhatsApp",
+      "settings": "Ajustes",
       "logout": "Sair",
       "openMenu": "Abrir menu",
       "closeMenu": "Fechar menu",
@@ -680,6 +681,79 @@
       "counters": {
         "chars": "{current}/{max} caracteres"
       }
+    },
+    "settings": {
+      "title": "Ajustes",
+      "subtitle": "Configuração geral da clínica, lembretes e bot.",
+      "loadError": "Não foi possível carregar os ajustes ({status}).",
+      "saved": "Ajustes salvos.",
+      "saveFailed": "Não foi possível salvar os ajustes.",
+      "save": "Salvar alterações",
+      "saving": "Salvando…",
+      "sidebarAriaLabel": "Seções de ajustes",
+      "tabs": {
+        "general": "Geral",
+        "reminders": "Lembretes",
+        "bot": "Bot / Chatbot"
+      },
+      "general": {
+        "title": "Geral",
+        "description": "Informações visíveis da clínica e preferências regionais."
+      },
+      "reminders": {
+        "title": "Lembretes",
+        "description": "Quando avisar o paciente antes da consulta e quando marcar em risco se não confirmar."
+      },
+      "bot": {
+        "title": "Bot",
+        "description": "Personalize as mensagens que o bot envia aos seus pacientes pelo WhatsApp."
+      },
+      "fields": {
+        "name": "Nome da clínica",
+        "address": "Endereço",
+        "timezone": "Fuso horário",
+        "locale": "Idioma",
+        "autoConfirm": "Confirmação automática de consultas",
+        "offsets": "Lembretes antes da consulta",
+        "threshold": "Limite \"em risco\"",
+        "tone": "Tom do bot",
+        "botGreeting": "Mensagem de saudação",
+        "botFallback": "Resposta padrão (fallback)",
+        "botHandoffMsg": "Mensagem ao escalar para humano"
+      },
+      "hints": {
+        "address": "Exibido aos pacientes na página pública de agendamento.",
+        "timezone": "Todas as horas do painel são exibidas neste fuso. Formato IANA.",
+        "autoConfirm": "Se ativo, as consultas nascem confirmadas — não pede confirmação explícita ao paciente.",
+        "offsets": "Você pode configurar até 5 lembretes. Ex: 24 (um dia antes) e 3 (três horas antes).",
+        "threshold": "Horas antes da consulta sem confirmação após as quais a consulta passa para EM_RISCO.",
+        "tone": "Modula o estilo das respostas do bot (só afeta o como, não o quê).",
+        "botGreeting": "Quando o paciente cumprimenta (\"olá\", \"oi\", \"boas\"). Placeholders: {clinicName}, {patientName}.",
+        "botFallback": "Quando o bot não entende a intenção da mensagem. Placeholders: {clinicName}, {patientName}.",
+        "botHandoffMsg": "Quando a conversa passa para uma pessoa da equipe. Placeholders: {clinicName}, {patientName}."
+      },
+      "errors": {
+        "required": "Obrigatório.",
+        "offsetRange": "O lembrete deve estar entre 1h e 168h (7 dias).",
+        "offsetDuplicate": "Você já adicionou esse lembrete.",
+        "offsetMax": "Máximo 5 lembretes.",
+        "thresholdRange": "O limite deve estar entre 1h e 72h."
+      },
+      "warnings": {
+        "timezoneChange": "Alterar o fuso horário afeta como as consultas futuras são exibidas. Verifique antes de salvar."
+      },
+      "timezoneCustom": "Outro (personalizado)",
+      "offsetChip": "{h}h antes",
+      "removeOffset": "Remover lembrete de {h}h",
+      "addOffset": "Adicionar",
+      "offsetsEmpty": "Sem lembretes configurados — o bot não avisará antes das consultas.",
+      "hoursSuffix": "horas",
+      "toneDefault": "Padrão (próximo)",
+      "toneCercano": "Próximo",
+      "toneFormal": "Formal",
+      "toneTecnico": "Técnico",
+      "placeholdersTitle": "Placeholders disponíveis",
+      "placeholdersBody": "São substituídos ao enviar: <clinicName></clinicName> pelo nome da clínica, <patientName></patientName> pelo nome do paciente se conhecido."
     },
     "whatsapp": {
       "title": "Conexão do WhatsApp",
