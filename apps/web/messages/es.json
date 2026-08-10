@@ -493,15 +493,20 @@
       "title": "Horarios",
       "subtitle": "Horarios de atención de la clínica.",
       "loadError": "No se pudieron cargar los horarios ({status}).",
-      "empty": "Sin horarios cargados.",
-      "new": "Nuevo horario",
+      "emptyList": "Sin horarios cargados.",
+      "noFilterResults": "Sin horarios para este filtro.",
+      "new": "Nuevo",
       "newTitle": "Nuevo horario",
+      "newSubtitle": "Sin definir",
       "editTitle": "Editar horario",
       "edit": "Editar",
       "delete": "Eliminar",
+      "close": "Cerrar",
+      "createFirst": "Cargar el primero",
+      "filterProfessional": "Filtrar por profesional",
       "actions": "Acciones",
       "save": "Guardar",
-      "saving": "Guardando...",
+      "saving": "Guardando…",
       "saved": "Horario guardado.",
       "saveFailed": "No se pudo guardar el horario.",
       "deleted": "Horario eliminado.",
@@ -512,6 +517,21 @@
       },
       "cancel": "Cancelar",
       "allProfessionals": "Toda la clínica",
+      "countLabel": "{n, plural, one {# horario} other {# horarios}}",
+      "countMatch": "{n} coinciden",
+      "durationHint": "Duración: {hours}h {minutes}m",
+      "filters": {
+        "allRows": "Todos los horarios",
+        "clinicOnly": "Solo horarios de la clínica"
+      },
+      "empty": {
+        "title": "Elegí un horario o cargá uno nuevo",
+        "description": "Definí cuándo abre la clínica o cada profesional. Los pacientes solo verán slots dentro de estos rangos.",
+        "cta": "Cargar horario"
+      },
+      "hints": {
+        "professional": "Dejalo en 'Toda la clínica' si el horario aplica a todos los profesionales."
+      },
       "fields": {
         "weekday": "Día",
         "range": "Rango",
@@ -536,16 +556,22 @@
       "title": "Bloqueos",
       "subtitle": "Vacaciones y ausencias.",
       "loadError": "No se pudieron cargar los bloqueos ({status}).",
-      "empty": "Sin bloqueos cargados.",
-      "searchPlaceholder": "Buscar por motivo…",
-      "new": "Nuevo bloqueo",
+      "emptyList": "Sin bloqueos cargados.",
+      "noSearchResults": "Sin resultados para tu búsqueda.",
+      "searchPlaceholder": "Buscar por motivo, fecha o profesional…",
+      "new": "Nuevo",
       "newTitle": "Nuevo bloqueo",
+      "newSubtitle": "Sin motivo",
       "editTitle": "Editar bloqueo",
       "edit": "Editar",
       "delete": "Eliminar",
+      "close": "Cerrar",
+      "optional": "opcional",
+      "createFirst": "Cargar el primero",
+      "untitled": "Sin motivo",
       "actions": "Acciones",
       "save": "Guardar",
-      "saving": "Guardando...",
+      "saving": "Guardando…",
       "saved": "Bloqueo guardado.",
       "saveFailed": "No se pudo guardar el bloqueo.",
       "deleted": "Bloqueo eliminado.",
@@ -556,6 +582,20 @@
       },
       "cancel": "Cancelar",
       "allProfessionals": "Toda la clínica",
+      "countLabel": "{n, plural, one {# bloqueo} other {# bloqueos}}",
+      "countMatch": "{n} coinciden",
+      "groups": {
+        "upcoming": "Próximos y activos",
+        "past": "Pasados"
+      },
+      "empty": {
+        "title": "Elegí un bloqueo o cargá uno nuevo",
+        "description": "Vacaciones, feriados o cualquier franja donde la clínica o un profesional no atiende.",
+        "cta": "Cargar bloqueo"
+      },
+      "hints": {
+        "professional": "Dejalo en 'Toda la clínica' si el bloqueo afecta a todos los profesionales."
+      },
       "fields": {
         "range": "Rango",
         "start": "Desde",

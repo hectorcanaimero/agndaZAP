@@ -493,15 +493,20 @@
       "title": "Horários",
       "subtitle": "Horários de atendimento da clínica.",
       "loadError": "Não foi possível carregar os horários ({status}).",
-      "empty": "Nenhum horário cadastrado.",
-      "new": "Novo horário",
+      "emptyList": "Nenhum horário cadastrado.",
+      "noFilterResults": "Sem horários para este filtro.",
+      "new": "Novo",
       "newTitle": "Novo horário",
+      "newSubtitle": "Sem definir",
       "editTitle": "Editar horário",
       "edit": "Editar",
       "delete": "Excluir",
+      "close": "Fechar",
+      "createFirst": "Cadastrar o primeiro",
+      "filterProfessional": "Filtrar por profissional",
       "actions": "Ações",
       "save": "Salvar",
-      "saving": "Salvando...",
+      "saving": "Salvando…",
       "saved": "Horário salvo.",
       "saveFailed": "Não foi possível salvar o horário.",
       "deleted": "Horário excluído.",
@@ -512,6 +517,21 @@
       },
       "cancel": "Cancelar",
       "allProfessionals": "Toda a clínica",
+      "countLabel": "{n, plural, one {# horário} other {# horários}}",
+      "countMatch": "{n} correspondem",
+      "durationHint": "Duração: {hours}h {minutes}m",
+      "filters": {
+        "allRows": "Todos os horários",
+        "clinicOnly": "Somente horários da clínica"
+      },
+      "empty": {
+        "title": "Selecione um horário ou cadastre um novo",
+        "description": "Defina quando a clínica ou cada profissional atende. Os pacientes só verão horários dentro desses intervalos.",
+        "cta": "Cadastrar horário"
+      },
+      "hints": {
+        "professional": "Deixe em 'Toda a clínica' se o horário se aplica a todos os profissionais."
+      },
       "fields": {
         "weekday": "Dia",
         "range": "Intervalo",
@@ -536,16 +556,22 @@
       "title": "Bloqueios",
       "subtitle": "Férias e ausências.",
       "loadError": "Não foi possível carregar os bloqueios ({status}).",
-      "empty": "Nenhum bloqueio cadastrado.",
-      "searchPlaceholder": "Buscar por motivo…",
-      "new": "Novo bloqueio",
+      "emptyList": "Nenhum bloqueio cadastrado.",
+      "noSearchResults": "Sem resultados para sua busca.",
+      "searchPlaceholder": "Buscar por motivo, data ou profissional…",
+      "new": "Novo",
       "newTitle": "Novo bloqueio",
+      "newSubtitle": "Sem motivo",
       "editTitle": "Editar bloqueio",
       "edit": "Editar",
       "delete": "Excluir",
+      "close": "Fechar",
+      "optional": "opcional",
+      "createFirst": "Cadastrar o primeiro",
+      "untitled": "Sem motivo",
       "actions": "Ações",
       "save": "Salvar",
-      "saving": "Salvando...",
+      "saving": "Salvando…",
       "saved": "Bloqueio salvo.",
       "saveFailed": "Não foi possível salvar o bloqueio.",
       "deleted": "Bloqueio excluído.",
@@ -556,6 +582,20 @@
       },
       "cancel": "Cancelar",
       "allProfessionals": "Toda a clínica",
+      "countLabel": "{n, plural, one {# bloqueio} other {# bloqueios}}",
+      "countMatch": "{n} correspondem",
+      "groups": {
+        "upcoming": "Próximos e ativos",
+        "past": "Passados"
+      },
+      "empty": {
+        "title": "Selecione um bloqueio ou cadastre um novo",
+        "description": "Férias, feriados ou qualquer período em que a clínica ou um profissional não atende.",
+        "cta": "Cadastrar bloqueio"
+      },
+      "hints": {
+        "professional": "Deixe em 'Toda a clínica' se o bloqueio afeta todos os profissionais."
+      },
       "fields": {
         "range": "Intervalo",
         "start": "Início",
