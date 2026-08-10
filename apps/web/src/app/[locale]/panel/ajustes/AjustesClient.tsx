@@ -63,6 +63,19 @@ interface Props {
  * Para casos edge (Europa, Asia), el operador puede editar el string directo
  * en el input — el backend valida con Intl.DateTimeFormat.
  */
+/**
+ * Los hints del bot (es/pt) contienen literalmente `{clinicName}` y
+ * `{patientName}` como referencia visual al operador. next-intl los parsea
+ * como variables ICU — hay que pasarles un valor. Le pasamos la misma
+ * string entre llaves para que el render final sea idéntico al texto original.
+ * Alternativa: `t.rich` con tags, pero es más código para un texto puramente
+ * informativo (los placeholders reales viven en `PlaceholdersHint`).
+ */
+const PLACEHOLDER_LITERALS = {
+  clinicName: '{clinicName}',
+  patientName: '{patientName}',
+} as const;
+
 const COMMON_TIMEZONES = [
   'America/Argentina/Buenos_Aires',
   'America/Sao_Paulo',
@@ -672,7 +685,7 @@ function BotForm({ clinic }: { clinic: ClinicSettings }) {
       <BotMessageField
         htmlFor="bot-greeting"
         label={t('fields.botGreeting')}
-        hint={t('hints.botGreeting')}
+        hint={t('hints.botGreeting', PLACEHOLDER_LITERALS)}
         register={register('botGreeting')}
         disabled={busy}
         placeholder="¡Hola! Soy el asistente de {clinicName}…"
@@ -682,7 +695,7 @@ function BotForm({ clinic }: { clinic: ClinicSettings }) {
       <BotMessageField
         htmlFor="bot-fallback"
         label={t('fields.botFallback')}
-        hint={t('hints.botFallback')}
+        hint={t('hints.botFallback', PLACEHOLDER_LITERALS)}
         register={register('botFallback')}
         disabled={busy}
         placeholder="Puedo ayudarte con agendar, reagendar o cancelar…"
@@ -692,7 +705,7 @@ function BotForm({ clinic }: { clinic: ClinicSettings }) {
       <BotMessageField
         htmlFor="bot-handoff"
         label={t('fields.botHandoffMsg')}
-        hint={t('hints.botHandoffMsg')}
+        hint={t('hints.botHandoffMsg', PLACEHOLDER_LITERALS)}
         register={register('botHandoffMsg')}
         disabled={busy}
         placeholder="Enseguida te atiende una persona del equipo. 🙏"
