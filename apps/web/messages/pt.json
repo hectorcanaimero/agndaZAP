@@ -526,7 +526,8 @@
       },
       "empty": {
         "title": "Selecione um horário ou cadastre um novo",
-        "description": "Defina quando a clínica ou cada profissional atende. Os pacientes só verão horários dentro desses intervalos."
+        "description": "Defina quando a clínica ou cada profissional atende. Os pacientes só verão horários dentro desses intervalos.",
+        "cta": "Cadastrar horário"
       },
       "hints": {
         "professional": "Deixe em 'Toda a clínica' se o horário se aplica a todos os profissionais."
@@ -589,7 +590,8 @@
       },
       "empty": {
         "title": "Selecione um bloqueio ou cadastre um novo",
-        "description": "Férias, feriados ou qualquer período em que a clínica ou um profissional não atende."
+        "description": "Férias, feriados ou qualquer período em que a clínica ou um profissional não atende.",
+        "cta": "Cadastrar bloqueio"
       },
       "hints": {
         "professional": "Deixe em 'Toda a clínica' se o bloqueio afeta todos os profissionais."

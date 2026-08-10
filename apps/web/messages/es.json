@@ -526,7 +526,8 @@
       },
       "empty": {
         "title": "Elegí un horario o cargá uno nuevo",
-        "description": "Definí cuándo abre la clínica o cada profesional. Los pacientes solo verán slots dentro de estos rangos."
+        "description": "Definí cuándo abre la clínica o cada profesional. Los pacientes solo verán slots dentro de estos rangos.",
+        "cta": "Cargar horario"
       },
       "hints": {
         "professional": "Dejalo en 'Toda la clínica' si el horario aplica a todos los profesionales."
@@ -589,7 +590,8 @@
       },
       "empty": {
         "title": "Elegí un bloqueo o cargá uno nuevo",
-        "description": "Vacaciones, feriados o cualquier franja donde la clínica o un profesional no atiende."
+        "description": "Vacaciones, feriados o cualquier franja donde la clínica o un profesional no atiende.",
+        "cta": "Cargar bloqueo"
       },
       "hints": {
         "professional": "Dejalo en 'Toda la clínica' si el bloqueo afecta a todos los profesionales."
