@@ -692,10 +692,12 @@ describe('BotService — FSM de agendamiento', () => {
     });
 
     // Handoff: conversation → NEEDS_HUMAN + mensaje al paciente.
+    // El mensaje concreto es customizable per-tenant (clinic.botHandoffMsg,
+    // ver /panel/ajustes). Verificamos el default hardcodeado — "persona del
+    // equipo" es el fragmento estable en `BotService.DEFAULT_BOT_MESSAGES`.
     expect(convoState.state).toBe('NEEDS_HUMAN');
     const msg = waha.sendText.mock.calls.at(-1)![2];
     expect(msg).toMatch(/persona del equipo/i);
-    expect(msg).toMatch(/verificar/i);
   });
 
   // ─────────────────── Rate-limit por chatId (ADR 0007) ───────────────────
@@ -738,11 +740,13 @@ describe('BotService — FSM de agendamiento', () => {
     intent.detect.mockResolvedValue(Intent.OTRO);
     redis.incr.mockRejectedValueOnce(new Error('redis down'));
 
+    // Texto que NO es saludo — GREETING_REGEX cortaría antes de llegar a
+    // intent.detect y este test verifica que el pipeline LLM se ejecuta.
     await bot.handleIncoming({
       clinicId: 'clinic-A',
       chatId: convoState.chatId,
       phone: convoState.phone,
-      text: 'hola',
+      text: '¿tienen turno mañana?',
     });
 
     // Fail-open: intent.detect se llamó igual.
@@ -766,5 +770,69 @@ describe('BotService — FSM de agendamiento', () => {
     // Un número siempre resuelve por índice, sin importar largo.
     const resolved3 = (bot as any).resolveChoice(choices, '2');
     expect(resolved3.id).toBe('svc-b');
+  });
+
+  // ─────────────────── Bot messages: custom + placeholders ───────────────────
+
+  describe('resolveBotMessage (settings de /panel/ajustes)', () => {
+    it('sin custom → devuelve el DEFAULT_BOT_MESSAGES de la key', () => {
+      const clinic = makeClinic({
+        botGreeting: null,
+        botFallback: null,
+        botHandoffMsg: null,
+      });
+      expect((bot as any).resolveBotMessage(clinic, 'handoff')).toContain(
+        'persona del equipo',
+      );
+      expect((bot as any).resolveBotMessage(clinic, 'fallback')).toContain(
+        'agendar',
+      );
+    });
+
+    it('custom no vacío → pisa al default', () => {
+      const clinic = makeClinic({
+        botHandoffMsg: 'Ya te llamamos.',
+      });
+      expect((bot as any).resolveBotMessage(clinic, 'handoff')).toBe(
+        'Ya te llamamos.',
+      );
+    });
+
+    it('reemplaza {clinicName}', () => {
+      const clinic = makeClinic({
+        name: 'Mi Consultorio',
+        botGreeting: 'Hola, sos parte de {clinicName}',
+      });
+      expect((bot as any).resolveBotMessage(clinic, 'greeting')).toBe(
+        'Hola, sos parte de Mi Consultorio',
+      );
+    });
+
+    it('reemplaza {patientName} cuando viene, o "" cuando no', () => {
+      const clinic = makeClinic({
+        botFallback: 'Hola {patientName}, ¿en qué te ayudo?',
+      });
+      expect(
+        (bot as any).resolveBotMessage(clinic, 'fallback', {
+          patientName: 'Ana',
+        }),
+      ).toBe('Hola Ana, ¿en qué te ayudo?');
+      expect((bot as any).resolveBotMessage(clinic, 'fallback')).toBe(
+        'Hola , ¿en qué te ayudo?',
+      );
+    });
+
+    it('greeting: "hola" dispara greeting y NO llega al LLM', async () => {
+      intent.detect.mockClear();
+      await bot.handleIncoming({
+        clinicId: 'clinic-A',
+        chatId: '5804141234567@c.us',
+        phone: '+5804141234567',
+        text: 'hola',
+      });
+      const msg = waha.sendText.mock.calls.at(-1)![2];
+      expect(msg).toContain('Clínica A'); // {clinicName} en el default
+      expect(intent.detect).not.toHaveBeenCalled();
+    });
   });
 });
