@@ -1143,7 +1143,8 @@ function ContactPanelEmpty({
  * si empieza con dígito). No pretende ser libphonenumber-perfect — solo mejorar
  * legibilidad. Cubre AR (54 9) y BR (55) que son las clínicas objetivo.
  */
-function formatPhone(raw: string): string {
+function formatPhone(raw: string | null | undefined): string {
+  if (!raw) return '—';
   const digits = raw.replace(/[^0-9]/g, '');
   if (digits.length < 8) return raw;
   if (digits.startsWith('549') && digits.length >= 12) {
@@ -1157,14 +1158,16 @@ function formatPhone(raw: string): string {
   return `+${digits}`;
 }
 
-function formatPhoneShort(raw: string): string {
+function formatPhoneShort(raw: string | null | undefined): string {
+  if (!raw) return '—';
   const d = raw.replace(/[^0-9]/g, '');
   if (d.length < 8) return raw;
   if (d.length >= 12) return `+${d.slice(0, 2)} … ${d.slice(-6)}`;
   return `+${d}`;
 }
 
-function getPhoneInitials(raw: string): string {
+function getPhoneInitials(raw: string | null | undefined): string {
+  if (!raw) return '··';
   const d = raw.replace(/[^0-9]/g, '');
   return d.slice(-2) || '··';
 }
