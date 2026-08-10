@@ -1,5 +1,19 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-08-10 — WhatsApp LID + contact info en Conversation (ADR 0010)
+- Detectado en el panel: un chat legítimo aparecía con "número" `+63556976398516` cuando el real era `+5541998819501`. Causa raíz: WhatsApp está migrando de `<phone>@c.us` a `<lid>@lid` (Linked ID por privacidad) y el webhook stripeaba solo `@c.us`, guardando el LID como si fuera phone. Verificado en DB (`chatId=63556976398516@lid`) y en logs de WAHA (`myPN`/`myLID` separados).
+- Decisión: extender el modelo `Conversation` en vez de crear tabla `Customer`. Ver [[adr/0010-lid-y-contacto-whatsapp]].
+- Cambios:
+  - **Prisma**: `Conversation.phone` pasa a `String?`; nuevas columnas `lid`, `contactName`, `avatarUrl`, `avatarFetchedAt`, `patientId?` (FK a `Patient`). Migración incluye backfill que separa `phone LIKE '%@lid'` → columna `lid` (sin sufijo) y phone=null; también stripea legacy `@c.us`.
+  - **WahaService**: `startSession` usa ahora `POST /api/sessions` con `config.noweb.store.enabled=true` (fullSync=false). Fallback al legacy `/api/sessions/start` con 409/422. Sesiones creadas antes de este cambio necesitan re-escaneo de QR para activar el store. Nuevo `getContactAvatar(session, chatId)` que consulta `/api/contacts/profile-picture` — funciona con `@c.us` y `@lid`.
+  - **Webhook**: parsea `from` separando phone/lid según sufijo; extrae `notifyName` de top-level o `_data.pushName`. Log condicional `[LID]` en dev para observar campos alternativos de Baileys (`senderPn`, `remoteJidAlt`) sin ensuciar el ingest.
+  - **Bot**: `handleIncoming` acepta `contactName + lid + phone|null`. Upsert respeta `contactName` existente si no vino nuevo. `refreshAvatar` en background con TTL 24h. FSM defensivo con `phone|null`: confirmaciones deterministas (sí/cancelar) y lookup de `Patient` se saltan si phone es null; `CONFIRM` aborta con mensaje pidiendo el número directo (TODO: agregar `ASK_PHONE` al FSM).
+  - **Conversations controller**: `list`/`findOne` exponen los nuevos campos. `findOne` agrega `messageCount` — cierra el bug "NaN mensajes" en el header del chat.
+  - **Panel (web)**: `displayName(conv)` prioriza `contactName` > phone formateado > "Contacto WhatsApp" (nunca renderiza el LID pelado). `ContactAvatar` acepta `avatarUrl` y cae a iniciales con `onError` cuando la URL de WhatsApp expira (~48h). Búsqueda incluye `contactName`. Botón "Abrir en WhatsApp" se esconde si `phone` es null.
+- Verificaciones: 284/284 tests backend verdes (nuevos: happy path + fallback 409 de `startSession`, `getContactAvatar` con `@lid`, `getContactAvatar` degradando a null con WAHA caído). Typecheck limpio en web y backend. Backfill validado en DB.
+- Deuda documentada: (1) `ASK_PHONE` en el FSM para completar agendamientos de contactos que llegaron con LID, (2) procedimiento de re-escaneo QR para activar el store en sesiones WAHA preexistentes, (3) refinamiento del parsing cuando se confirmen los campos alternativos que expone Baileys via el log `[LID]`.
+- Archivos tocados: `apps/backend/prisma/schema.prisma`, migration nueva `20260810091156_conversation_contact_info`, `apps/backend/src/whatsapp/{waha.service,webhook.controller}.ts` (+ specs), `apps/backend/src/bot/bot.service.ts` (+ spec), `apps/backend/src/conversations/conversations.controller.ts`, `apps/web/src/app/[locale]/panel/conversaciones/ConversationsClient.tsx`, `docs/adr/0010-lid-y-contacto-whatsapp.md`.
+
 ## 2026-08-09 — FAQ banner "sin embedding" — fallo silencioso resuelto (spec P0)
 - Ejecutado [[ux/2026-08-09-faq-embedding-banner]]: cerrado el fallo silencioso donde una FAQ cargada sin `OPENAI_API_KEY` quedaba en DB con `embedding=NULL`, el bot NO podía responderla (`KnowledgeService.retrieve` filtra por `embedding IS NOT NULL`), y el operador NO lo sabía porque el `FaqClient` no distinguía chunks indexados vs no indexados.
 - Cambios:
