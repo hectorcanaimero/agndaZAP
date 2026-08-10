@@ -1,5 +1,34 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-08-10 — Profesionales: perfil ampliado + master-detail + iCal feed (ADR 0011)
+- Reescritura de `/panel/profesionales` alineando con el patrón master-detail que ya se aplicó en servicios. Aparte, el modelo `Professional` estaba minimalista (solo `name + active`) — el usuario planteó que era insuficiente para la app mobile futura del profesional y para que puedan sincronizar sus turnos con el calendar del teléfono.
+- Ver [[adr/0011-perfil-profesional-e-ical-feed]] para el análisis completo (por qué iCal feed en vez de Google OAuth, decisión del HMAC token, deuda documentada).
+- Cambios de schema:
+  - Migration `20260810115333_professional_profile_fields` agrega 7 campos opcionales a `Professional`: `email`, `phone`, `specialty`, `bio`, `avatarUrl`, `licenseNumber`, `color`. Todos NULL para profesionales existentes.
+  - `@@unique([clinicId, email])` para prevenir doble alta.
+  - `updatedAt @updatedAt` con default `now()` para tomar valor inicial en el ALTER sin fallar sobre rows existentes.
+- Cambios backend:
+  - Nuevo `ProfessionalProfileFieldsDto` compartido entre create y update via `extends`. Validaciones: `@IsEmail`, regex E.164 phone, `@IsUrl` para avatar, `@IsHexColor` para color, `@Transform` que normaliza strings vacíos a `undefined`.
+  - Controller: helper `pickProfileFields` que filtra `undefined` (no pisa valores en patch parcial). Nuevo helper `throwIfEmailTaken` que traduce `P2002` a `409 Conflict` claro.
+  - **Nuevo `IcalService`** (RFC 5545) — genera `.ics` con las citas activas del profesional en ventana [30d atrás, 90d adelante]. Excluye `CANCELADA`/`NO_SHOW`. Escape correcto de `,`, `;`, `\`, newlines. CRLF entre líneas. Mapea PENDIENTE/EN_RIESGO → TENTATIVE, CONFIRMADA/ATENDIDA → CONFIRMED.
+  - **HMAC token** `HMAC-SHA256(professionalId, ICAL_SECRET)` truncado a 32 hex. Comparado con `timingSafeEqual`. Determinístico + revocable rotando `ICAL_SECRET`. Fail-fast en prod si no está seteado.
+  - **Nuevo `ProfessionalsIcalController`** — `GET /ical/professionals/:id?token=X`. `@Public` (opt-out del JWT guard global). Fuera del prefijo `/api` (agregado a `main.ts` exclude, junto al webhook de WAHA). Content-Type: `text/calendar; charset=utf-8`.
+  - `findOne` del controller de professionals ahora expone `icalUrl` pre-firmada en el response, para que el frontend pueda mostrar "Copiar URL" sin re-firmar.
+  - Tests: 316/316 verdes (14 nuevos en `IcalService` cubriendo token determinismo/rotación, verify con timing-safe, feed vacío defensivo, VEVENT generation, exclusión de CANCELADA/NO_SHOW, mapeo de status, escape RFC 5545, tolerancia a Patient.name null, CRLF).
+- Cambios frontend:
+  - Rewrite de `ProfessionalsClient.tsx` con layout master-detail (~900 LOC). Lista izq con avatar circular (foto o iniciales sobre `color` propio o brand-500 fallback), specialty visible bajo el nombre, conteo de servicios.
+  - Form con **5 secciones** (`FormSection` helper para consistencia visual): Identidad (name, email, phone), Perfil profesional (specialty, licenseNumber, bio), Servicios (checkboxes existentes), Visual (avatarUrl, color con color picker + input hex sincronizados), Calendar (solo edit — sync con iCal feed URL copiable + instrucciones iOS/Android).
+  - `CalendarUrlCopy` component: fetch del detail on demand → construye URL absoluta (`window.location.origin + icalUrl`) → botón "Copiar" con feedback visual "Copiado ✓" 2 segundos.
+  - Avatar preview en el header del form (foto o iniciales sobre color) — se actualiza en tiempo real mientras el operador escribe.
+  - Sheet mobile con guard `matchMedia('(max-width: 767.98px)')` (mismo patrón que servicios para evitar backdrop en desktop).
+- i18n: ~60 keys nuevas bajo `panel.professionals.{sections,fields,placeholders,hints,errors,calendarSync,empty}`. Renombramos `empty` (era string) a `emptyList` para liberar `empty.{title,description,cta}` como objeto del panel. Paridad estricta es/pt verificada con `diff <(jq)`.
+- Deuda documentada (en ADR 0011):
+  - `avatarUrl` es URL manual — upload propio queda para follow-up.
+  - iCal es read-only — Google Calendar OAuth para bi-direccional queda para follow-up cuando aparezca demanda concreta.
+  - No hay revocación por profesional individual — rotar `ICAL_SECRET` invalida TODAS las suscripciones.
+  - Botón "Invitar a la app" (crear User linkeado con email del profesional) queda para PR siguiente.
+- Archivos tocados: `apps/backend/prisma/schema.prisma`, migration nueva `20260810115333_professional_profile_fields`, `apps/backend/src/professionals/{professionals.controller,professionals.module}.ts`, `apps/backend/src/professionals/dto/{create,update}-professional.dto.ts` (+ nuevo `professional-profile-fields.dto.ts`), `apps/backend/src/professionals/{ical.service,ical.service.spec,professionals-ical.controller}.ts` (nuevos), `apps/backend/src/main.ts`, `apps/web/src/app/[locale]/panel/profesionales/{page,ProfessionalsClient}.tsx`, `apps/web/messages/{es,pt}.json`, `docs/adr/0011-perfil-profesional-e-ical-feed.md`.
+
 ## 2026-08-10 — Servicios: layout master-detail (prototipo del nuevo patrón CRUD)
 - Reescritura completa de `/panel/servicios` — antes era DataTable full-width + Dialog modal (patrón shadcn genérico), ahora master-detail 2-col alineado con agenda/conversaciones. Ver [[notas]] siguientes:
   - **Diagnóstico**: la tabla tenía 4 columnas simples y ~5-15 filas por clínica típica → un DataTable con sorting + column-visibility era sobreingeniería. El form vivía en un dialog modal que tapaba la lista → contexto perdido al editar. Contra el resto del panel se veía "genérico".

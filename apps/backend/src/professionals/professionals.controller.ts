@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
   Delete,
   Get,
@@ -12,13 +13,16 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { tenantWhere, type AuthUser } from '../auth/tenant-context.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProfessionalDto } from './dto/create-professional.dto';
+import { ProfessionalProfileFieldsDto } from './dto/professional-profile-fields.dto';
 import { UpdateProfessionalDto } from './dto/update-professional.dto';
+import { IcalService } from './ical.service';
 
 /**
  * CRUD de `Professional`. Soft-delete via `active = false`.
@@ -28,7 +32,10 @@ import { UpdateProfessionalDto } from './dto/update-professional.dto';
 @UseGuards(RolesGuard)
 @Roles('CLINIC_ADMIN', 'SUPERADMIN')
 export class ProfessionalsController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ical: IcalService,
+  ) {}
 
   /**
    * Valida que todos los `serviceIds` pertenecen a la misma clínica del scope.
@@ -50,6 +57,45 @@ export class ProfessionalsController {
     }
   }
 
+  /**
+   * Extrae solo los campos de perfil que vienen definidos en el DTO. Filtramos
+   * `undefined` para NO pisar valores en DB en un patch parcial. Los strings
+   * vacíos que llegaron los normaliza ya el `@Transform` del DTO a `undefined`.
+   * Devuelve `Record<string, string>` — sirve tanto para `ProfessionalCreateInput`
+   * como `UpdateInput` (los campos escalares se aceptan como strings directos).
+   */
+  private pickProfileFields(
+    dto: ProfessionalProfileFieldsDto,
+  ): Record<string, string> {
+    const out: Record<string, string> = {};
+    if (dto.email !== undefined) out.email = dto.email;
+    if (dto.phone !== undefined) out.phone = dto.phone;
+    if (dto.specialty !== undefined) out.specialty = dto.specialty;
+    if (dto.bio !== undefined) out.bio = dto.bio;
+    if (dto.avatarUrl !== undefined) out.avatarUrl = dto.avatarUrl;
+    if (dto.licenseNumber !== undefined)
+      out.licenseNumber = dto.licenseNumber;
+    if (dto.color !== undefined) out.color = dto.color;
+    return out;
+  }
+
+  /**
+   * Traduce el `P2002` de Prisma (unique constraint) a un `409 Conflict` claro.
+   * Hoy el único unique compuesto es `[clinicId, email]` — otro profesional ya
+   * usa ese email en la misma clínica.
+   */
+  private throwIfEmailTaken(err: unknown): never {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002'
+    ) {
+      throw new ConflictException(
+        'ese email ya está registrado para otro profesional de esta clínica',
+      );
+    }
+    throw err as Error;
+  }
+
   @Post()
   async create(
     @CurrentUser() user: AuthUser,
@@ -60,21 +106,26 @@ export class ProfessionalsController {
     if (dto.serviceIds && dto.serviceIds.length > 0) {
       await this.assertServicesInScope(dto.serviceIds, scope.clinicId);
     }
-    return this.prisma.professional.create({
-      data: {
-        clinicId: scope.clinicId,
-        name: dto.name,
-        active: true,
-        ...(dto.serviceIds && dto.serviceIds.length > 0
-          ? {
-              services: {
-                // Pre-validado arriba: sólo IDs del mismo tenant.
-                connect: dto.serviceIds.map((id) => ({ id })),
-              },
-            }
-          : {}),
-      },
-    });
+    try {
+      return await this.prisma.professional.create({
+        data: {
+          clinicId: scope.clinicId,
+          name: dto.name,
+          active: true,
+          ...this.pickProfileFields(dto),
+          ...(dto.serviceIds && dto.serviceIds.length > 0
+            ? {
+                services: {
+                  // Pre-validado arriba: sólo IDs del mismo tenant.
+                  connect: dto.serviceIds.map((id) => ({ id })),
+                },
+              }
+            : {}),
+        },
+      });
+    } catch (e) {
+      this.throwIfEmailTaken(e);
+    }
   }
 
   @Get()
@@ -104,7 +155,12 @@ export class ProfessionalsController {
       },
     });
     if (!prof) throw new NotFoundException('profesional no encontrado');
-    return prof;
+    // URL del iCal feed pre-firmada — la devolvemos junto al detalle para que
+    // el frontend pueda mostrar un botón "Copiar URL de calendar". El path vive
+    // fuera de /api (ver ProfessionalsIcalController) y no requiere auth JWT —
+    // el token HMAC en el query string es la credencial.
+    const icalUrl = `/ical/professionals/${prof.id}?token=${this.ical.tokenFor(prof.id)}`;
+    return { ...prof, icalUrl };
   }
 
   @Patch(':id')
@@ -125,21 +181,26 @@ export class ProfessionalsController {
       await this.assertServicesInScope(dto.serviceIds, scope.clinicId);
     }
 
-    return this.prisma.professional.update({
-      where: { id },
-      data: {
-        ...(dto.name !== undefined ? { name: dto.name } : {}),
-        ...(dto.active !== undefined ? { active: dto.active } : {}),
-        ...(dto.serviceIds
-          ? {
-              services: {
-                // Pre-validado arriba: `set` sólo con IDs del mismo tenant.
-                set: dto.serviceIds.map((sid) => ({ id: sid })),
-              },
-            }
-          : {}),
-      },
-    });
+    try {
+      return await this.prisma.professional.update({
+        where: { id },
+        data: {
+          ...(dto.name !== undefined ? { name: dto.name } : {}),
+          ...(dto.active !== undefined ? { active: dto.active } : {}),
+          ...this.pickProfileFields(dto),
+          ...(dto.serviceIds
+            ? {
+                services: {
+                  // Pre-validado arriba: `set` sólo con IDs del mismo tenant.
+                  set: dto.serviceIds.map((sid) => ({ id: sid })),
+                },
+              }
+            : {}),
+        },
+      });
+    } catch (e) {
+      this.throwIfEmailTaken(e);
+    }
   }
 
   @Delete(':id')

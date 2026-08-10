@@ -74,13 +74,29 @@ model Professional {
   clinic    Clinic   @relation(fields: [clinicId], references: [id])
   name      String
   active    Boolean  @default(true)
+  // Contacto (opcional). `email` es único por clínica para prevenir doble alta
+  // del mismo profesional. Se usará como identificador cuando se cree el `User`
+  // vinculado para el login de la app mobile (PR siguiente).
+  email     String?
+  phone     String?  // E.164
+  // Perfil visible al paciente en la página pública /agendar/[slug].
+  specialty String?
+  bio       String?
+  avatarUrl String?  // URL manual del profesional. Upload propio → follow-up.
+  // Regulatorio (matrícula) — obligatorio en clínicas médicas en AR/BR.
+  licenseNumber String?
+  // Color de calendar (hex, ej "#3b82f6"). Para diferenciar visualmente cuando
+  // hay varios profesionales en la misma agenda.
+  color     String?
   user      User?
   services  Service[] @relation("ProfessionalServices")
   businessHours BusinessHour[]
   timeOff   TimeOff[]
   appointments Appointment[]
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
+  @@unique([clinicId, email])
   @@index([clinicId])
 }
 

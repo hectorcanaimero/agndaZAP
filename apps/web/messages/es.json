@@ -405,18 +405,23 @@
       "title": "Profesionales",
       "subtitle": "Profesionales que atienden en la clínica.",
       "loadError": "No se pudieron cargar los profesionales ({status}).",
-      "empty": "Sin profesionales cargados.",
+      "emptyList": "Sin profesionales cargados.",
       "searchPlaceholder": "Buscar profesional…",
-      "new": "Nuevo profesional",
+      "new": "Nuevo",
       "newTitle": "Nuevo profesional",
+      "newSubtitle": "Sin nombre",
       "editTitle": "Editar profesional",
       "edit": "Editar",
       "delete": "Eliminar",
+      "close": "Cerrar",
+      "clear": "Limpiar",
+      "optional": "opcional",
       "actions": "Acciones",
       "save": "Guardar",
-      "saving": "Guardando...",
+      "saving": "Guardando…",
       "saved": "Profesional guardado.",
       "saveFailed": "No se pudo guardar el profesional.",
+      "emailTaken": "Ese email ya está registrado para otro profesional de esta clínica.",
       "deleted": "Profesional desactivado.",
       "deleteFailed": "No se pudo eliminar el profesional.",
       "confirmDelete": {
@@ -425,12 +430,63 @@
       },
       "cancel": "Cancelar",
       "noServices": "No hay servicios cargados todavía.",
+      "noServicesRow": "Sin servicios asignados",
+      "noSearchResults": "Sin resultados para tu búsqueda.",
+      "createFirst": "Cargar el primero",
+      "countLabel": "{n, plural, one {# profesional} other {# profesionales}}",
+      "countMatch": "{n} coinciden",
+      "servicesCount": "{n, plural, one {# servicio} other {# servicios}}",
+      "selectedCount": "{n} seleccionados",
+      "empty": {
+        "title": "Elegí un profesional o cargá uno nuevo",
+        "description": "Cada profesional puede tener email para acceder a la app, foto, especialidad y matrícula.",
+        "cta": "Cargar profesional"
+      },
+      "sections": {
+        "identity": "Identidad",
+        "profile": "Perfil profesional",
+        "services": "Servicios que atiende",
+        "visual": "Visual",
+        "calendar": "Sincronización con calendar"
+      },
       "fields": {
-        "name": "Nombre",
+        "name": "Nombre completo",
+        "email": "Email",
+        "phone": "Teléfono",
+        "specialty": "Especialidad",
+        "licenseNumber": "Matrícula profesional",
+        "bio": "Bio",
+        "avatarUrl": "URL de la foto",
+        "color": "Color",
         "services": "Servicios que atiende"
       },
+      "placeholders": {
+        "name": "Ej: Dra. María Ríos",
+        "specialty": "Ej: Cardiología",
+        "licenseNumber": "Ej: MP 12345",
+        "bio": "Breve descripción visible en la página pública."
+      },
+      "hints": {
+        "bio": "Máximo 1000 caracteres. Se muestra a los pacientes al elegir profesional.",
+        "avatarUrl": "URL pública de una imagen (JPG/PNG/WebP).",
+        "color": "Hex (ej. #3b82f6). Se usa para diferenciarlo visualmente en la agenda."
+      },
+      "calendarSync": {
+        "description": "El profesional puede suscribir esta URL desde su iPhone, Android o Google Calendar para ver sus turnos automáticamente. Se actualiza cada 15 minutos aproximadamente.",
+        "copy": "Copiar",
+        "copyFailed": "No se pudo copiar la URL.",
+        "copied": "URL copiada al portapapeles.",
+        "copiedShort": "Copiado",
+        "loading": "Generando URL…",
+        "unavailable": "URL no disponible",
+        "instructions": "iOS: Ajustes → Calendario → Cuentas → Añadir cuenta → Otro → Añadir calendario suscrito. Android: Google Calendar → Añadir por URL."
+      },
       "errors": {
-        "required": "Requerido."
+        "required": "Requerido.",
+        "email": "Email inválido.",
+        "phone": "Teléfono inválido. Usá formato internacional (ej. +54 9 11 5555 5555).",
+        "avatarUrl": "URL inválida (debe empezar con http o https).",
+        "color": "Color debe ser hex (ej. #3b82f6)."
       }
     },
     "businessHours": {
