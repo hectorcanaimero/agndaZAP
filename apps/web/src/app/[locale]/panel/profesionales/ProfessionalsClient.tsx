@@ -549,7 +549,7 @@ function ProfessionalForm({
       avatarUrl: prof?.avatarUrl ?? undefined,
       licenseNumber: prof?.licenseNumber ?? undefined,
       color: prof?.color ?? undefined,
-      serviceIds: prof?.services.map((s) => s.id) ?? [],
+      serviceIds: prof?.services?.map((s) => s.id) ?? [],
     },
   });
 
@@ -563,7 +563,7 @@ function ProfessionalForm({
       avatarUrl: prof?.avatarUrl ?? undefined,
       licenseNumber: prof?.licenseNumber ?? undefined,
       color: prof?.color ?? undefined,
-      serviceIds: prof?.services.map((s) => s.id) ?? [],
+      serviceIds: prof?.services?.map((s) => s.id) ?? [],
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prof?.id]);
