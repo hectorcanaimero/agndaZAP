@@ -55,4 +55,10 @@ export const queryKeys = {
     ['availability', slug, serviceId ?? '', professionalId ?? '', from ?? '', days ?? 7] as const,
   dashboardMetrics: ['dashboard', 'metrics'] as const,
   me: ['me'] as const,
+  /**
+   * Meta-info + settings de la clínica del usuario. Consumida por /panel/ajustes
+   * y por otros consumidores que necesitan `timezone`/`locale`/branding
+   * (ej. agenda para el slot picker).
+   */
+  clinicMe: ['clinicMe'] as const,
 } as const;

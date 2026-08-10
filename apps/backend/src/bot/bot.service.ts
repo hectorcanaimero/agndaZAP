@@ -105,6 +105,48 @@ export class BotService {
     }
   }
 
+  /**
+   * Mensajes default cuando `clinic.bot*` es NULL. Se elige el fallback
+   * hardcodeado para no romper clínicas existentes que aún no tocaron
+   * `/panel/ajustes`. Personalizable por tenant vía `/api/clinics/me`.
+   * Placeholders soportados: `{clinicName}`, `{patientName}`.
+   */
+  private static readonly DEFAULT_BOT_MESSAGES = {
+    greeting:
+      '¡Hola! Soy el asistente de {clinicName}. Puedo ayudarte a *agendar*, *reagendar* o *cancelar* una cita, o responder dudas. ¿Qué necesitás?',
+    fallback:
+      'Puedo ayudarte a *agendar*, *reagendar* o *cancelar* una cita, o responder dudas. ¿Qué necesitás?',
+    handoff: 'Enseguida te atiende una persona del equipo. 🙏',
+  } as const;
+
+  /** Regex para detectar saludos → dispara `greeting` en vez de fallback. */
+  private static readonly GREETING_REGEX =
+    /^(hola|holis|holaa+|buenas|buenos d[ií]as|buenas tardes|buenas noches|hey|hi|hello)\b/i;
+
+  /**
+   * Resuelve el mensaje del bot para una clínica, aplicando el custom si existe
+   * o el default. Reemplaza placeholders `{clinicName}` y `{patientName}`.
+   */
+  private resolveBotMessage(
+    clinic: Pick<
+      Clinic,
+      'name' | 'botGreeting' | 'botFallback' | 'botHandoffMsg'
+    >,
+    key: 'greeting' | 'fallback' | 'handoff',
+    ctx?: { patientName?: string | null },
+  ): string {
+    const customMap = {
+      greeting: clinic.botGreeting,
+      fallback: clinic.botFallback,
+      handoff: clinic.botHandoffMsg,
+    } as const;
+    const template =
+      customMap[key] || BotService.DEFAULT_BOT_MESSAGES[key];
+    return template
+      .replace(/\{clinicName\}/g, clinic.name)
+      .replace(/\{patientName\}/g, ctx?.patientName ?? '');
+  }
+
   async handleIncoming(input: {
     clinicId: string;
     chatId: string;
@@ -223,7 +265,19 @@ export class BotService {
         clinic.wahaSession,
         chatId,
         convo.id,
-        'Enseguida te atiende una persona del equipo. 🙏',
+        this.resolveBotMessage(clinic, 'handoff'),
+      );
+      return;
+    }
+
+    // 0.5) Saludo — antes de meterse con confirmaciones/intent. Responde
+    // el `botGreeting` (o default). Cortés y barato: no gasta LLM.
+    if (BotService.GREETING_REGEX.test(normalized)) {
+      await this.reply(
+        clinic.wahaSession,
+        chatId,
+        convo.id,
+        this.resolveBotMessage(clinic, 'greeting'),
       );
       return;
     }
@@ -283,7 +337,7 @@ export class BotService {
           clinic.wahaSession,
           chatId,
           convo.id,
-          'Enseguida te atiende una persona del equipo.',
+          this.resolveBotMessage(clinic, 'handoff'),
         );
         break;
 
@@ -300,6 +354,7 @@ export class BotService {
           clinicId,
           question: text,
           locale: clinic.locale,
+          tone: clinic.botTone, // custom per-tenant desde /panel/ajustes
         });
         if (result) {
           await this.reply(
@@ -317,7 +372,7 @@ export class BotService {
             clinic.wahaSession,
             chatId,
             convo.id,
-            'Déjame verificar esa información y en breve te responde una persona del equipo. 🙏',
+            this.resolveBotMessage(clinic, 'handoff'),
           );
         }
         break;
@@ -328,7 +383,7 @@ export class BotService {
           clinic.wahaSession,
           chatId,
           convo.id,
-          'Puedo ayudarte a *agendar*, *reagendar* o *cancelar* una cita, o responder dudas. ¿Qué necesitás?',
+          this.resolveBotMessage(clinic, 'fallback'),
         );
     }
   }

@@ -1,5 +1,30 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-08-10 — Página de Ajustes: General + Recordatorios + Bot personalizable
+- Nueva ruta `/panel/ajustes` — la clínica finalmente puede editar sus settings sin necesitar tocar la DB. Cierra un gap del panel: el schema de `Clinic` ya tenía `timezone`, `locale`, `reminderOffsetsH`, `confirmThresholdH`, `autoConfirm` pero eran solo settable via seed/psql.
+- **Nuevo también:** el bot deja de tener respuestas hardcodeadas. La clínica personaliza greeting, fallback y handoff con placeholders (`{clinicName}`, `{patientName}`), y elige un tono (cercano/formal/técnico) que se inyecta al system prompt del LLM.
+- Schema: nuevos campos opcionales en `Clinic` — `botGreeting`, `botFallback`, `botHandoffMsg`, `botTone`. Migration sin backfill (NULLs → BotService cae a defaults hardcodeados). Sin cambios breaking para clínicas existentes.
+- Backend:
+  - **Nuevo `PATCH /api/clinics/me`** con `UpdateClinicDto` estricto. NO acepta `slug`/`wahaSession`/`wahaConnected` (cambios peligrosos — se hacen por CLI). Validación custom de timezone con `Intl.DateTimeFormat`. Log de auditoría específico para cambios de TZ (afectan citas futuras).
+  - **`BotService.resolveBotMessage(clinic, key, ctx?)`** helper con defaults + placeholders. Cambio: los 4 hardcodes de mensajes (2× handoff explícito, 1× handoff post-RAG, 1× fallback) ahora pasan por este helper.
+  - **Nuevo trigger de greeting**: `GREETING_REGEX` (hola/holis/buenas/buenos días/etc.) dispara antes del intent LLM. Cero costo LLM, respuesta inmediata con `botGreeting`.
+  - **`KnowledgeService.answer`** acepta `tone?` opcional. Inyecta al system prompt del RAG una instrucción de estilo (cercano/formal/técnico) sin tocar la fuente de verdad (las fuentes FAQ).
+- Frontend:
+  - Layout con **sub-tabs verticales** (sidebar izq 224px + card der con el form activo). Mobile: tabs horizontal scroll arriba del card.
+  - **3 tabs independientes** — cada uno con su propio `useForm` + submit + `isDirty` check. Cambiar de tab con datos sin guardar NO los pierde (isDirty por form). El `key` en el JSX remonta el form al cambiar de tab.
+  - **General**: name, address, timezone (select con 12 zonas comunes + "personalizada" con input libre), locale, autoConfirm (toggle).
+  - **Recordatorios**: chips agregables/removibles (max 5, entre 1h y 168h) con validación cliente (rango, duplicados, cap). Threshold EN_RIESGO como input numérico.
+  - **Bot**: 4 textareas (greeting/fallback/handoff) + select de tono. Panel de ayuda con los placeholders soportados (formateados con `code`). Placeholders visibles en los `placeholder=` de los inputs para que el operador vea cómo se usan.
+  - Warning ámbar inline cuando cambia el timezone (afecta cómo se ven citas futuras).
+- Tests: 322/322 verdes (5 nuevos en `bot.service.spec.ts` cubriendo `resolveBotMessage`: default fallback, custom pisando default, `{clinicName}` replace, `{patientName}` con y sin ctx, greeting dispara antes de intent).
+- Deuda documentada:
+  - No hay upload de logo/avatar de la clínica → follow-up cuando tengamos infra R2/S3.
+  - **Branding avanzado** (color primario custom por tenant) requiere CSS variables per-tenant en el layout root — Fase 2.
+  - Notificaciones al operador (email cuando NEEDS_HUMAN) → Fase 2.
+  - Auto-respuesta fuera de horario → Fase 2, o simplemente usar `botGreeting` condicional en el bot.
+- Missing keys scan corrido ANTES del commit (lección de PRs pasados). Cero MISSING_MESSAGE.
+- Archivos tocados: `apps/backend/prisma/schema.prisma`, migration nueva `20260810162518_clinic_bot_settings`, `apps/backend/src/clinics/{clinics.controller,dto/update-clinic.dto}.ts`, `apps/backend/src/bot/{bot.service,bot.service.spec}.ts`, `apps/backend/src/knowledge/knowledge.service.ts`, `apps/web/src/app/[locale]/panel/{PanelShell.tsx,ajustes/{page,AjustesClient}.tsx}`, `apps/web/src/lib/query-keys.ts`, `apps/web/messages/{es,pt}.json`.
+
 ## 2026-08-10 — FAQ / Base de conocimiento: master-detail
 - 5to y último CRUD del panel migrado al patrón master-detail (después de servicios, profesionales, horarios, bloqueos).
 - **Contexto:** FAQ ya tenía un split view viejo (grid 30/70), pero con estilo pre-tokens (`bg-white`, `text-gray-*`, `max-w-5xl`) y mobile via `hidden`/`block` en lugar de Sheet drawer. Además faltaban features UX importantes: sin search, sin filtro por "solo sin indexar", empty state genérico.
