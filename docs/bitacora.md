@@ -1,5 +1,28 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-08-10 — Horarios y Bloqueos: master-detail (cierre del patrón CRUD del panel)
+- Última migración del patrón master-detail: `/panel/horarios` y `/panel/bloqueos`. Cierra el rollout iniciado en servicios (PR #6) y continuado en profesionales (PR #7). Ahora los 4 CRUDs del panel comparten lenguaje visual: agenda, conversaciones, servicios, profesionales, horarios y bloqueos.
+- **Bloqueos (TimeOff)** — master-detail directo, mismo patrón que servicios/profesionales. Diferenciales:
+  - **Agrupamiento temporal:** rows separadas en "Próximos y activos" (asc por fecha) y "Pasados" (desc). Los pasados con opacity-70 para no confundirse.
+  - **Chip de fecha visual** al inicio del row (día + mes chico, tipo agenda de escritorio) — comunica el "cuándo" antes que el "qué".
+  - Row muestra hora inicio→fin si es mismo día, o rango de días si abarca varios.
+  - Búsqueda cliente-side por reason, nombre del profesional, o fecha formateada (permite buscar "15 mar" o "vacaciones" o "Ríos").
+  - Empty state SVG: calendario con X amber (bloqueo).
+- **Horarios (BusinessHour)** — master-detail con **agrupamiento visual por día de la semana**. Decisión de diseño: `BusinessHour` es matricial (7 días × N profesionales); una lista plana no comunica bien. Alternativa considerada y descartada: grilla semanal completa tipo Google Calendar (scope enorme, valor solo en setup inicial).
+  - Sticky headers por weekday (Lun/Mar/.../Dom) con contador de rows en la esquina.
+  - Orden semanal: L, M, X, J, V, S, D (weekday 1..6, 0 al final — más natural que el orden Prisma 0..6).
+  - **Filtro en el toolbar:** "Todos los horarios" / "Solo horarios de la clínica" (sin professionalId) / lista de profesionales. Sin caja de búsqueda porque los horarios son datos estructurados (hora + día), no texto libre.
+  - Cada row muestra `HH:mm – HH:mm` con `tabular-nums` grande + profesional debajo.
+  - Empty state SVG: reloj con manecillas + sparkle.
+  - Bonus en el form: "Duración: Xh Ym" preview que se actualiza en tiempo real cuando el usuario cambia startTime/endTime.
+- Cambios de contrato: **cero**. Los endpoints (`GET/POST/PATCH/DELETE /api/business-hours` y `/api/time-off`) y sus DTOs quedan idénticos. Solo cambia el chrome.
+- i18n: en ambos módulos se renombró `empty` (era string) a `emptyList` para liberar `empty.{title,description}` como objeto del panel derecho. ~35 keys nuevas por módulo (`countLabel`/`countMatch` ICU plural, `groups.upcoming/past`, `filters.*`, `hints.*`, `newSubtitle`, `close`, `optional`, `createFirst`, `durationHint`, `untitled` en TimeOff). Paridad estricta es/pt validada con `diff <(jq)`.
+- Deuda documentada:
+  - **Aún NO se extrajeron helpers compartidos** (el patrón master-detail vive duplicado en 4 clientes). Considerar `<MasterDetailShell>` + `useMobileSheet()` hook cuando aparezca el 5to consumidor o cuando queramos ajustar un detalle común y evitar 4 edits paralelos.
+  - Horarios: no hay "duplicar horario" (típico: mismo horario L-V). Follow-up: acción "duplicar en otros días" en el header del form.
+  - Bloqueos: no hay recurrencia (cada bloqueo es puntual). Follow-up si se necesitan feriados recurrentes tipo "Navidad todos los años".
+- Archivos tocados: `apps/web/src/app/[locale]/panel/horarios/{page,BusinessHoursClient}.tsx`, `apps/web/src/app/[locale]/panel/bloqueos/{page,TimeOffClient}.tsx`, `apps/web/messages/{es,pt}.json`.
+
 ## 2026-08-10 — Profesionales: perfil ampliado + master-detail + iCal feed (ADR 0011)
 - Reescritura de `/panel/profesionales` alineando con el patrón master-detail que ya se aplicó en servicios. Aparte, el modelo `Professional` estaba minimalista (solo `name + active`) — el usuario planteó que era insuficiente para la app mobile futura del profesional y para que puedan sincronizar sus turnos con el calendar del teléfono.
 - Ver [[adr/0011-perfil-profesional-e-ical-feed]] para el análisis completo (por qué iCal feed en vez de Google OAuth, decisión del HMAC token, deuda documentada).
