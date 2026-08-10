@@ -553,7 +553,7 @@ function ServiceForm({
       durationMin: service?.durationMin ?? 30,
       bufferMin: service?.bufferMin ?? 0,
       priceCents: service?.priceCents ?? undefined,
-      professionalIds: service?.professionals.map((p) => p.id) ?? [],
+      professionalIds: service?.professionals?.map((p) => p.id) ?? [],
     },
   });
 
@@ -565,7 +565,7 @@ function ServiceForm({
       durationMin: service?.durationMin ?? 30,
       bufferMin: service?.bufferMin ?? 0,
       priceCents: service?.priceCents ?? undefined,
-      professionalIds: service?.professionals.map((p) => p.id) ?? [],
+      professionalIds: service?.professionals?.map((p) => p.id) ?? [],
     });
     // Sólo reset al cambiar el servicio identificado por id — evita re-resets
     // en cada render y perdida de estado que el user está tipeando.
