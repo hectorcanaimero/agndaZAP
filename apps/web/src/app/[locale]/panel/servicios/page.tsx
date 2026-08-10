@@ -35,20 +35,26 @@ export default async function ServicesPage({
   const services = servicesRes.ok ? servicesRes.data : [];
   const professionals = profsRes.ok ? profsRes.data : [];
 
+  // Full-height split layout (mismo patrón que agenda/conversaciones):
+  // header page-level arriba, split master-detail ocupando el resto.
   return (
-    <div className="max-w-5xl space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900">{t('title')}</h1>
-        <p className="text-sm text-gray-500">{t('subtitle')}</p>
+    <div className="flex h-full min-h-0 flex-col gap-4">
+      <div className="shrink-0">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          {t('title')}
+        </h1>
+        <p className="text-sm text-muted-foreground">{t('subtitle')}</p>
       </div>
 
       {!servicesRes.ok ? (
-        <div className="rounded-md bg-red-50 p-3 text-sm text-red-800">
+        <div className="shrink-0 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
           {t('loadError', { status: servicesRes.status })}
         </div>
       ) : null}
 
-      <ServicesClient services={services} professionals={professionals} />
+      <div className="min-h-0 flex-1">
+        <ServicesClient services={services} professionals={professionals} />
+      </div>
     </div>
   );
 }

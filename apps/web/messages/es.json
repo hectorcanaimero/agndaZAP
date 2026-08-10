@@ -348,16 +348,18 @@
       "title": "Servicios",
       "subtitle": "Servicios que ofrece la clínica.",
       "loadError": "No se pudieron cargar los servicios ({status}).",
-      "empty": "Sin servicios cargados.",
+      "emptyList": "Sin servicios cargados.",
       "searchPlaceholder": "Buscar servicio…",
-      "new": "Nuevo servicio",
+      "new": "Nuevo",
       "newTitle": "Nuevo servicio",
+      "newSubtitle": "Sin título",
       "editTitle": "Editar servicio",
       "edit": "Editar",
       "delete": "Eliminar",
+      "close": "Cerrar",
       "actions": "Acciones",
       "save": "Guardar",
-      "saving": "Guardando...",
+      "saving": "Guardando…",
       "saved": "Servicio guardado.",
       "saveFailed": "No se pudo guardar el servicio.",
       "deleted": "Servicio desactivado.",
@@ -368,6 +370,17 @@
       },
       "cancel": "Cancelar",
       "noProfessionals": "No hay profesionales cargados.",
+      "noProfessionalsRow": "Sin profesionales asignados",
+      "noSearchResults": "Sin resultados para tu búsqueda.",
+      "createFirst": "Cargar el primero",
+      "countLabel": "{n, plural, one {# servicio} other {# servicios}}",
+      "countMatch": "{n} coinciden",
+      "selectedCount": "{n} seleccionados",
+      "empty": {
+        "title": "Elegí un servicio o creá uno nuevo",
+        "description": "Los servicios definen qué ofrecés, cuánto dura cada turno y qué profesionales lo atienden.",
+        "cta": "Crear servicio"
+      },
       "fields": {
         "name": "Nombre",
         "duration": "Duración",
@@ -376,8 +389,12 @@
         "price": "Precio",
         "professionals": "Profesionales"
       },
+      "placeholders": {
+        "name": "Ej: Consulta general"
+      },
       "hints": {
-        "priceCents": "En centavos. Ej: 1500 = $15,00."
+        "priceCents": "En centavos. Ej: 1500 = $15,00.",
+        "buffer": "Tiempo entre turnos consecutivos."
       },
       "errors": {
         "required": "Requerido."
