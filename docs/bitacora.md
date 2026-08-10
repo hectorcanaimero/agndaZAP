@@ -1,5 +1,15 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-08-10 — Refactor: extract MasterDetailShell + useMobileSheet
+- Cierre del rollout master-detail: extracción de los helpers compartidos que estaban duplicados en los 5 clientes CRUD del panel (servicios, profesionales, horarios, bloqueos, faq).
+- Nuevo módulo `apps/web/src/components/panel/master-detail/`:
+  - **`MasterDetailShell`** — layout split card + Sheet drawer mobile. Props: `sidebar`, `panel`, `mobile`, `mobileTitle`, `hidePanelInSheet`, `mobileSheetMaxWidth` (default `sm:max-w-md`; FAQ overrides a `sm:max-w-2xl` por el markdown editor), `headerSlot` (para el banner "sin embedding" de FAQ arriba del card).
+  - **`useMobileSheet()`** hook — encapsula el guard con `matchMedia('(max-width: 767.98px)')` que evita el bug de Radix (overlay del portal renderizando en desktop aunque el content tenga `md:hidden`). Devuelve `{ isOpen, openIfMobile, close, onOpenChange }`.
+  - **`EmptyStatePanel`** y **`MasterDetailRow`** — disponibles pero no adoptados en los clientes existentes (el chrome duplicado es chico y el contenido interno de los rows es muy variado). Quedan para futuros consumidores o refactor quirúrgico si aparece un tweak común.
+- Cambio en los 5 clientes: se reemplaza el JSX del shell (~40 líneas c/u de `<div><aside><section>` + `<Sheet>`) por `<MasterDetailShell>`. Se reemplazan `useState<boolean> + isMobileViewport()` (~10 líneas c/u) por `useMobileSheet()`. Total: **460 líneas removidas, 340 agregadas** (los helpers cuentan en las agregadas — neto ~120 menos de código duplicado, y todo el nuevo código vive en un solo lugar).
+- **Cero cambios de comportamiento** — mismo lenguaje visual, mismo behavior, mismo a11y. Verificado con typecheck limpio en toda la app web.
+- Archivos tocados: `apps/web/src/components/panel/master-detail/{MasterDetailShell,MasterDetailRow,EmptyStatePanel,useMobileSheet,index}.{tsx,ts}` (nuevos), y los 5 clientes CRUD.
+
 ## 2026-08-10 — Ajustes: consolidar WhatsApp como tab + URL query sync
 - Follow-up al PR de Ajustes: WhatsApp deja de ser página separada (`/panel/config/whatsapp`) y se consolida como el **4to tab** dentro de `/panel/ajustes`. "Todo lo que es configurar la clínica" queda en un solo lugar.
 - Cambios:
