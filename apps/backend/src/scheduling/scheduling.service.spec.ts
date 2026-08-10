@@ -265,3 +265,172 @@ describe('SchedulingService.createAppointment', () => {
     expect(upsertCall.update.consent).toBe(true);
   });
 });
+
+describe('SchedulingService.rescheduleAppointment', () => {
+  let prisma: Deep<PrismaService>;
+  let availability: Deep<AvailabilityService>;
+  let reminders: Deep<RemindersService>;
+  let service: SchedulingService;
+
+  const zone = 'America/Caracas';
+  const currentStart = DateTime.now()
+    .setZone(zone)
+    .plus({ days: 1 })
+    .set({ hour: 10, minute: 0, second: 0, millisecond: 0 });
+  const newStart = currentStart.plus({ hours: 4 });
+  const newStartISO = newStart.toISO()!;
+
+  beforeEach(() => {
+    prisma = {
+      appointment: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'appt-1',
+          clinicId: 'clinic-A',
+          serviceId: 'svc-1',
+          professionalId: 'prof-1',
+          status: 'PENDIENTE',
+          startAt: currentStart.toJSDate(),
+          endAt: currentStart.plus({ minutes: 30 }).toJSDate(),
+          service: makeService(),
+          clinic: makeClinic(),
+        }),
+        update: jest.fn().mockImplementation(({ where, data }: any) =>
+          Promise.resolve({ id: where.id, ...data, status: 'PENDIENTE' }),
+        ),
+      },
+    };
+    availability = {
+      getSlots: jest.fn().mockResolvedValue([
+        {
+          startAt: newStart.toJSDate(),
+          endAt: newStart.plus({ minutes: 30 }).toJSDate(),
+        },
+      ]),
+    };
+    reminders = {
+      scheduleForAppointment: jest.fn().mockResolvedValue(undefined),
+    };
+    service = new SchedulingService(
+      prisma as unknown as PrismaService,
+      availability as unknown as AvailabilityService,
+      reminders as unknown as RemindersService,
+    );
+  });
+
+  it('happy path: mueve startAt/endAt y reprograma reminders', async () => {
+    const updated = await service.rescheduleAppointment({
+      clinicId: 'clinic-A',
+      appointmentId: 'appt-1',
+      startAtISO: newStartISO,
+    });
+
+    expect(prisma.appointment.update).toHaveBeenCalledWith({
+      where: { id: 'appt-1' },
+      data: {
+        startAt: newStart.toJSDate(),
+        endAt: newStart.plus({ minutes: 30 }).toJSDate(),
+      },
+    });
+    expect(reminders.scheduleForAppointment).toHaveBeenCalledWith('appt-1');
+    expect(updated.startAt).toEqual(newStart.toJSDate());
+  });
+
+  it('excluye la propia cita del cálculo de disponibilidad', async () => {
+    // Load-bearing: sin excludeAppointmentId, la propia cita apareceria como
+    // ocupada por si misma y bloquearia el mismo slot en el que ya esta.
+    await service.rescheduleAppointment({
+      clinicId: 'clinic-A',
+      appointmentId: 'appt-1',
+      startAtISO: newStartISO,
+    });
+    const call = availability.getSlots.mock.calls[0][0];
+    expect(call.excludeAppointmentId).toBe('appt-1');
+  });
+
+  it('no-op cuando startAtISO coincide con el startAt actual (idempotencia)', async () => {
+    const sameStartISO = currentStart.toISO()!;
+    const result = await service.rescheduleAppointment({
+      clinicId: 'clinic-A',
+      appointmentId: 'appt-1',
+      startAtISO: sameStartISO,
+    });
+    // Sin cambios: ni update ni reminders. Retorna el appt tal como está.
+    expect(prisma.appointment.update).not.toHaveBeenCalled();
+    expect(reminders.scheduleForAppointment).not.toHaveBeenCalled();
+    expect(result.startAt).toEqual(currentStart.toJSDate());
+  });
+
+  it('cita no encontrada (o cross-tenant) → NotFoundException', async () => {
+    prisma.appointment.findFirst.mockResolvedValueOnce(null);
+    await expect(
+      service.rescheduleAppointment({
+        clinicId: 'clinic-A',
+        appointmentId: 'appt-of-B',
+        startAtISO: newStartISO,
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('rechaza reagendar al pasado con BadRequestException', async () => {
+    const pastISO = DateTime.now().setZone(zone).minus({ hours: 1 }).toISO()!;
+    await expect(
+      service.rescheduleAppointment({
+        clinicId: 'clinic-A',
+        appointmentId: 'appt-1',
+        startAtISO: pastISO,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('slot no disponible → ConflictException', async () => {
+    availability.getSlots.mockResolvedValueOnce([]); // ningun slot libre
+    await expect(
+      service.rescheduleAppointment({
+        clinicId: 'clinic-A',
+        appointmentId: 'appt-1',
+        startAtISO: newStartISO,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.appointment.update).not.toHaveBeenCalled();
+  });
+
+  it('@@unique race → ConflictException', async () => {
+    prisma.appointment.update.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('unique violation', {
+        code: 'P2002',
+        clientVersion: '5.0',
+      }),
+    );
+    await expect(
+      service.rescheduleAppointment({
+        clinicId: 'clinic-A',
+        appointmentId: 'appt-1',
+        startAtISO: newStartISO,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('startAtISO inválido → BadRequestException', async () => {
+    await expect(
+      service.rescheduleAppointment({
+        clinicId: 'clinic-A',
+        appointmentId: 'appt-1',
+        startAtISO: 'no-es-iso',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('reminders falla → NO rollbackea el reschedule (fail-open, logueado)', async () => {
+    reminders.scheduleForAppointment.mockRejectedValueOnce(
+      new Error('queue down'),
+    );
+    const updated = await service.rescheduleAppointment({
+      clinicId: 'clinic-A',
+      appointmentId: 'appt-1',
+      startAtISO: newStartISO,
+    });
+    // Cita reagendada aunque reminders explote.
+    expect(updated.startAt).toEqual(newStart.toJSDate());
+    expect(prisma.appointment.update).toHaveBeenCalled();
+  });
+});
