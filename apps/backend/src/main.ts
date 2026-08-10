@@ -111,8 +111,14 @@ async function bootstrap(): Promise<void> {
 
   // El webhook de WAHA NO debe llevar el prefijo /api porque WHATSAPP_HOOK_URL
   // apunta a http://backend:4000/webhooks/waha (ver docker-compose.yml).
+  // Los feeds iCal tampoco: los clientes de calendar (iOS/Android/Google) no
+  // envían Bearer y no queremos anteponer /api a una URL que el usuario
+  // copia/pega en su app. Ver `ProfessionalsIcalController` (@Public + HMAC).
   app.setGlobalPrefix('api', {
-    exclude: [{ path: 'webhooks/(.*)', method: RequestMethod.ALL }],
+    exclude: [
+      { path: 'webhooks/(.*)', method: RequestMethod.ALL },
+      { path: 'ical/(.*)', method: RequestMethod.ALL },
+    ],
   });
 
   // Cierre limpio de Prisma (delega en beforeExit → app.close()).
