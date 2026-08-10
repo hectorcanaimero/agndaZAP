@@ -43,7 +43,15 @@ describe('ProfessionalsController', () => {
           ),
       },
     };
-    controller = new ProfessionalsController(prisma as unknown as PrismaService);
+    const icalMock = {
+      tokenFor: jest.fn().mockReturnValue('token-fake'),
+      verifyToken: jest.fn().mockReturnValue(true),
+      buildFeed: jest.fn().mockResolvedValue(''),
+    };
+    controller = new ProfessionalsController(
+      prisma as unknown as PrismaService,
+      icalMock as any,
+    );
   });
 
   it('create → guarda clinicId del scope y active=true por default', async () => {
