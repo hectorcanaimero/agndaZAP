@@ -65,3 +65,9 @@ skills-lock.json
 *.png
 !apps/**/*.png
 !docs/**/*.png
+
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# Playwright MCP artifacts (snapshots temporales por sesión)
+.playwright-mcp/
