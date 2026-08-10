@@ -694,7 +694,8 @@
       "tabs": {
         "general": "General",
         "reminders": "Recordatorios",
-        "bot": "Bot / Chatbot"
+        "bot": "Bot / Chatbot",
+        "whatsapp": "WhatsApp"
       },
       "general": {
         "title": "General",
@@ -707,6 +708,10 @@
       "bot": {
         "title": "Bot",
         "description": "Personalizá los mensajes que el bot envía a tus pacientes por WhatsApp."
+      },
+      "whatsapp": {
+        "title": "Conexión de WhatsApp",
+        "description": "Estado de la sesión del bot. Escaneá el QR desde tu teléfono para conectar."
       },
       "fields": {
         "name": "Nombre de la clínica",

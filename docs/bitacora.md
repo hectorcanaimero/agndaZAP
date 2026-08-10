@@ -1,5 +1,18 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-08-10 — Ajustes: consolidar WhatsApp como tab + URL query sync
+- Follow-up al PR de Ajustes: WhatsApp deja de ser página separada (`/panel/config/whatsapp`) y se consolida como el **4to tab** dentro de `/panel/ajustes`. "Todo lo que es configurar la clínica" queda en un solo lugar.
+- Cambios:
+  - `AjustesClient`: cambio de `useState<TabKey>` a URL query `?tab=general|reminders|bot|whatsapp` con `useSearchParams` + `router.replace({scroll: false})`. Bonus: deep-linkeable + el redirect del wrapper aterriza en el tab correcto.
+  - Nuevo componente `WhatsappTab` que envuelve el `WhatsappConnectionClient` existente con el mismo `FormHeader` (consistencia visual con los otros tabs). **Cero cambios** al componente WhatsApp — se importa y renderiza tal cual, con toda su lógica de polling QR, mutations, connection status.
+  - `ajustes/page.tsx`: fetch en paralelo del `/api/clinics/me` + `/api/clinics/me/waha/status` para hidratar el tab WhatsApp sin flash de loading.
+  - `config/whatsapp/page.tsx`: **redirect server-side** con `redirect()` de Next → `/{locale}/panel/ajustes?tab=whatsapp`. Zero JS ejecutado. No rompe bookmarks del piloto.
+  - `PanelShell`: entrada "WhatsApp" removida del nav (queda solo "Ajustes"). Import de `MessageCircle` limpiado.
+  - i18n: `settings.tabs.whatsapp` + `settings.whatsapp.{title,description}` en es/pt.
+- El `key={tab}` en el JSX ya remonta cada tab component al cambiar — para WhatsApp esto asegura que el polling arranca desde cero al entrar y se limpia al salir (unmount natural).
+- Verificado: typecheck limpio, paridad i18n estricta, missing keys scan sin hits.
+- Deuda: la carpeta `config/whatsapp/WhatsappConnectionClient.tsx` sigue ahí — hoy importada desde `/ajustes`. Podría moverse a un lugar más neutral (`components/settings/` o similar) cuando aparezca el 2do consumidor. Por ahora, mantener el archivo donde vive evita un rename ruidoso.
+
 ## 2026-08-10 — Página de Ajustes: General + Recordatorios + Bot personalizable
 - Nueva ruta `/panel/ajustes` — la clínica finalmente puede editar sus settings sin necesitar tocar la DB. Cierra un gap del panel: el schema de `Clinic` ya tenía `timezone`, `locale`, `reminderOffsetsH`, `confirmThresholdH`, `autoConfirm` pero eran solo settable via seed/psql.
 - **Nuevo también:** el bot deja de tener respuestas hardcodeadas. La clínica personaliza greeting, fallback y handoff con placeholders (`{clinicName}`, `{patientName}`), y elige un tono (cercano/formal/técnico) que se inyecta al system prompt del LLM.

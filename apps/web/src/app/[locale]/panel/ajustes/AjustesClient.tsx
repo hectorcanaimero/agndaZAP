@@ -8,13 +8,15 @@ import {
   Bot,
   Building2,
   Check,
+  MessageCircle,
   MessageSquareText,
   Plus,
   Sparkles,
   X,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
@@ -32,6 +34,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { apiMutation, apiQuery } from '@/lib/query-fn';
 import { queryKeys } from '@/lib/query-keys';
 import { cn } from '@/lib/utils';
+import {
+  WhatsappConnectionClient,
+  type WahaStatusResponse,
+} from '../config/whatsapp/WhatsappConnectionClient';
 
 /* ─────────────────────────── Types ─────────────────────────── */
 
@@ -51,10 +57,20 @@ export interface ClinicSettings {
   botTone: string | null;
 }
 
-type TabKey = 'general' | 'reminders' | 'bot';
+type TabKey = 'general' | 'reminders' | 'bot' | 'whatsapp';
+const VALID_TABS: readonly TabKey[] = [
+  'general',
+  'reminders',
+  'bot',
+  'whatsapp',
+];
 
 interface Props {
   clinic: ClinicSettings;
+  /** Estado inicial de la sesión WAHA — hidrata el tab WhatsApp sin flash. */
+  wahaInitial: WahaStatusResponse;
+  /** Token cookie leído server-side — necesario para el WhatsappConnectionClient. */
+  token: string;
 }
 
 /**
@@ -104,10 +120,34 @@ const COMMON_TIMEZONES = [
  * invalida `queryKeys.clinicMe` → refetch automático + refresca cualquier
  * consumidor de la clínica (agenda picker, etc.).
  */
-export function AjustesClient({ clinic: initialClinic }: Props) {
+export function AjustesClient({
+  clinic: initialClinic,
+  wahaInitial,
+  token,
+}: Props) {
   const t = useTranslations('panel.settings');
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
-  const [tab, setTab] = useState<TabKey>('general');
+  // Tab activo desde URL (`?tab=...`) — permite deep-linking y que el redirect
+  // desde /panel/config/whatsapp aterrice en el tab correcto. Default: general.
+  const tab: TabKey = useMemo(() => {
+    const raw = searchParams.get('tab');
+    return (VALID_TABS as readonly string[]).includes(raw ?? '')
+      ? (raw as TabKey)
+      : 'general';
+  }, [searchParams]);
+
+  const setTab = useCallback(
+    (next: TabKey) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('tab', next);
+      // replace en vez de push → no ensucia el history con cada click de tab.
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
 
   const { data: clinic = initialClinic } = useQuery({
     queryKey: queryKeys.clinicMe,
@@ -120,6 +160,7 @@ export function AjustesClient({ clinic: initialClinic }: Props) {
     { key: 'general', label: t('tabs.general'), icon: Building2 },
     { key: 'reminders', label: t('tabs.reminders'), icon: Bell },
     { key: 'bot', label: t('tabs.bot'), icon: Bot },
+    { key: 'whatsapp', label: t('tabs.whatsapp'), icon: MessageCircle },
   ];
 
   return (
@@ -182,7 +223,9 @@ export function AjustesClient({ clinic: initialClinic }: Props) {
       {/* ─────────  DERECHA — FORM ACTIVO  ───────── */}
       <main className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-border bg-card p-6 shadow-sm">
         {/* key remonta el form cuando cambia el tab: evita valores stale
-            de otro tab si el user tabbeó sin guardar. */}
+            de otro tab si el user tabbeó sin guardar. En el tab WhatsApp
+            el key también fuerza que el polling arranque desde cero al
+            entrar (y se limpie al salir vía unmount). */}
         {tab === 'general' && (
           <GeneralForm key="general" clinic={clinic} />
         )}
@@ -190,6 +233,9 @@ export function AjustesClient({ clinic: initialClinic }: Props) {
           <RemindersForm key="reminders" clinic={clinic} />
         )}
         {tab === 'bot' && <BotForm key="bot" clinic={clinic} />}
+        {tab === 'whatsapp' && (
+          <WhatsappTab key="whatsapp" initial={wahaInitial} token={token} />
+        )}
       </main>
     </div>
   );
@@ -714,6 +760,35 @@ function BotForm({ clinic }: { clinic: ClinicSettings }) {
 
       <FormFooter busy={busy} isDirty={isDirty} />
     </form>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ *                         TAB: WHATSAPP
+ * ═══════════════════════════════════════════════════════════════════ */
+
+/**
+ * Wrapper visual del `WhatsappConnectionClient` existente para consistencia
+ * con los otros tabs (mismo `FormHeader`). El client component se importa
+ * SIN modificar — mantiene su lógica de polling, QR, mutations, etc.
+ */
+function WhatsappTab({
+  initial,
+  token,
+}: {
+  initial: WahaStatusResponse;
+  token: string;
+}) {
+  const t = useTranslations('panel.settings');
+  return (
+    <div className="space-y-5">
+      <FormHeader
+        title={t('whatsapp.title')}
+        description={t('whatsapp.description')}
+        icon={<MessageCircle className="h-4 w-4" aria-hidden="true" />}
+      />
+      <WhatsappConnectionClient initial={initial} token={token} />
+    </div>
   );
 }
 

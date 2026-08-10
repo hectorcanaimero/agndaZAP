@@ -11,7 +11,6 @@ import {
   HelpCircle,
   LayoutDashboard,
   LogOut,
-  MessageCircle,
   MessagesSquare,
   Settings,
   Sparkles,
@@ -126,12 +125,10 @@ export function PanelShell({ locale, me, children }: PanelShellProps) {
           label: t('faq'),
           icon: HelpCircle,
         },
-        {
-          key: 'whatsapp',
-          href: `/${locale}/panel/config/whatsapp`,
-          label: t('whatsapp'),
-          icon: MessageCircle,
-        },
+        // WhatsApp vive ahora como tab dentro de /panel/ajustes.
+        // `/panel/config/whatsapp` sigue funcionando (redirect a
+        // /panel/ajustes?tab=whatsapp) — se removió del nav pero no de las
+        // rutas.
         {
           key: 'ajustes',
           href: `/${locale}/panel/ajustes`,
