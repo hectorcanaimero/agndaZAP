@@ -1,5 +1,25 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-08-10 — Agenda: agendar / reagendar / cancelar desde el panel
+- Feature CRUD sobre `/panel/agenda`. Antes solo se podía "cambiar status" (que incluye CANCELADA) desde el detalle; ahora hay un flow completo con:
+  - **Nueva cita**: botón "Nueva cita" en el toolbar → dialog con form (paciente name+phone, servicio, profesional, slot picker de 7 días, consent obligatorio). Los selectores cross-filtran entre sí (elegir profesional filtra servicios que atiende, y viceversa).
+  - **Reagendar**: botón nuevo en el detalle, solo visible en estados vivos (PENDIENTE/CONFIRMADA/EN_RIESGO). Dialog con paciente/servicio/profesional readonly + slot picker filtrado al mismo combo. El slot actual de la cita no bloquea la reprogramación (nuevo param `excludeAppointmentId` en `AvailabilityService.getSlots`).
+  - **Cancelar con confirmación**: los botones CANCELADA / NO_SHOW ahora abren un `ConfirmDialog` (destructive, con el nombre del paciente en el mensaje) en vez de disparar directo.
+- Cambios backend:
+  - **Nuevo endpoint** `PATCH /api/appointments/:id/reschedule` con FSM check (`assertReschedulable` — solo estados vivos), delegando a `SchedulingService.rescheduleAppointment`. Reprograma reminders vía `scheduleForAppointment` (idempotente: cancela viejos + agenda nuevos). Fail-open en reminders — no rollbackea la cita si la cola explota.
+  - **Nuevo endpoint** `GET /api/appointments/slots?serviceId&professionalId&from&days&excludeAppointmentId` para alimentar el slot picker interno (era solo público antes vía `/api/public/clinics/:slug/availability`).
+  - **Nuevo endpoint** `GET /api/clinics/me` (módulo `ClinicsModule` nuevo, mínimo) devolviendo `{ id, name, slug, timezone, locale }`. Consumido por la agenda para armar el picker en la TZ correcta.
+  - `AvailabilityService.getSlots` acepta `excludeAppointmentId` opcional — evita que la propia cita se cuente como "ocupando su slot actual" al reagendar.
+  - Tests: 302/302 verdes (14 nuevos: 8 en `SchedulingService.rescheduleAppointment` cubriendo happy + exclude + no-op idempotente + 404 + past + 409 slot + 409 race + BadRequest ISO + fail-open reminders; 6 en `AppointmentsController` cubriendo happy + status vivos + 422 terminales + 404 + slots endpoint + validación).
+- Cambios frontend:
+  - Nuevo componente `AppointmentDialog.tsx` (~500 LOC) con dos modos: `create` (form completo) y `reschedule` (paciente/servicio/profesional readonly + solo slot picker). Sin Luxon en el web — helpers Date/Intl vanilla para navegar por semanas del picker.
+  - `AgendaClient` ahora acepta `services` + `timezone` como props (nuevos), renderiza el botón "Nueva cita" en el toolbar, agrega el botón "Reagendar" en el detalle (solo estados vivos) y envuelve CANCELADA/NO_SHOW en `ConfirmDialog`.
+- i18n: 50+ keys nuevas bajo `panel.agenda.{dialog,confirmCancel,confirmNoShow,detail.reschedule,newAppointment}` en es y pt (paridad estricta validada con `diff <(jq)`).
+- Deuda documentada:
+  - No hay endpoint `GET /api/patients` — cuando se agende para un paciente ya existente, el operador tipea de nuevo el phone (el backend hace `upsert` por `[clinicId, phone]` — misma persona). Follow-up: autocomplete de paciente en el form de "Nueva cita".
+  - `Cancelar` no permite capturar motivo (`reason` fue removido en M4 — ver ADR 0006 §Deuda). Se re-integra cuando exista tabla `AuditEvent`.
+- Archivos tocados: `apps/backend/src/appointments/{appointments.controller,dto/reschedule-appointment.dto,appointment-status.util}.ts` (+ specs), `apps/backend/src/scheduling/{scheduling.service,availability.service}.ts` (+ specs), `apps/backend/src/clinics/{clinics.controller,clinics.module}.ts` (nuevos), `apps/backend/src/app.module.ts`, `apps/web/src/app/[locale]/panel/agenda/{page,AgendaClient,AppointmentDialog}.tsx`, `apps/web/messages/{es,pt}.json`.
+
 ## 2026-08-10 — WhatsApp LID + contact info en Conversation (ADR 0010)
 - Detectado en el panel: un chat legítimo aparecía con "número" `+63556976398516` cuando el real era `+5541998819501`. Causa raíz: WhatsApp está migrando de `<phone>@c.us` a `<lid>@lid` (Linked ID por privacidad) y el webhook stripeaba solo `@c.us`, guardando el LID como si fuera phone. Verificado en DB (`chatId=63556976398516@lid`) y en logs de WAHA (`myPN`/`myLID` separados).
 - Decisión: extender el modelo `Conversation` en vez de crear tabla `Customer`. Ver [[adr/0010-lid-y-contacto-whatsapp]].

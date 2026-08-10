@@ -230,11 +230,54 @@
         "time": "Horario",
         "status": "Estado",
         "transitions": "Cambiar estado",
-        "noTransitions": "Esta cita ya está en un estado final."
+        "noTransitions": "Esta cita ya está en un estado final.",
+        "reschedule": "Reagendar"
       },
+      "newAppointment": "Nueva cita",
       "statusChanged": "Estado actualizado.",
       "statusChangeFailed": "No se pudo actualizar el estado.",
-      "statusRaceRefresh": "Ese estado ya cambió — refrescando."
+      "statusRaceRefresh": "Ese estado ya cambió — refrescando.",
+      "confirmCancel": {
+        "title": "¿Cancelar cita?",
+        "description": "Estás por cancelar la cita de {name}. Esta acción no se puede deshacer.",
+        "confirm": "Sí, cancelar"
+      },
+      "confirmNoShow": {
+        "title": "¿Marcar como no-show?",
+        "description": "Vas a marcar la cita de {name} como no-show. Esto cancela recordatorios y no se puede deshacer.",
+        "confirm": "Sí, marcar no-show"
+      },
+      "dialog": {
+        "createTitle": "Nueva cita",
+        "rescheduleTitle": "Reagendar cita",
+        "patientName": "Nombre del paciente",
+        "patientPhone": "Teléfono (WhatsApp)",
+        "service": "Servicio",
+        "servicePlaceholder": "Elegí un servicio",
+        "professional": "Profesional",
+        "professionalPlaceholder": "Elegí un profesional",
+        "notes": "Notas internas",
+        "optional": "opcional",
+        "slotPickerLabel": "Elegí un horario",
+        "slotsHint": "Seleccioná servicio y profesional para ver horarios disponibles.",
+        "slotsError": "No se pudieron cargar los horarios. Reintentá en un momento.",
+        "noSlots": "Sin horarios disponibles en la semana. Probá con la siguiente.",
+        "prevWeek": "Semana anterior",
+        "nextWeek": "Semana siguiente",
+        "consentLabel": "El paciente autorizó el uso de sus datos para agendar y recibir recordatorios (LGPD/GDPR).",
+        "createSubmit": "Crear cita",
+        "rescheduleSubmit": "Confirmar nuevo horario",
+        "submitting": "Guardando…",
+        "createOk": "Cita creada.",
+        "createFailed": "No se pudo crear la cita.",
+        "rescheduleOk": "Cita reagendada.",
+        "rescheduleFailed": "No se pudo reagendar la cita.",
+        "slotTakenReload": "Ese horario ya se ocupó. Elegí otro.",
+        "errName": "El nombre es obligatorio (mínimo 2 caracteres).",
+        "errPhone": "Teléfono inválido. Usá formato internacional (ej: +54 9 11 5555 5555).",
+        "errServiceOrProfessional": "Elegí servicio y profesional.",
+        "errConsent": "El consentimiento del paciente es obligatorio."
+      }
     },
     "conversations": {
       "title": "Bandeja",
