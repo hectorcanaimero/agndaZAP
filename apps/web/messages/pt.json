@@ -134,9 +134,8 @@
       },
       "userMenu": "Menu do usuário",
       "roles": {
-        "OWNER": "Proprietária/o",
-        "ADMIN": "Administrador",
-        "STAFF": "Staff",
+        "SUPERADMIN": "Superadministrador",
+        "CLINIC_ADMIN": "Administrador da clínica",
         "PROFESSIONAL": "Profissional"
       }
     },
@@ -251,6 +250,7 @@
       "noResults": "Sem resultados",
       "noResultsHint": "Nada encontrado para \"{query}\".",
       "needsAttention": "Novo",
+      "live": "Ao vivo",
       "outbound": "Enviado por você",
       "backToList": "Voltar à caixa",
       "composerHint": "Enter para nova linha · ⌘↵ para enviar",
