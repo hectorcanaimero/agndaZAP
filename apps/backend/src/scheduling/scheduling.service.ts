@@ -197,4 +197,115 @@ export class SchedulingService {
 
     return appointment;
   }
+
+  /**
+   * Reagenda una cita existente moviéndola a un nuevo `startAtISO`. NO cambia
+   * el paciente, servicio ni profesional (para eso: cancelar + crear nueva).
+   *
+   * Validaciones:
+   *  - Multi-tenant estricto por `clinicId`.
+   *  - Status debe permitir reagendamiento (ver `assertReschedulable` en el
+   *    controller — este método asume que ya se validó, pero re-verifica que
+   *    el appointment exista + esté en la clínica correcta).
+   *  - Nuevo `startAt` debe ser futuro y coincidir con un slot disponible
+   *    del mismo profesional/servicio (usa `AvailabilityService`).
+   *
+   * Comportamiento:
+   *  - Si el nuevo `startAtISO` coincide con el `startAt` actual (mismo instante),
+   *    es NO-OP idempotente — retorna la cita sin tocar reminders. Evita ruido
+   *    al hacer "save" sin cambios reales.
+   *  - Reprograma reminders (cancela viejos + agenda nuevos con el nuevo horario).
+   *
+   * Errores:
+   *  - `NotFoundException` si la cita no existe o no es de esta clínica.
+   *  - `BadRequestException` si startAtISO es inválido o pasado.
+   *  - `ConflictException` si el slot no está disponible (fuera de BH, TimeOff,
+   *    ya tomado por otra cita, etc.) o si el `@@unique([professionalId, startAt])`
+   *    explota en la carrera.
+   */
+  async rescheduleAppointment(input: {
+    clinicId: string;
+    appointmentId: string;
+    startAtISO: string;
+  }): Promise<Appointment> {
+    const { clinicId, appointmentId, startAtISO } = input;
+
+    // 1) Cargar cita + service + clinic (todo cross-checked por clinicId).
+    const appt = await this.prisma.appointment.findFirst({
+      where: { id: appointmentId, clinicId },
+      include: { service: true, clinic: true },
+    });
+    if (!appt) throw new NotFoundException('cita no encontrada');
+
+    const zone = appt.clinic.timezone;
+    const newStartDT = DateTime.fromISO(startAtISO, { zone });
+    if (!newStartDT.isValid) {
+      throw new BadRequestException('startAtISO inválido');
+    }
+
+    // 2) No-op: mismo instante. Idempotencia — no tocamos DB ni reminders.
+    if (newStartDT.toMillis() === appt.startAt.getTime()) {
+      return appt;
+    }
+
+    if (newStartDT <= DateTime.now().setZone(zone)) {
+      throw new BadRequestException('no se puede reagendar al pasado');
+    }
+
+    const newEndDT = newStartDT.plus({ minutes: appt.service.durationMin });
+
+    // 3) Validar disponibilidad. AvailabilityService excluye a esta cita del
+    // cálculo porque su startAt actual sigue en DB — para eso pasamos
+    // `excludeAppointmentId` (implementado abajo en getSlots). Si no se soporta
+    // el parámetro (versión previa), el @@unique constraint de abajo actúa como
+    // última red de seguridad.
+    const slots = await this.availability.getSlots({
+      clinicId,
+      serviceId: appt.serviceId,
+      professionalId: appt.professionalId,
+      fromISO: newStartDT.startOf('day').toISO() ?? startAtISO,
+      days: 1,
+      limit: 200,
+      excludeAppointmentId: appointmentId,
+    });
+    const startMs = newStartDT.toMillis();
+    const stillFree = slots.some((s) => s.startAt.getTime() === startMs);
+    if (!stillFree) {
+      throw new ConflictException('slot no disponible');
+    }
+
+    // 4) Update de la cita. El @@unique([professionalId, startAt]) es la última
+    // línea de defensa contra doble reserva concurrente → traducimos a 409.
+    let updated: Appointment;
+    try {
+      updated = await this.prisma.appointment.update({
+        where: { id: appointmentId },
+        data: {
+          startAt: newStartDT.toJSDate(),
+          endAt: newEndDT.toJSDate(),
+        },
+      });
+    } catch (e) {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002'
+      ) {
+        throw new ConflictException('slot ya tomado');
+      }
+      throw e;
+    }
+
+    // 5) Reprogramar reminders. `scheduleForAppointment` es idempotente (cancela
+    // los previos primero). Fail-open: si falla, la cita queda reagendada y
+    // logueamos — preferimos cita sin recordatorios a rollback silencioso.
+    try {
+      await this.reminders.scheduleForAppointment(appointmentId);
+    } catch (e) {
+      this.logger.error(
+        `No se pudieron reprogramar recordatorios para ${appointmentId}: ${e}`,
+      );
+    }
+
+    return updated;
+  }
 }

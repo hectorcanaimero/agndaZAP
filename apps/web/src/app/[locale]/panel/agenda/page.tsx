@@ -10,6 +10,20 @@ function todayUTCISODate(): string {
 interface Professional {
   id: string;
   name: string;
+  active: boolean;
+  serviceIds: string[];
+}
+
+interface ServiceLite {
+  id: string;
+  name: string;
+  durationMin: number;
+  active: boolean;
+}
+
+interface ClinicMeta {
+  id: string;
+  timezone: string;
 }
 
 interface Appointment {
@@ -129,17 +143,49 @@ export default async function AgendaPage({
   if (statusList.length === 1) qs.set('status', statusList[0]);
 
   const token = await getTokenFromCookies();
-  const [apptsRes, profsRes] = await Promise.all([
+  // Traemos servicios + clínica en paralelo con appointments para poder pasarle
+  // al AgendaClient todo lo que necesita el AppointmentDialog (crear cita).
+  const [apptsRes, profsRes, servicesRes, clinicRes] = await Promise.all([
     fetcher<Appointment[]>(`/api/appointments?${qs.toString()}`, { token }),
-    fetcher<Array<{ id: string; name: string }>>('/api/professionals', {
-      token,
-    }),
+    fetcher<
+      Array<{
+        id: string;
+        name: string;
+        active: boolean;
+        services: Array<{ id: string; name: string }>;
+      }>
+    >('/api/professionals', { token }),
+    fetcher<
+      Array<{
+        id: string;
+        name: string;
+        durationMin: number;
+        active: boolean;
+      }>
+    >('/api/services', { token }),
+    fetcher<ClinicMeta>('/api/clinics/me', { token }),
   ]);
 
   const appointments = apptsRes.ok ? apptsRes.data : [];
   const professionals: Professional[] = profsRes.ok
-    ? profsRes.data.map((p) => ({ id: p.id, name: p.name }))
+    ? profsRes.data.map((p) => ({
+        id: p.id,
+        name: p.name,
+        active: p.active,
+        serviceIds: p.services.map((s) => s.id),
+      }))
     : [];
+  const services: ServiceLite[] = servicesRes.ok
+    ? servicesRes.data.map((s) => ({
+        id: s.id,
+        name: s.name,
+        durationMin: s.durationMin,
+        active: s.active,
+      }))
+    : [];
+  // Fallback razonable si /clinics/me falla: TZ del sistema. La agenda ya renderea
+  // sin timezone explícita, así que no rompe — pero pierde precisión en el picker.
+  const timezone = clinicRes.ok ? clinicRes.data.timezone : 'UTC';
 
   return (
     <div className="w-full space-y-6">
@@ -167,6 +213,8 @@ export default async function AgendaPage({
         query={sp.q ?? ''}
         appointments={appointments}
         professionals={professionals}
+        services={services}
+        timezone={timezone}
       />
     </div>
   );

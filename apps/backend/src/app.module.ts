@@ -12,6 +12,7 @@ import { ProfessionalsModule } from './professionals/professionals.module';
 import { BusinessHoursModule } from './business-hours/business-hours.module';
 import { TimeOffModule } from './time-off/time-off.module';
 import { AppointmentsModule } from './appointments/appointments.module';
+import { ClinicsModule } from './clinics/clinics.module';
 import { ConversationsModule } from './conversations/conversations.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { FaqModule } from './faq/faq.module';
@@ -42,6 +43,7 @@ import { HealthModule } from './health/health.module';
     BusinessHoursModule,
     TimeOffModule,
     AppointmentsModule,
+    ClinicsModule,
     ConversationsModule,
     DashboardModule,
     FaqModule,

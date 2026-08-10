@@ -6,6 +6,7 @@ import {
 import type { AuthUser } from '../auth/tenant-context.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { RemindersService } from '../reminders/reminders.service';
+import { AvailabilityService } from '../scheduling/availability.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { AppointmentsController } from './appointments.controller';
 
@@ -23,6 +24,7 @@ describe('AppointmentsController', () => {
   let prisma: Deep<PrismaService>;
   let reminders: Deep<RemindersService>;
   let scheduling: Deep<SchedulingService>;
+  let availability: Deep<AvailabilityService>;
   let controller: AppointmentsController;
 
   const adminA: AuthUser = {
@@ -71,11 +73,21 @@ describe('AppointmentsController', () => {
         id: 'appt-new',
         status: 'PENDIENTE',
       }),
+      rescheduleAppointment: jest.fn().mockResolvedValue({
+        id: 'appt-1',
+        status: 'PENDIENTE',
+        startAt: new Date('2030-06-01T14:00:00.000Z'),
+        endAt: new Date('2030-06-01T14:30:00.000Z'),
+      }),
+    };
+    availability = {
+      getSlots: jest.fn().mockResolvedValue([]),
     };
     controller = new AppointmentsController(
       prisma as unknown as PrismaService,
       reminders as unknown as RemindersService,
       scheduling as unknown as SchedulingService,
+      availability as unknown as AvailabilityService,
     );
   });
 
@@ -289,6 +301,134 @@ describe('AppointmentsController', () => {
       });
       expect(result).toBeDefined();
       expect(scheduling.createAppointment).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('slots (GET /slots)', () => {
+    it('delega a AvailabilityService con clinicId del scope + clamp de days', async () => {
+      availability.getSlots.mockResolvedValueOnce([
+        { startAt: new Date(), endAt: new Date() },
+      ]);
+      const result = await controller.slots(
+        adminA,
+        'svc-1',
+        'prof-1',
+        '2030-06-01T00:00:00-04:00',
+        '99', // > 30 → debe clampearse a 30
+        'appt-1',
+      );
+      expect(result).toHaveLength(1);
+      const call = availability.getSlots.mock.calls[0][0];
+      expect(call.clinicId).toBe('clinic-A');
+      expect(call.serviceId).toBe('svc-1');
+      expect(call.professionalId).toBe('prof-1');
+      expect(call.days).toBe(30);
+      expect(call.excludeAppointmentId).toBe('appt-1');
+    });
+
+    it('faltan params → 400', async () => {
+      await expect(
+        controller.slots(adminA, undefined, 'prof-1', '2030-06-01'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(availability.getSlots).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('reschedule', () => {
+    beforeEach(() => {
+      // El controller carga la cita mínima para chequear tenant + status ANTES
+      // de delegar. Ajustamos el mock para retornar shape esperado.
+      prisma.appointment.findFirst = jest.fn().mockResolvedValue({
+        id: 'appt-1',
+        status: 'PENDIENTE',
+        startAt: new Date('2030-06-01T10:00:00.000Z'),
+      });
+    });
+
+    it('happy path PENDIENTE: delega a SchedulingService + loguea auditoría', async () => {
+      const result = await controller.reschedule(adminA, 'appt-1', {
+        startAtISO: '2030-06-01T14:00:00-04:00',
+      });
+      expect(result).toBeDefined();
+      expect(scheduling.rescheduleAppointment).toHaveBeenCalledWith({
+        clinicId: 'clinic-A',
+        appointmentId: 'appt-1',
+        startAtISO: '2030-06-01T14:00:00-04:00',
+      });
+    });
+
+    it('CONFIRMADA → OK (status vivo, permite reagendar)', async () => {
+      prisma.appointment.findFirst.mockResolvedValueOnce({
+        id: 'appt-1',
+        status: 'CONFIRMADA',
+        startAt: new Date('2030-06-01T10:00:00.000Z'),
+      });
+      await controller.reschedule(adminA, 'appt-1', {
+        startAtISO: '2030-06-01T14:00:00-04:00',
+      });
+      expect(scheduling.rescheduleAppointment).toHaveBeenCalledTimes(1);
+    });
+
+    it('EN_RIESGO → OK', async () => {
+      prisma.appointment.findFirst.mockResolvedValueOnce({
+        id: 'appt-1',
+        status: 'EN_RIESGO',
+        startAt: new Date('2030-06-01T10:00:00.000Z'),
+      });
+      await controller.reschedule(adminA, 'appt-1', {
+        startAtISO: '2030-06-01T14:00:00-04:00',
+      });
+      expect(scheduling.rescheduleAppointment).toHaveBeenCalledTimes(1);
+    });
+
+    it('CANCELADA → 422 (estado terminal no reagendable)', async () => {
+      prisma.appointment.findFirst.mockResolvedValueOnce({
+        id: 'appt-1',
+        status: 'CANCELADA',
+        startAt: new Date('2030-06-01T10:00:00.000Z'),
+      });
+      await expect(
+        controller.reschedule(adminA, 'appt-1', {
+          startAtISO: '2030-06-01T14:00:00-04:00',
+        }),
+      ).rejects.toBeInstanceOf(UnprocessableEntityException);
+      expect(scheduling.rescheduleAppointment).not.toHaveBeenCalled();
+    });
+
+    it('ATENDIDA → 422', async () => {
+      prisma.appointment.findFirst.mockResolvedValueOnce({
+        id: 'appt-1',
+        status: 'ATENDIDA',
+        startAt: new Date('2030-06-01T10:00:00.000Z'),
+      });
+      await expect(
+        controller.reschedule(adminA, 'appt-1', {
+          startAtISO: '2030-06-01T14:00:00-04:00',
+        }),
+      ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    });
+
+    it('NO_SHOW → 422', async () => {
+      prisma.appointment.findFirst.mockResolvedValueOnce({
+        id: 'appt-1',
+        status: 'NO_SHOW',
+        startAt: new Date('2030-06-01T10:00:00.000Z'),
+      });
+      await expect(
+        controller.reschedule(adminA, 'appt-1', {
+          startAtISO: '2030-06-01T14:00:00-04:00',
+        }),
+      ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    });
+
+    it('cita cross-tenant → 404 (no filtra el status check antes)', async () => {
+      prisma.appointment.findFirst.mockResolvedValueOnce(null);
+      await expect(
+        controller.reschedule(adminA, 'appt-of-B', {
+          startAtISO: '2030-06-01T14:00:00-04:00',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(scheduling.rescheduleAppointment).not.toHaveBeenCalled();
     });
   });
 });
