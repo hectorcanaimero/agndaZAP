@@ -29,6 +29,18 @@ model Clinic {
   confirmThresholdH Int   @default(6)
   autoConfirm   Boolean  @default(false) // si true, la cita nace CONFIRMADA
 
+  // ─── Bot / Chatbot settings (Fase 1 — /panel/ajustes) ────────────
+  // Mensajes personalizables por tenant. Placeholders soportados:
+  // {clinicName} (siempre disponible), {patientName} (cuando exista Patient).
+  // Si NULL, `BotService` cae al fallback hardcodeado (bot.messages.default.*
+  // en i18n del backend).
+  botGreeting   String?
+  botFallback   String?
+  botHandoffMsg String?
+  // Tono que se inyecta al system prompt del LLM (intent + FAQ RAG).
+  // Valores esperados: "formal" | "cercano" | "tecnico". Default null = "cercano".
+  botTone       String?
+
   users         User[]
   professionals Professional[]
   services      Service[]
