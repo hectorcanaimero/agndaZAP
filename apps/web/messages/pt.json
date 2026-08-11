@@ -120,6 +120,7 @@
       "agenda": "Agenda",
       "conversations": "Conversas",
       "patients": "Pacientes",
+      "leads": "Leads",
       "feedback": "Satisfação",
       "services": "Serviços",
       "professionals": "Profissionais",
@@ -333,6 +334,42 @@
         "BOT": "O bot está atendendo",
         "NEEDS_HUMAN": "Precisa de atenção humana",
         "HUMAN": "Um humano está respondendo"
+      }
+    },
+    "leads": {
+      "title": "Leads",
+      "subtitle": "Prospects vindos da landing.",
+      "loading": "Carregando…",
+      "loadError": "Não foi possível carregar os leads.",
+      "retry": "Tentar novamente",
+      "countLabel": "{n, plural, one {# lead} other {# leads}}",
+      "filters": {
+        "status": "Status",
+        "all": "Todos"
+      },
+      "table": {
+        "name": "Nome",
+        "phone": "WhatsApp",
+        "clinicType": "Tipo",
+        "locale": "Idioma",
+        "createdAt": "Data",
+        "status": "Status"
+      },
+      "status": {
+        "NEW": "Novo",
+        "CONTACTED": "Contatado",
+        "DEMO": "Demo",
+        "CONVERTED": "Convertido",
+        "LOST": "Perdido"
+      },
+      "empty": {
+        "title": "Ainda não há leads",
+        "description": "Quando alguém preencher o formulário da landing, aparecerá aqui."
+      },
+      "pagination": {
+        "prev": "Anterior",
+        "next": "Próximo",
+        "page": "Página {page} de {total}"
       }
     },
     "feedback": {
@@ -957,7 +994,7 @@
     "hero": {
       "eyebrow": "Agendamento pelo WhatsApp para clínicas",
       "headline": "Pare de perder pacientes por faltas.",
-      "subheadline": "O Showly agenda, confirma e lembra as consultas da sua clínica pelo WhatsApp. Sem apps, sem treinamento, sem fricção para o paciente.",
+      "subheadline": "O paciente escreve para o WhatsApp de sempre. O Showly agenda, confirma e lembra. Ninguém baixa nada, sua equipe não aprende nada novo.",
       "primaryCta": "Solicite sua demo",
       "secondaryCta": "Veja como funciona",
       "trust": "Em piloto com clínicas na LATAM e no Brasil.",
@@ -983,7 +1020,7 @@
     "problem": {
       "eyebrow": "O problema",
       "headline": "O WhatsApp da sua clínica virou um caos.",
-      "subheadline": "Estima-se que clínicas pequenas e médias na LATAM perdem entre 20% e 30% da receita por faltas e gestão manual de agendas.",
+      "subheadline": "Em consultas na LATAM o no-show costuma estar entre 20% e 30%. Cada horário vazio é dinheiro que não volta — e ainda por cima ninguém sabe quanto custou.",
       "points": {
         "one": {
           "title": "A recepção vive respondendo.",
@@ -1022,30 +1059,30 @@
     },
     "features": {
       "eyebrow": "Recursos",
-      "headline": "Feito para o dia a dia de uma clínica.",
+      "headline": "O que sua clínica precisa todos os dias.",
       "items": {
         "reminders": {
           "title": "Lembretes anti-falta",
           "body": "Configuráveis por clínica. 24h e 3h antes por padrão. O paciente confirma com um SIM ou pede para remarcar."
         },
         "handoff": {
-          "title": "Passagem para humano",
+          "title": "Sua equipe assume o chat",
           "body": "Quando o bot não entende ou o paciente pede uma pessoa, sua equipe assume a conversa e o bot se cala."
         },
         "faq": {
-          "title": "Base de conhecimento",
+          "title": "Responde suas dúvidas frequentes",
           "body": "Preços, endereço, horários, formas de pagamento. O bot responde a partir da sua própria base — sem inventar."
         },
         "multiPro": {
-          "title": "Multi-profissional",
+          "title": "Cada profissional com sua agenda",
           "body": "Cada profissional com sua agenda, serviços, horários e feed iCal para sincronizar com Google Calendar ou iPhone."
         },
         "feedback": {
-          "title": "Feedback pós-atendimento",
+          "title": "Pesquisa de 1 a 5 após a consulta",
           "body": "Pesquisa automática de 1 a 5 estrelas depois de cada consulta. Sem formulários, sem enquetes externas."
         },
         "multiTenant": {
-          "title": "Multi-idioma e multi-fuso",
+          "title": "Português e español, cada clínica no seu fuso",
           "body": "Português e español. Cada clínica configura seu fuso horário. Os lembretes respeitam feriados e bloqueios."
         }
       }
@@ -1060,11 +1097,11 @@
     "pricing": {
       "eyebrow": "Preços",
       "headline": "Um único plano enquanto durar o piloto.",
-      "subheadline": "Sem tiers confusos, sem letra miúda. Tudo incluído para as clínicas que começam com a gente.",
+      "subheadline": "Um único plano enquanto durar o piloto. Tudo incluído para as clínicas que começam com a gente.",
       "badge": "Piloto",
       "price": "Grátis",
       "priceNote": "enquanto durar o piloto",
-      "description": "Sem cartão de crédito. Sem compromisso. Levamos a clínica pela mão no início.",
+      "description": "Não pedimos cartão nem compromisso assinado. Te acompanhamos no início até a clínica agendar sozinha.",
       "includesTitle": "Tudo incluído",
       "features": {
         "bot": "Bot de agendamento pelo WhatsApp",
@@ -1075,11 +1112,11 @@
         "unlimited": "Sem limite de consultas ou pacientes"
       },
       "cta": "Quero entrar no piloto",
-      "afterPilot": "Quando sairmos do piloto avisamos com 30 dias de antecedência. Sem surpresas."
+      "afterPilot": "Quando sairmos do piloto avisamos 30 dias antes. Nem um centavo antes disso."
     },
     "security": {
       "eyebrow": "Segurança e dados",
-      "headline": "Feito no código, pensado para clínicas.",
+      "headline": "O que fizemos no código — não no marketing.",
       "subheadline": "Os dados dos seus pacientes são sensíveis. Em vez de listar selos de compliance, te contamos como o sistema é por dentro.",
       "pillars": {
         "isolation": {
@@ -1156,7 +1193,7 @@
     "cta": {
       "headline": "Recupere as horas que sua equipe gasta no WhatsApp.",
       "subheadline": "Em menos de uma hora sua clínica está agendando e confirmando pelo WhatsApp. Sem trocar de número.",
-      "trust": "Sem cartão. Sem instalação. Onboarding acompanhado.",
+      "trust": "Não pedimos cartão. Você não instala nada. Onboarding acompanhado pela equipe.",
       "form": {
         "labels": {
           "name": "Seu nome",

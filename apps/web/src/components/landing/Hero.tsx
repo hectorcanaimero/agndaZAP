@@ -46,7 +46,7 @@ export function Hero() {
             </span>
 
             <h1
-              className="mt-6 font-display text-[2.75rem] font-semibold leading-[1.05] tracking-tight text-neutral-950 sm:text-6xl lg:text-[4.25rem]"
+              className="mt-6 font-display text-[2.75rem] font-semibold leading-[1.1] tracking-[-0.02em] text-neutral-950 sm:text-6xl lg:text-[4.25rem]"
               style={{ overflowWrap: 'anywhere' }}
             >
               {t('headline')}
