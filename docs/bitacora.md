@@ -1,5 +1,31 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-08-10 — CI + observability básica (plan B — punto 3/4)
+- Sin CI antes de esto — los checks corrían solo en local del dev. Los bugs de i18n post-merge (3× en la sesión) confirmaron la necesidad. Este PR mueve TODOS los quality gates a CI automatizado.
+- **`.github/workflows/ci.yml`** con 2 jobs paralelos (`backend` + `web`):
+  - `backend`: `pnpm install --frozen-lockfile` → `prisma generate` → `tsc --noEmit` → `jest`.
+  - `web`: `pnpm install --frozen-lockfile` → `tsc --noEmit` → `node scripts/i18n-check.mjs`.
+  - Corre en `pull_request` y `push` contra `staged` y `main`.
+  - `concurrency: cancel-in-progress` — ahorra minutos si se pushea de nuevo al mismo PR.
+  - Cache de pnpm via `pnpm/action-setup@v4` + `actions/setup-node@v4 with cache: pnpm`.
+- **`scripts/i18n-check.mjs`** — script node standalone (cero deps) que reemplaza el `diff <(jq)` bash + los scripts adhoc que estaba usando entre commits. Chequea:
+  1. **Paridad estricta** de paths escalares `es.json` (source) ↔ `pt.json` (y cualquier locale nuevo que aparezca). Reporta paths faltantes/sobrantes con contexto.
+  2. **Missing keys por consumidor** — para cada `.tsx` que usa `useTranslations('namespace')`, verifica que cada `t('key')` / `t.rich('key')` matchee un path del source.
+  3. Salida con colores ANSI, exit 0/1/2 semánticos (OK / validation error / config error).
+- **Scripts npm root nuevos** — reproducen exactamente lo que corre CI:
+  - `pnpm check` — todo (backend + web + i18n).
+  - `pnpm check:backend` / `pnpm check:web` / `pnpm i18n:check` — granulares.
+  - Renombré de `ci` a `check` porque `pnpm ci` es un comando reservado (ERR_PNPM_CI_NOT_IMPLEMENTED).
+- **Docs de deploy** (`docs/deploy.md`):
+  - Sección 11 (Monitoring): documenta el `GET /api/health` que ya existía (`{ ok, db, redis, timestamp }`). Se marca "listo" el item de deuda de la sección 15.
+  - Nueva sección 16 (Quality gates): describe qué chequea CI + comandos locales equivalentes.
+- **Observability**: el health endpoint ya existía (verificado — `apps/backend/src/health/`) con chequeos reales de DB (Prisma `SELECT 1`) y Redis (`PING`). El `Logger` de NestJS ya emite structured logs. Sentry queda documentado como opcional/follow-up — el MVP no lo necesita.
+- **Cero cambios de código de app** — solo infra (workflow YAML + script node + docs + package.json scripts). No toca ningún cliente, endpoint ni schema.
+- Deuda:
+  - GitHub Branch Protection "require status checks to pass" en `staged`/`main` — setup manual en Settings (fuera del alcance del código del repo).
+  - Cuando actualicemos next-intl a v4+ (usa `AppConfig` en vez de `IntlMessages`), el chequeo i18n sigue funcionando igual (parseo estructural).
+- Archivos tocados: `.github/workflows/ci.yml` (nuevo), `scripts/i18n-check.mjs` (nuevo), `package.json`, `docs/deploy.md`.
+
 ## 2026-08-10 — Pacientes con historial (primer consumidor del MasterDetailShell)
 - Gap cerrado: el modelo `Patient` existía como referencia en `Appointment` y `Conversation` pero no tenía página propia. El operador no podía ver "quiénes son los pacientes de la clínica" ni consolidar su historial. Nueva ruta `/panel/pacientes` con master-detail.
 - **Primer consumidor del `<MasterDetailShell>` post-refactor** — validación práctica del componente extraído en el PR #12. El shell escaló bien: cero cambios necesarios, se usa con las props documentadas (`mobileSheetMaxWidth="sm:max-w-lg"` para dar más espacio al detail de 3 secciones).

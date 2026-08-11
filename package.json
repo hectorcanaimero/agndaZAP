@@ -8,7 +8,11 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "infra:up": "docker compose up -d db redis waha",
-    "infra:down": "docker compose down"
+    "infra:down": "docker compose down",
+    "i18n:check": "node scripts/i18n-check.mjs",
+    "check:backend": "pnpm --filter @agendazap/backend exec tsc --noEmit && pnpm --filter @agendazap/backend test",
+    "check:web": "pnpm --filter @agendazap/web exec tsc --noEmit && pnpm i18n:check",
+    "check": "pnpm check:backend && pnpm check:web"
   },
   "devDependencies": {
     "typescript": "^5.5.4"
