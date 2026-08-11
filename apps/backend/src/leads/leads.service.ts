@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import type { Lead, LeadStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 interface CreateLeadInput {
@@ -9,6 +10,19 @@ interface CreateLeadInput {
   locale: string;
   ip?: string;
   userAgent?: string;
+}
+
+interface ListLeadsInput {
+  status?: LeadStatus;
+  page: number;
+  pageSize: number;
+}
+
+export interface ListLeadsResult {
+  items: Lead[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 /**
@@ -43,5 +57,32 @@ export class LeadsService {
       `lead created id=${lead.id} locale=${input.locale} clinicType=${input.clinicType ?? '-'}`,
     );
     return lead;
+  }
+
+  /**
+   * Listado paginado para el panel admin. Los leads son cross-tenant (no
+   * tienen `clinicId`), así que la única defensa es el rol del caller —
+   * lo enforcea el controller vía `@Roles('SUPERADMIN')`.
+   *
+   * Orden: `createdAt desc` (últimos primero — el owner mira arriba
+   * los recién llegados). Devolvemos `total` para paginación real,
+   * sin correr un COUNT(*) por página cuando el filtro no cambia
+   * (TanStack Query cachea por queryKey).
+   */
+  async findAll(input: ListLeadsInput): Promise<ListLeadsResult> {
+    const { status, page, pageSize } = input;
+    const where: Prisma.LeadWhereInput = status ? { status } : {};
+
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.lead.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.lead.count({ where }),
+    ]);
+
+    return { items, total, page, pageSize };
   }
 }

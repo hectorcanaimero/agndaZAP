@@ -29,6 +29,19 @@ const fraunces = Fraunces({
 export const metadata: Metadata = {
   title: 'Showly',
   description: 'Agendá tu cita en un minuto.',
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.ico', sizes: 'any' },
+    ],
+    apple: '/apple-touch-icon.png',
+  },
+  openGraph: {
+    title: 'Showly',
+    description: 'Agendá tu cita en un minuto.',
+    images: ['/og-image.png'],
+    type: 'website',
+  },
 };
 
 export function generateStaticParams() {

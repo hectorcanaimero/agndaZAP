@@ -17,10 +17,16 @@ const config: Config = {
     },
     extend: {
       colors: {
-        // Paleta base — la ajustamos cuando arranque el branding real de Showly.
-        // Escala 50-900 completa para poder construir todas las variantes semánticas
-        // sin hardcodear hex. Ver `src/components/ui/tokens.ts` para los tokens
-        // derivados (APPOINTMENT_STATUS_TOKENS, CONVERSATION_STATE_TOKENS, etc.).
+        // Escala verde 50-900 — representa el CANAL de WhatsApp en la UI (mock
+        // del hero, header de conversaciones, tokens de estado en el panel).
+        // Se mantiene después del rebrand a Showly porque no es el brand del
+        // producto, es el lenguaje visual del canal donde el producto opera.
+        // Ver `src/components/ui/tokens.ts` para tokens derivados
+        // (APPOINTMENT_STATUS_TOKENS, CONVERSATION_STATE_TOKENS, etc.).
+        //
+        // Los colores del brand Showly (navy + teal) viven como tokens planos
+        // navy/teal debajo, alineados con el logo en `apps/web/public/favicon.svg`
+        // y `showly-wordmark.svg`. Ver docs/notas/2026-08-11-brand-kit-showly.md.
         brand: {
           50: '#f0fdf4',
           100: '#dcfce7',
@@ -32,6 +38,8 @@ const config: Config = {
           700: '#15803d',
           800: '#166534',
           900: '#14532d',
+          navy: '#0F2A4A',
+          teal: '#28D9B9',
         },
         // Tokens semánticos shadcn/ui (leen variables CSS de globals.css).
         // Esto habilita que los componentes de shadcn (bg-primary, text-muted-foreground, etc.)

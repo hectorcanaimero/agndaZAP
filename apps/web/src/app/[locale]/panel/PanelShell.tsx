@@ -15,6 +15,7 @@ import {
   Settings,
   Sparkles,
   Star,
+  UserPlus,
   UserRound,
   Users,
   Briefcase,
@@ -96,6 +97,12 @@ export function PanelShell({ locale, me, children }: PanelShellProps) {
           href: `/${locale}/panel/pacientes`,
           label: t('patients'),
           icon: UserRound,
+        },
+        {
+          key: 'leads',
+          href: `/${locale}/panel/leads`,
+          label: t('leads'),
+          icon: UserPlus,
         },
         {
           key: 'feedback',

@@ -17,7 +17,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json ./apps/web/
 COPY packages/shared/package.json ./packages/shared/
 
-RUN pnpm install --frozen-lockfile --filter @agendazap/web...
+RUN pnpm install --frozen-lockfile --filter @showly/web...
 
 COPY packages/shared ./packages/shared
 COPY apps/web ./apps/web
@@ -50,7 +50,7 @@ WORKDIR /repo
 #
 # `--frozen-lockfile` en el install debajo garantiza builds reproducibles.
 # Copiamos el manifest+lockfile del workspace + los del web para que
-# `pnpm install --filter @agendazap/web...` resuelva bien.
+# `pnpm install --filter @showly/web...` resuelva bien.
 COPY --from=build /repo/package.json ./package.json
 COPY --from=build /repo/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY --from=build /repo/pnpm-workspace.yaml ./pnpm-workspace.yaml
@@ -64,7 +64,7 @@ COPY --from=build /repo/apps/web/public ./apps/web/public
 COPY --from=build /repo/packages/shared/package.json ./packages/shared/package.json
 
 RUN corepack enable && corepack prepare pnpm@9.0.0 --activate && \
-    pnpm install --prod --frozen-lockfile --ignore-scripts --filter @agendazap/web... && \
+    pnpm install --prod --frozen-lockfile --ignore-scripts --filter @showly/web... && \
     chown -R app:app /repo
 
 USER app

@@ -7,7 +7,7 @@
  * embedding vía `KnowledgeService.embedText`, y hace UPDATE con el vector.
  *
  * Uso:
- *   pnpm --filter @agendazap/backend prisma:reindex-faq
+ *   pnpm --filter @showly/backend prisma:reindex-faq
  *
  * Requiere `OPENAI_API_KEY` en el env. Si falta, sale con exit code 1 y
  * mensaje claro — a diferencia del create, acá no tiene sentido degradar.

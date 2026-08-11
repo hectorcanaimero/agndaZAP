@@ -73,5 +73,6 @@ skills-lock.json
 .playwright-mcp/
 
 # Da Vinci — carpeta local de generación (manifest + outputs sin curar).
-# Los assets finales viven en apps/web/public/landing/ (curados a mano).
+# Los assets finales viven en apps/web/public/ (curados a mano).
 apps/*/assets/generated/
+/assets/

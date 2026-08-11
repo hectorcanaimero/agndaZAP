@@ -80,4 +80,11 @@ export const queryKeys = {
     limit?: number;
   }) => ['feedback', filters ?? {}] as const,
   feedbackSummary: ['feedback', 'summary'] as const,
+  /**
+   * Leads del panel admin. Prospects capturados desde la landing (form del
+   * FinalCta) — vive en el namespace propio para poder invalidar todo con
+   * `['leads']` cuando aparezca el PATCH de status en Fase 2.
+   */
+  leads: (filters?: { status?: string; page?: number; pageSize?: number }) =>
+    ['leads', filters ?? {}] as const,
 } as const;

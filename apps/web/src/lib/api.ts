@@ -136,3 +136,63 @@ export async function createAppointment(
     (body as { message?: string } | null)?.message ?? `HTTP ${res.status}`;
   return { ok: false, status: res.status, message };
 }
+
+/* ─────────────────────────── Leads (panel admin) ─────────────────────────── */
+
+/** Status del funnel de leads — matchea `LeadStatus` en Prisma. */
+export type LeadStatus = 'NEW' | 'CONTACTED' | 'DEMO' | 'CONVERTED' | 'LOST';
+
+/**
+ * Row de `Lead` como lo expone el backend en `GET /api/leads`.
+ *
+ * IMPORTANTE: `createdAt` viaja como string (JSON no serializa Date), NO
+ * como `Date`. El caller lo parsea con `new Date(...)` en el momento de
+ * formatear. Mantener este tipo sync con `model Lead` en
+ * `apps/backend/prisma/schema.prisma`.
+ */
+export interface Lead {
+  id: string;
+  name: string;
+  phone: string;
+  clinicType: string | null;
+  notes: string | null;
+  source: string;
+  locale: string;
+  ip: string | null;
+  userAgent: string | null;
+  status: LeadStatus;
+  contactedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LeadsListResponse {
+  items: Lead[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/**
+ * Params opcionales del listado admin. `page`/`pageSize` se serializan como
+ * string en la URL (query params). El backend valida rangos y tira 400 si
+ * son inválidos.
+ */
+export interface FetchLeadsParams {
+  status?: LeadStatus;
+  page?: number;
+  pageSize?: number;
+}
+
+/**
+ * Construye el querystring canonical de `/api/leads`. Extraído para reusar
+ * el mismo shape en el server component (initial fetch) y el client (useQuery).
+ */
+export function buildLeadsQueryString(params: FetchLeadsParams): string {
+  const qs = new URLSearchParams();
+  if (params.status) qs.set('status', params.status);
+  if (params.page !== undefined) qs.set('page', String(params.page));
+  if (params.pageSize !== undefined)
+    qs.set('pageSize', String(params.pageSize));
+  return qs.toString();
+}
