@@ -339,9 +339,36 @@
       "title": "Satisfacción",
       "subtitle": "Cómo puntuaron los pacientes su experiencia post-atención.",
       "loadError": "No se pudieron cargar los datos de satisfacción ({status}).",
+      "close": "Cerrar",
+      "searchPlaceholder": "Buscar paciente, profesional o comentario…",
+      "countLabel": "{n, plural, one {# respuesta} other {# respuestas}}",
+      "countMatch": "{n, plural, one {# coincide} other {# coinciden}}",
+      "noSearchResults": "Ninguna respuesta coincide con la búsqueda.",
+      "resetFilter": "Ver todas",
+      "filters": {
+        "all": "Todas",
+        "score": "{n}★"
+      },
       "empty": {
         "title": "Todavía no recibiste respuestas de satisfacción",
         "description": "Prendé follow-up en algún profesional para empezar a recibir puntuaciones de tus pacientes. Cada vez que marques una cita como ATENDIDA se manda un mensaje pidiendo 1-5 estrellas."
+      },
+      "detail": {
+        "backLabel": "Volver a la lista",
+        "sectionScore": "Puntuación",
+        "sectionAppointment": "Cita atendida",
+        "sectionContext": "Contexto",
+        "sectionComment": "Comentario del paciente",
+        "noComment": "El paciente no dejó un comentario.",
+        "respondedAt": "Respondido el {date}",
+        "appointmentAt": "Atendido el {date}",
+        "professionalLabel": "Profesional",
+        "serviceLabel": "Servicio",
+        "patientLabel": "Paciente"
+      },
+      "panelEmpty": {
+        "title": "Elegí una respuesta",
+        "description": "Seleccioná una respuesta de la lista para ver el detalle. Abajo tenés el resumen agregado de todas las puntuaciones recibidas."
       },
       "stats": {
         "total": {
