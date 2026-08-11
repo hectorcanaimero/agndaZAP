@@ -5,7 +5,7 @@ import { Toaster as Sonner } from 'sonner';
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
 /**
- * Wrapper de sonner con tokens shadcn. Sin `next-themes` — el panel AgendaZap
+ * Wrapper de sonner con tokens shadcn. Sin `next-themes` — el panel Showly
  * arranca en light-only (ver globals.css). Si más adelante habilitamos dark
  * mode, agregamos `next-themes` y volvemos a leer `useTheme()`.
  */

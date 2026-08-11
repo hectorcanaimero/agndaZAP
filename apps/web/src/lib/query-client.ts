@@ -1,7 +1,7 @@
 import { QueryClient } from '@tanstack/react-query';
 
 /**
- * Factory de QueryClient con defaults sensatos para el panel AgendaZap.
+ * Factory de QueryClient con defaults sensatos para el panel Showly.
  *
  * - `staleTime: 30s` — la mayoría de la data del panel (agenda, contactos,
  *   configuración) no cambia tan rápido; evita refetches innecesarios al navegar

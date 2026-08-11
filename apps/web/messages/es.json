@@ -940,11 +940,11 @@
   },
   "landing": {
     "meta": {
-      "title": "gochat — Agendamiento por WhatsApp para clínicas",
-      "description": "gochat agenda, confirma y recuerda las citas de tu clínica por WhatsApp. Menos no-shows, más pacientes atendidos."
+      "title": "Showly — Agendamiento por WhatsApp para clínicas",
+      "description": "Showly agenda, confirma y recuerda las citas de tu clínica por WhatsApp. Menos no-shows, más pacientes atendidos."
     },
     "nav": {
-      "brand": "gochat",
+      "brand": "Showly",
       "howItWorks": "Cómo funciona",
       "features": "Funcionalidades",
       "pricing": "Precios",
@@ -957,7 +957,7 @@
     "hero": {
       "eyebrow": "Agendamiento por WhatsApp para clínicas",
       "headline": "Deja de perder pacientes por no-show.",
-      "subheadline": "gochat agenda, confirma y recuerda las citas de tu clínica por WhatsApp. Sin apps, sin capacitación, sin fricción para el paciente.",
+      "subheadline": "Showly agenda, confirma y recuerda las citas de tu clínica por WhatsApp. Sin apps, sin capacitación, sin fricción para el paciente.",
       "primaryCta": "Solicita tu demo",
       "secondaryCta": "Ver cómo funciona",
       "trust": "En piloto con clínicas de LATAM y Brasil.",
@@ -1010,7 +1010,7 @@
         },
         "two": {
           "number": "02",
-          "title": "gochat agenda, confirma y recuerda.",
+          "title": "Showly agenda, confirma y recuerda.",
           "body": "El bot entiende la consulta, ofrece horarios reales de tu agenda, crea la cita y envía recordatorios 24h y 3h antes."
         },
         "three": {
@@ -1052,10 +1052,10 @@
     },
     "testimonial": {
       "badge": "Piloto en curso",
-      "altPortrait": "Retrato de una dueña de clínica participante del piloto de gochat",
+      "altPortrait": "Retrato de una dueña de clínica participante del piloto de Showly",
       "quote": "Antes contestaba WhatsApp entre paciente y paciente. Ahora entro al panel a la mañana y ya tengo el día armado.",
       "author": "Dueña de clínica",
-      "role": "Piloto gochat · LATAM"
+      "role": "Piloto Showly · LATAM"
     },
     "pricing": {
       "eyebrow": "Precios",
@@ -1103,7 +1103,7 @@
     },
     "forWhom": {
       "eyebrow": "Para quién",
-      "headline": "Si tu clínica agenda por WhatsApp, gochat es para ti.",
+      "headline": "Si tu clínica agenda por WhatsApp, Showly es para ti.",
       "cards": {
         "consultorios": {
           "title": "Consultorios pequeños",
@@ -1192,7 +1192,7 @@
       }
     },
     "footer": {
-      "brand": "gochat",
+      "brand": "Showly",
       "statement": "Agendamiento por WhatsApp para clínicas. Menos no-shows, más pacientes atendidos.",
       "columns": {
         "product": {
@@ -1214,7 +1214,7 @@
         }
       },
       "language": "Idioma",
-      "copyright": "© {year} gochat. Hecho con cariño para clínicas de LATAM y Brasil."
+      "copyright": "© {year} Showly. Hecho con cariño para clínicas de LATAM y Brasil."
     }
   }
 }

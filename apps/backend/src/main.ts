@@ -211,7 +211,7 @@ async function bootstrap(): Promise<void> {
 
   const port = Number.parseInt(process.env.PORT ?? '4000', 10);
   await app.listen(port);
-  logger.log(`AgendaZap backend escuchando en http://localhost:${port}`);
+  logger.log(`Showly backend escuchando en http://localhost:${port}`);
   logger.log(`Webhook WAHA: POST http://localhost:${port}/webhooks/waha`);
 }
 

@@ -27,7 +27,7 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: 'AgendaZap',
+  title: 'Showly',
   description: 'Agendá tu cita en un minuto.',
 };
 

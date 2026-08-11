@@ -1,4 +1,4 @@
-// AgendaZap — Prisma schema (MVP)
+// Showly — Prisma schema (MVP)
 // Multi-tenant: clinicId presente en todas las entidades de negocio.
 
 generator client {

@@ -203,12 +203,12 @@ describe('AuthService', () => {
       prisma.user.findUnique.mockResolvedValue({
         id: 'user-super',
         clinicId: null,
-        email: 'super@agendazap.dev',
+        email: 'super@showly.dev',
         password: hash,
         name: 'Super',
         role: 'SUPERADMIN',
       });
-      await service.login('super@agendazap.dev', 'correcto1234');
+      await service.login('super@showly.dev', 'correcto1234');
       const payload = jwt.signAsync.mock.calls[0][0];
       expect(payload.clinicId).toBeNull();
       expect(payload.role).toBe('SUPERADMIN');
@@ -298,7 +298,7 @@ describe('AuthService', () => {
       prisma.user.findUnique.mockResolvedValue({
         id: 'user-super',
         clinicId: null,
-        email: 'super@agendazap.dev',
+        email: 'super@showly.dev',
         password: '<hash>',
         name: 'Super',
         role: 'SUPERADMIN',
