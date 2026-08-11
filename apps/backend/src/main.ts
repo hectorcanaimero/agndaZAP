@@ -14,6 +14,7 @@ import {
 } from './whatsapp/health-monitor.processor';
 import { createRemindersWorker } from './reminders/reminders.processor';
 import { parseRedis } from './reminders/reminders.module';
+import { createFollowUpsWorker } from './follow-ups/follow-ups.processor';
 
 async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
@@ -134,6 +135,17 @@ async function bootstrap(): Promise<void> {
     logger.error(`Job ${job?.id} falló: ${err?.message ?? 'unknown'}`);
   });
 
+  // Worker de follow-ups post-atención (satisfacción). Misma conexión Redis
+  // que reminders (parseRedis()). Es un worker separado porque la Queue es
+  // distinta — así el failure de uno no arrastra al otro.
+  const followUpsWorker = createFollowUpsWorker(parseRedis(), prisma, waha);
+  followUpsWorker.on('ready', () => logger.log('FollowUpsWorker listo'));
+  followUpsWorker.on('failed', (job, err) => {
+    logger.error(
+      `FollowUp job ${job?.id} falló: ${err?.message ?? 'unknown'}`,
+    );
+  });
+
   // Health-monitor de sesiones WAHA. Repeatable job cada N minutos que corre
   // `WahaHealthMonitor.checkAll()`. El `jobId` fijo hace que BullMQ dedupe el
   // repeatable a través de restarts del backend (idempotente). Si se revierte
@@ -167,6 +179,13 @@ async function bootstrap(): Promise<void> {
       await worker.close();
     } catch (e) {
       logger.error(`Error cerrando worker: ${(e as Error).message}`);
+    }
+    try {
+      await followUpsWorker.close();
+    } catch (e) {
+      logger.error(
+        `Error cerrando follow-ups worker: ${(e as Error).message}`,
+      );
     }
     try {
       await healthWorker.close();

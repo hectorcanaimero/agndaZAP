@@ -4,6 +4,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import type { AuthUser } from '../auth/tenant-context.util';
+import { FollowUpsService } from '../follow-ups/follow-ups.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RemindersService } from '../reminders/reminders.service';
 import { AvailabilityService } from '../scheduling/availability.service';
@@ -23,6 +24,7 @@ type Deep<T> = { [K in keyof T]?: any } & Record<string, any>;
 describe('AppointmentsController', () => {
   let prisma: Deep<PrismaService>;
   let reminders: Deep<RemindersService>;
+  let followUps: Deep<FollowUpsService>;
   let scheduling: Deep<SchedulingService>;
   let availability: Deep<AvailabilityService>;
   let controller: AppointmentsController;
@@ -68,6 +70,10 @@ describe('AppointmentsController', () => {
       confirmAppointment: jest.fn().mockResolvedValue(undefined),
       cancelForAppointment: jest.fn().mockResolvedValue(undefined),
     };
+    followUps = {
+      scheduleForAppointment: jest.fn().mockResolvedValue(undefined),
+      cancelForAppointment: jest.fn().mockResolvedValue(undefined),
+    };
     scheduling = {
       createAppointment: jest.fn().mockResolvedValue({
         id: 'appt-new',
@@ -86,6 +92,7 @@ describe('AppointmentsController', () => {
     controller = new AppointmentsController(
       prisma as unknown as PrismaService,
       reminders as unknown as RemindersService,
+      followUps as unknown as FollowUpsService,
       scheduling as unknown as SchedulingService,
       availability as unknown as AvailabilityService,
     );

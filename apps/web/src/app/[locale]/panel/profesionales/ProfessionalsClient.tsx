@@ -11,6 +11,7 @@ import {
   FileText,
   Image as ImageIcon,
   Mail,
+  MessageCircleHeart,
   Palette,
   Phone,
   Plus,
@@ -52,6 +53,8 @@ interface Professional {
   avatarUrl: string | null;
   licenseNumber: string | null;
   color: string | null;
+  followUpEnabled: boolean;
+  followUpDelayHours: number;
   services: Array<{ id: string; name: string }>;
 }
 
@@ -102,6 +105,13 @@ const professionalSchema = z.object({
       .optional(),
   ),
   serviceIds: z.array(z.string()).default([]),
+  followUpEnabled: z.boolean().default(false),
+  followUpDelayHours: z
+    .number()
+    .int()
+    .min(0)
+    .max(168)
+    .default(2),
 });
 
 type ProfessionalFormValues = z.infer<typeof professionalSchema>;
@@ -525,6 +535,8 @@ function ProfessionalForm({
       licenseNumber: prof?.licenseNumber ?? undefined,
       color: prof?.color ?? undefined,
       serviceIds: prof?.services?.map((s) => s.id) ?? [],
+      followUpEnabled: prof?.followUpEnabled ?? false,
+      followUpDelayHours: prof?.followUpDelayHours ?? 2,
     },
   });
 
@@ -539,6 +551,8 @@ function ProfessionalForm({
       licenseNumber: prof?.licenseNumber ?? undefined,
       color: prof?.color ?? undefined,
       serviceIds: prof?.services?.map((s) => s.id) ?? [],
+      followUpEnabled: prof?.followUpEnabled ?? false,
+      followUpDelayHours: prof?.followUpDelayHours ?? 2,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prof?.id]);
@@ -547,6 +561,8 @@ function ProfessionalForm({
   const currentColor = watch('color');
   const currentAvatar = watch('avatarUrl');
   const currentName = watch('name');
+  const followUpEnabled = watch('followUpEnabled') ?? false;
+  const followUpDelay = watch('followUpDelayHours') ?? 2;
 
   function toggleService(id: string) {
     if (selectedServices.includes(id)) {
@@ -598,6 +614,11 @@ function ProfessionalForm({
     const payload: Record<string, unknown> = {
       name: values.name,
       serviceIds: values.serviceIds,
+      // Follow-up post-atención: siempre viajan porque tienen defaults numéricos
+      // y el backend valida el rango 0-168. No enviarlos rompería la sección
+      // "toggle off → volver on" (perderíamos el delay previo).
+      followUpEnabled: values.followUpEnabled,
+      followUpDelayHours: values.followUpDelayHours,
     };
     // Solo enviamos las keys definidas (patch parcial más limpio en la wire).
     (
@@ -935,6 +956,95 @@ function ProfessionalForm({
             ) : null}
             <p className="text-[11px] text-muted-foreground">
               {t('hints.color')}
+            </p>
+          </div>
+        </FormSection>
+
+        {/* ─── Sección: Follow-up post-atención ─── */}
+        <FormSection
+          icon={<MessageCircleHeart className="h-4 w-4" aria-hidden="true" />}
+          title={t('sections.followUp')}
+        >
+          <label
+            htmlFor="prof-followup-enabled"
+            className="flex cursor-pointer items-start gap-3 rounded-md border border-border/60 bg-background/50 p-3 transition-colors hover:bg-accent/40"
+          >
+            <input
+              id="prof-followup-enabled"
+              type="checkbox"
+              checked={followUpEnabled}
+              onChange={(e) =>
+                setValue('followUpEnabled', e.target.checked, {
+                  shouldDirty: true,
+                })
+              }
+              disabled={busy}
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-border text-brand-600 focus:ring-brand-500"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-foreground">
+                {t('followUp.toggleLabel')}
+              </p>
+              <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                {t('followUp.toggleHint')}
+              </p>
+            </div>
+          </label>
+
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="prof-followup-delay"
+              className={cn(
+                'flex items-center gap-1.5',
+                !followUpEnabled && 'text-muted-foreground/60',
+              )}
+            >
+              {t('followUp.delayLabel')}
+            </Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="prof-followup-delay"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={168}
+                step={1}
+                value={followUpDelay}
+                onChange={(e) => {
+                  // Number(...) porque el input devuelve string y el schema
+                  // Zod exige number entero. Clampeamos al rango del backend
+                  // (0-168) para dar feedback inmediato — el backend igual valida.
+                  const raw = e.target.value === '' ? 0 : Number(e.target.value);
+                  const clamped = Number.isFinite(raw)
+                    ? Math.max(0, Math.min(168, Math.trunc(raw)))
+                    : 2;
+                  setValue('followUpDelayHours', clamped, { shouldDirty: true });
+                }}
+                disabled={busy || !followUpEnabled}
+                className="w-24 tabular-nums"
+                aria-describedby="prof-followup-hint"
+              />
+              <span
+                className={cn(
+                  'text-sm',
+                  !followUpEnabled
+                    ? 'text-muted-foreground/60'
+                    : 'text-muted-foreground',
+                )}
+              >
+                {t('followUp.delaySuffix')}
+              </span>
+            </div>
+            {errors.followUpDelayHours ? (
+              <p className="text-xs text-destructive">
+                {t('followUp.delayError')}
+              </p>
+            ) : null}
+            <p
+              id="prof-followup-hint"
+              className="text-[11px] leading-relaxed text-muted-foreground"
+            >
+              {t('followUp.hint')}
             </p>
           </div>
         </FormSection>

@@ -27,6 +27,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[adr/0009-faq-title-y-markdown-strip|0009 — FAQ: `title` opcional y strip de markdown antes del embedding]]
 - [[adr/0010-lid-y-contacto-whatsapp|0010 — WhatsApp LID, identidad del contacto y perfil visible]]
 - [[adr/0011-perfil-profesional-e-ical-feed|0011 — Perfil de Profesional e iCal feed para sincronización con calendar]]
+- [[adr/0012-feedback-post-atencion|0012 — Feedback post-atención (satisfacción) por WhatsApp]]
 
 ## Notas y descubrimientos
 - [[notas/2026-08-08-prisma-pgvector-y-env|2026-08-08 — Prisma + pgvector y carga de `.env` en el monorepo]]

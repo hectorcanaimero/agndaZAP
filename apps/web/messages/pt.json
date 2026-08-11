@@ -120,6 +120,7 @@
       "agenda": "Agenda",
       "conversations": "Conversas",
       "patients": "Pacientes",
+      "feedback": "Satisfação",
       "services": "Serviços",
       "professionals": "Profissionais",
       "businessHours": "Horários",
@@ -334,6 +335,51 @@
         "HUMAN": "Um humano está respondendo"
       }
     },
+    "feedback": {
+      "title": "Satisfação",
+      "subtitle": "Como os pacientes avaliaram sua experiência pós-atendimento.",
+      "loadError": "Não foi possível carregar os dados de satisfação ({status}).",
+      "empty": {
+        "title": "Ainda não recebeu respostas de satisfação",
+        "description": "Ative o follow-up em algum profissional para começar a receber avaliações dos seus pacientes. Cada vez que marcar uma consulta como ATENDIDA envia uma mensagem pedindo 1-5 estrelas."
+      },
+      "stats": {
+        "total": {
+          "title": "Respostas totais",
+          "hint": "Pacientes que responderam à pesquisa."
+        },
+        "average": {
+          "title": "Média geral"
+        },
+        "positive": {
+          "title": "Avaliações positivas",
+          "hint": "% de notas 4 e 5 estrelas."
+        },
+        "top": {
+          "title": "Profissional melhor avaliado",
+          "hint": "{avg}★ · {count, plural, one {# resposta} other {# respostas}}",
+          "empty": "Sem dados por profissional ainda."
+        }
+      },
+      "distribution": {
+        "title": "Distribuição de notas"
+      },
+      "byProfessional": {
+        "title": "Por profissional",
+        "empty": "Sem dados por profissional ainda.",
+        "headers": {
+          "name": "Profissional",
+          "count": "Respostas",
+          "average": "Média"
+        }
+      },
+      "recent": {
+        "title": "Últimas respostas",
+        "empty": "Sem respostas recentes.",
+        "unnamed": "Paciente sem nome",
+        "metaLine": "{professional} · {service}"
+      }
+    },
     "conversations": {
       "title": "Caixa",
       "subtitle": "Mensagens recebidas do WhatsApp.",
@@ -502,6 +548,7 @@
         "profile": "Perfil profissional",
         "services": "Serviços que atende",
         "visual": "Visual",
+        "followUp": "Follow-up pós-atendimento",
         "calendar": "Sincronização com calendário"
       },
       "fields": {
@@ -535,6 +582,14 @@
         "loading": "Gerando URL…",
         "unavailable": "URL indisponível",
         "instructions": "iOS: Ajustes → Calendário → Contas → Adicionar conta → Outra → Adicionar calendário assinado. Android: Google Calendar → Adicionar por URL."
+      },
+      "followUp": {
+        "toggleLabel": "Pedir feedback ao paciente após o atendimento",
+        "toggleHint": "Quando você marca uma consulta como ATENDIDA, envia automaticamente uma mensagem pedindo ao paciente que avalie a experiência de 1 a 5.",
+        "delayLabel": "Enviar mensagem N horas depois",
+        "delaySuffix": "horas depois",
+        "delayError": "O intervalo deve estar entre 0 e 168 horas (7 dias).",
+        "hint": "Deixe em 2h para o paciente ainda ter a experiência fresca. Máximo 168h (7 dias)."
       },
       "errors": {
         "required": "Obrigatório.",

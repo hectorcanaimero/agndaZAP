@@ -4,6 +4,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { SchedulingModule } from './scheduling/scheduling.module';
 import { RemindersModule } from './reminders/reminders.module';
+import { FollowUpsModule } from './follow-ups/follow-ups.module';
 import { BotModule } from './bot/bot.module';
 import { PublicModule } from './public/public.module';
 import { AuthModule } from './auth/auth.module';
@@ -17,6 +18,7 @@ import { ConversationsModule } from './conversations/conversations.module';
 import { PatientsModule } from './patients/patients.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { FaqModule } from './faq/faq.module';
+import { FeedbackModule } from './feedback/feedback.module';
 import { HealthModule } from './health/health.module';
 
 /**
@@ -36,6 +38,7 @@ import { HealthModule } from './health/health.module';
     WhatsappModule,
     SchedulingModule,
     RemindersModule,
+    FollowUpsModule,
     BotModule,
     PublicModule,
     AuthModule,
@@ -49,6 +52,7 @@ import { HealthModule } from './health/health.module';
     PatientsModule,
     DashboardModule,
     FaqModule,
+    FeedbackModule,
     HealthModule,
   ],
 })

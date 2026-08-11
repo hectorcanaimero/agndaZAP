@@ -9,6 +9,7 @@ import { Clinic, Conversation, Service } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import Redis from 'ioredis';
 import { DateTime } from 'luxon';
+import { FollowUpsService } from '../follow-ups/follow-ups.service';
 import { KnowledgeService } from '../knowledge/knowledge.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { REDIS_CLIENT } from '../public/rate-limit.guard';
@@ -24,7 +25,12 @@ type FlowStep =
   | 'ASK_PROFESSIONAL'
   | 'ASK_SLOT'
   | 'ASK_NAME'
-  | 'CONFIRM';
+  | 'CONFIRM'
+  // Sub-FSM de follow-up post-atención (satisfacción). El processor deja la
+  // conversation en AWAITING_NPS_SCORE al mandar el prompt; el paciente
+  // responde 1-5, opcionalmente sigue con un comentario. Ver ADR 0012.
+  | 'AWAITING_NPS_SCORE'
+  | 'AWAITING_NPS_COMMENT';
 
 /** Datos acumulados durante la FSM, persistidos en Conversation.flowData. */
 interface FlowData {
@@ -37,6 +43,10 @@ interface FlowData {
   choices?: Array<{ id: string; label: string }>;
   /** Nombre del paciente capturado en ASK_NAME (solo si no existía en DB). */
   patientName?: string;
+  /** Sub-FSM de feedback: id de la cita que estamos puntuando. */
+  feedbackAppointmentId?: string;
+  /** Sub-FSM de feedback: score ya capturado, esperando comentario opcional. */
+  feedbackScore?: number;
 }
 
 /**
@@ -62,6 +72,7 @@ export class BotService {
     private readonly prisma: PrismaService,
     private readonly waha: WahaService,
     private readonly reminders: RemindersService,
+    private readonly followUps: FollowUpsService,
     private readonly intent: IntentService,
     private readonly availability: AvailabilityService,
     private readonly scheduling: SchedulingService,
@@ -459,6 +470,12 @@ export class BotService {
         return;
       case 'CONFIRM':
         await this.handleConfirm(clinic, convo, data, normalized, originalText);
+        return;
+      case 'AWAITING_NPS_SCORE':
+        await this.handleAwaitingNpsScore(clinic, convo, data, normalized);
+        return;
+      case 'AWAITING_NPS_COMMENT':
+        await this.handleAwaitingNpsComment(clinic, convo, data, originalText);
         return;
       default:
         // Estado desconocido: resetear y arrancar de cero.
@@ -1114,6 +1131,122 @@ export class BotService {
     return DateTime.fromISO(iso, { zone: clinic.timezone })
       .setLocale(clinic.locale)
       .toFormat("cccc d 'de' LLLL 'a las' HH:mm");
+  }
+
+  // ─────────────────────────── Sub-FSM: feedback ───────────────────────────
+
+  // AWAITING_NPS_SCORE: paciente responde el prompt de satisfacción con un
+  // número 1-5. Aceptamos también el número escrito ("cinco") sólo para 1-5.
+  // Fuera de rango o texto que no matchea: le pedimos que corrija (no
+  // reseteamos la sub-FSM porque podría estar tipeando distinto).
+  private async handleAwaitingNpsScore(
+    clinic: Clinic,
+    convo: Conversation,
+    data: FlowData,
+    normalized: string,
+  ): Promise<void> {
+    const apptId = data.feedbackAppointmentId;
+    if (!apptId) {
+      // Estado corrupto: caemos gracefully al reset.
+      await this.resetFlow(convo.id);
+      return;
+    }
+
+    const score = this.parseNpsScore(normalized);
+    if (score === null) {
+      await this.reply(
+        clinic.wahaSession,
+        convo.chatId,
+        convo.id,
+        'No entendí. Respondeme con un número del *1* al *5*.',
+      );
+      return;
+    }
+
+    const { created } = await this.followUps.recordFeedback(
+      clinic.id,
+      apptId,
+      score,
+    );
+
+    if (!created) {
+      // Ya había respondido antes. Le agradecemos igual y cerramos sub-FSM.
+      await this.resetFlow(convo.id);
+      await this.reply(
+        clinic.wahaSession,
+        convo.chatId,
+        convo.id,
+        '¡Gracias por tu respuesta!',
+      );
+      return;
+    }
+
+    // Guardamos el score en flowData y pasamos a esperar comentario opcional.
+    const nextData: FlowData = { ...data, feedbackScore: score };
+    await this.prisma.conversation.update({
+      where: { id: convo.id },
+      data: {
+        flowStep: 'AWAITING_NPS_COMMENT',
+        flowData: nextData as object,
+      },
+    });
+
+    await this.reply(
+      clinic.wahaSession,
+      convo.chatId,
+      convo.id,
+      '¡Gracias! Si querés contarnos algo más, escribilo ahora ' +
+        '(o respondé *no* para finalizar).',
+    );
+  }
+
+  // AWAITING_NPS_COMMENT: 2do paso opcional. El paciente puede mandar un
+  // texto libre que se guarda como `Feedback.comment`, o "no"/"nada"/"listo"
+  // para cerrar sin comentario. En ambos casos reseteamos la sub-FSM.
+  private async handleAwaitingNpsComment(
+    clinic: Clinic,
+    convo: Conversation,
+    data: FlowData,
+    originalText: string,
+  ): Promise<void> {
+    const apptId = data.feedbackAppointmentId;
+    const skip = ['no', 'nada', 'listo', 'ok'].includes(
+      originalText.trim().toLowerCase(),
+    );
+
+    if (apptId && !skip) {
+      // Actualizamos el comment del feedback existente (la row se creó en el
+      // paso previo). NO usamos followUps.recordFeedback porque ya existe.
+      await this.prisma.feedback.update({
+        where: { appointmentId: apptId },
+        data: { comment: originalText.trim().slice(0, 1000) },
+      });
+    }
+
+    await this.resetFlow(convo.id);
+    await this.reply(
+      clinic.wahaSession,
+      convo.chatId,
+      convo.id,
+      '¡Muchas gracias por tu tiempo! Que tengas un buen día.',
+    );
+  }
+
+  // Parsea "5", "cinco", " 3 " → 1-5 | null si no es válido.
+  // Solo aceptamos escrito para dígitos 1-5 (rango de nuestro NPS/CSAT).
+  private parseNpsScore(input: string): number | null {
+    const t = input.trim().toLowerCase();
+    const digit = Number.parseInt(t, 10);
+    if (Number.isInteger(digit) && digit >= 1 && digit <= 5) return digit;
+    const map: Record<string, number> = {
+      uno: 1,
+      dos: 2,
+      tres: 3,
+      cuatro: 4,
+      cinco: 5,
+    };
+    if (t in map) return map[t];
+    return null;
   }
 
   private async resetFlow(convoId: string): Promise<void> {

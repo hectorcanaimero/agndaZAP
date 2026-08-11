@@ -18,6 +18,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { tenantWhere, type AuthUser } from '../auth/tenant-context.util';
+import { FollowUpsService } from '../follow-ups/follow-ups.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RemindersService } from '../reminders/reminders.service';
 import { AvailabilityService } from '../scheduling/availability.service';
@@ -57,6 +58,7 @@ export class AppointmentsController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly reminders: RemindersService,
+    private readonly followUps: FollowUpsService,
     private readonly scheduling: SchedulingService,
     private readonly availability: AvailabilityService,
   ) {}
@@ -317,10 +319,18 @@ export class AppointmentsController {
         dto.status === AppointmentStatus.NO_SHOW
       ) {
         await this.reminders.cancelForAppointment(id);
+        // Además, si se revierte una ATENDIDA, cancelamos el follow-up
+        // pendiente. `cancelForAppointment` es silent-fail.
+        await this.followUps.cancelForAppointment(id);
+      } else if (dto.status === AppointmentStatus.ATENDIDA) {
+        // Encolamos el follow-up post-atención. Respeta la config del
+        // profesional (`followUpEnabled` + `followUpDelayHours`). Si el
+        // profesional lo tiene apagado, es no-op.
+        await this.followUps.scheduleForAppointment(id);
       }
     } catch (e) {
       this.logger.error(
-        `reminders side-effect falló apptId=${id} status=${dto.status}: ${(e as Error).message}`,
+        `side-effect (reminders/follow-ups) falló apptId=${id} status=${dto.status}: ${(e as Error).message}`,
       );
     }
 

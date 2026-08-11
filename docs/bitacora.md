@@ -1,5 +1,17 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-08-10 — Feedback post-atención (satisfacción) — PR #15
+- Sistema end-to-end para medir satisfacción por WhatsApp cuando una cita pasa a ATENDIDA. Ver [[adr/0012-feedback-post-atencion|ADR 0012]] para el "por qué" completo.
+- **Schema**: `Professional.followUpEnabled` (default `false`) + `followUpDelayHours` (default `2h`, rango 0-168), y nuevo modelo `Feedback` (score 1-5, `comment?`, unique en `appointmentId`).
+- **Backend `FollowUpsModule`**: Queue BullMQ separada de reminders (mismo Redis). `scheduleForAppointment` se dispara desde `AppointmentsController` en `case ATENDIDA` con fail-open. Processor manda prompt "1-5" y deja `Conversation.flowStep=AWAITING_NPS_SCORE`.
+- **Sub-FSM del bot**: `AWAITING_NPS_SCORE` parsea dígito o palabra (`uno`…`cinco`). Guarda el `Feedback`, avanza a `AWAITING_NPS_COMMENT` (texto libre max 1000 chars o "no"/"nada"/"listo" para cerrar). Idempotente por unique — 2da respuesta se ignora silenciosamente pero se agradece.
+- **Backend `FeedbackController`**: `GET /api/feedback` (lista, filtro por `professionalId`, cap 200), `GET /api/feedback/summary` (count, avg, distribución 1-5, ranking por profesional). Multi-tenant estricto vía `tenantWhere` (el modelo tiene `clinicId` propio).
+- **Frontend**: sección "Follow-up post-atención" en `panel/profesionales` (toggle + input horas + hint), y nueva página `panel/feedback` con stat cards (total, promedio, % 4-5★, top prof), distribución 5→1, ranking por profesional, lista de últimas respuestas con estrellas + comment. Entry "Feedback"/"Satisfação" en el nav (sección "Operación").
+- **i18n** es/pt paridad OK: `panel.feedback.*`, `panel.professionals.followUp.*`, `panel.nav.feedback`.
+- **Decisión clave**: escala **1-5 en vez de NPS 0-10** — cabe en un mensaje corto, intuitivo en voseo, y para volumen bajo por tenant NPS es overkill. En código `Feedback` (neutro); en UI "satisfacción/experiencia".
+- **Delay = 2h default** (consensuado): fresca la experiencia, pero el paciente ya salió. Rango 0-168h configurable por profesional (0 útil para dev).
+- **Tests**: 337/337 backend siguen pasando. Actualicé mocks de `AppointmentsController` (DI de `FollowUpsService`) y `BotService` (idem + `recordFeedback`).
+
 ## 2026-08-10 — CI + observability básica (plan B — punto 3/4)
 - Sin CI antes de esto — los checks corrían solo en local del dev. Los bugs de i18n post-merge (3× en la sesión) confirmaron la necesidad. Este PR mueve TODOS los quality gates a CI automatizado.
 - **`.github/workflows/ci.yml`** con 2 jobs paralelos (`backend` + `web`):
