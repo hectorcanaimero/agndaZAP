@@ -1,0 +1,88 @@
+name: CI
+
+# Corre en PRs contra las branches "integration" (staged) y "prod" (main),
+# y también en push directo a esas branches (post-merge sanity check).
+on:
+  pull_request:
+    branches: [staged, main]
+  push:
+    branches: [staged, main]
+
+# Cancela runs viejos si se pushea de nuevo al mismo PR — ahorra minutos.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Fuerza no-interactive en instaladores y hace que los logs sean parseables.
+  CI: true
+  # pnpm ejecuta más chill con esta env (evita prompts de fixes automáticos).
+  PNPM_HOME: /home/runner/.local/share/pnpm
+
+jobs:
+  # ─────────────────────────── BACKEND ───────────────────────────
+  # tsc + jest. NO ejecutamos migrate ni levantamos servicios reales —
+  # los tests usan mocks (`jest.fn()`), no conectan a Postgres/Redis.
+  backend:
+    name: Backend — tsc + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies (frozen)
+        run: pnpm install --frozen-lockfile
+
+      # Prisma Client se genera al install (postinstall del package), pero
+      # explicitarlo evita sorpresas si en algún momento se saca ese hook.
+      - name: Prisma generate
+        working-directory: apps/backend
+        run: pnpm exec prisma generate
+
+      - name: TypeScript check
+        working-directory: apps/backend
+        run: pnpm exec tsc --noEmit
+
+      - name: Unit tests
+        working-directory: apps/backend
+        run: pnpm test
+
+  # ─────────────────────────── WEB ───────────────────────────
+  # tsc + i18n validation. NO ejecutamos `next build` en CI por ahora — es
+  # lento y el typecheck ya cubre el 90% de los errores que atrapa el build.
+  # Cuando se quiera atrapar errores de bundling (dynamic imports, edge
+  # runtime), agregar step `pnpm --filter @agendazap/web build`.
+  web:
+    name: Web — tsc + i18n
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies (frozen)
+        run: pnpm install --frozen-lockfile
+
+      - name: TypeScript check
+        working-directory: apps/web
+        run: pnpm exec tsc --noEmit
+
+      # i18n check custom — valida paridad estricta es/pt + missing keys por
+      # consumidor. Ver scripts/i18n-check.mjs para el detalle.
+      - name: i18n check (paridad + missing keys)
+        run: node scripts/i18n-check.mjs
