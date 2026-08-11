@@ -70,9 +70,13 @@ Actualización sobre el borrador inicial de este ADR (que anticipaba
   paths en scripts de CI si existen, y el nombre en el remote GitHub. Es
   cleanup independiente que puede hacerse después junto con `git mv` /
   rename del repositorio en GitHub.
-- **Nombre del paquete pnpm** (`@agendazap/*`). Renombrarlo obliga a
+- ~~**Nombre del paquete pnpm** (`@agendazap/*`). Renombrarlo obliga a
   regenerar `pnpm-lock.yaml` y a actualizar todos los imports internos.
-  Deuda menor — se puede hacer en un commit separado sin urgencia.
+  Deuda menor — se puede hacer en un commit separado sin urgencia.~~
+  **Cerrado en commit posterior**: pasa a `@showly/{backend,web,shared}`.
+  El `pnpm-lock.yaml` no cambió (pnpm resuelve workspaces por path, no
+  por nombre) y no había imports internos consumiendo el `shared` (era
+  package stub). Dockerfiles + comentarios de scripts actualizados.
 
 ## Consecuencias
 

@@ -23,7 +23,7 @@
  * re-correr, borramos primero esas filas y las regeneramos con timestamps
  * frescos (los últimos 30 días son relativos a `DateTime.now()`).
  *
- * Ejecutar: `pnpm --filter @agendazap/backend prisma db seed`.
+ * Ejecutar: `pnpm --filter @showly/backend prisma db seed`.
  */
 import {
   PrismaClient,
