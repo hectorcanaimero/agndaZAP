@@ -937,5 +937,203 @@
         "statusFetchFailed": "No se pudo consultar el estado (reintentando…)"
       }
     }
+  },
+  "landing": {
+    "meta": {
+      "title": "gochat — Agendamiento por WhatsApp para clínicas",
+      "description": "gochat agenda, confirma y recuerda las citas de tu clínica por WhatsApp. Menos no-shows, más pacientes atendidos."
+    },
+    "nav": {
+      "brand": "gochat",
+      "howItWorks": "Cómo funciona",
+      "features": "Funcionalidades",
+      "pricing": "Precio",
+      "faq": "Preguntas",
+      "signIn": "Iniciar sesión",
+      "primaryCta": "Solicita tu demo",
+      "openMenu": "Abrir menú",
+      "closeMenu": "Cerrar menú"
+    },
+    "hero": {
+      "eyebrow": "Agendamiento por WhatsApp para clínicas",
+      "headline": "Deja de perder pacientes por no-show.",
+      "subheadline": "gochat agenda, confirma y recuerda las citas de tu clínica por WhatsApp. Sin apps, sin capacitación, sin fricción para el paciente.",
+      "primaryCta": "Solicita tu demo",
+      "secondaryCta": "Ver cómo funciona",
+      "trust": "En piloto con clínicas de LATAM y Brasil.",
+      "altReceptionist": "Recepcionista de clínica revisando su WhatsApp con calma",
+      "photoCaption": "Menos tiempo en el chat. Más tiempo con la clínica.",
+      "mock": {
+        "clinicName": "Clínica Aurora",
+        "clinicStatus": "en línea",
+        "patient": "Hola, quiero una cita con la Dra. Ríos.",
+        "bot1": "¡Hola! Estos son los próximos horarios con la Dra. Ríos:",
+        "botOptions": "1. Mar 12 · 09:30\n2. Mié 13 · 15:00\n3. Jue 14 · 11:00",
+        "botHint": "Responde con el número o escribe otra fecha.",
+        "patientReply": "1",
+        "botConfirm": "Listo. Cita confirmada para el martes 12 a las 9:30. ✅",
+        "reminderBadge": "Recordatorio automático 24h antes",
+        "reminderText": "Hola María, te esperamos mañana a las 9:30. Responde SÍ para confirmar, REAGENDAR para cambiar."
+      }
+    },
+    "problem": {
+      "eyebrow": "El problema",
+      "headline": "El WhatsApp de tu clínica se volvió un caos.",
+      "subheadline": "Se estima que las clínicas pequeñas y medianas en LATAM pierden entre un 20% y un 30% de sus ingresos por inasistencias y gestión manual de turnos.",
+      "points": {
+        "one": {
+          "title": "La recepción vive respondiendo.",
+          "body": "Cien mensajes al día para agendar, mover y confirmar. Se le va el turno en el chat."
+        },
+        "two": {
+          "title": "Nadie confirma sistemáticamente.",
+          "body": "Los recordatorios los mandas tú, cuando puedes. La mitad no responde."
+        },
+        "three": {
+          "title": "El horario se pierde.",
+          "body": "Cuando alguien no aparece, ese slot ya no se recupera. Y no sabes cuánto te costó."
+        }
+      }
+    },
+    "howItWorks": {
+      "eyebrow": "Cómo funciona",
+      "headline": "Tres pasos. Sin apps que instalar.",
+      "steps": {
+        "one": {
+          "number": "01",
+          "title": "El paciente escribe por WhatsApp.",
+          "body": "Al mismo número de siempre. No instala nada, no crea cuentas. Solo pregunta."
+        },
+        "two": {
+          "number": "02",
+          "title": "gochat agenda, confirma y recuerda.",
+          "body": "El bot entiende la consulta, ofrece horarios reales de tu agenda, crea la cita y envía recordatorios 24h y 3h antes."
+        },
+        "three": {
+          "number": "03",
+          "title": "Tú ves todo desde el panel.",
+          "body": "Agenda visual, bandeja de conversaciones y dashboard de no-show. Toma la conversación cuando el bot no alcance."
+        }
+      }
+    },
+    "features": {
+      "eyebrow": "Funcionalidades",
+      "headline": "Diseñado para el día a día de una clínica.",
+      "items": {
+        "reminders": {
+          "title": "Recordatorios anti no-show",
+          "body": "Configurables por clínica. 24h y 3h antes por defecto. El paciente confirma con un SÍ o pide reagendar."
+        },
+        "handoff": {
+          "title": "Handoff a humano",
+          "body": "Cuando el bot no entiende o el paciente pide una persona, tu equipo toma la conversación y el bot se calla."
+        },
+        "faq": {
+          "title": "Base de conocimiento",
+          "body": "Precios, dirección, horarios, formas de pago. El bot responde desde tu propia base — sin alucinar."
+        },
+        "multiPro": {
+          "title": "Multi-profesional",
+          "body": "Cada profesional con su agenda, servicios, horarios y feed iCal para sincronizar con Google Calendar o iPhone."
+        },
+        "feedback": {
+          "title": "Feedback post-atención",
+          "body": "Encuesta automática de 1 a 5 estrellas después de cada consulta. Sin formularios, sin encuestas externas."
+        },
+        "multiTenant": {
+          "title": "Multi-idioma y multi-zona",
+          "body": "Español y português. Cada clínica configura su zona horaria. Los recordatorios respetan feriados y bloqueos."
+        }
+      }
+    },
+    "testimonial": {
+      "badge": "Piloto en curso",
+      "altPortrait": "Retrato de una dueña de clínica participante del piloto de gochat",
+      "quote": "Antes contestaba WhatsApp entre paciente y paciente. Ahora entro al panel a la mañana y ya tengo el día armado.",
+      "author": "Dueña de clínica",
+      "role": "Piloto gochat · LATAM"
+    },
+    "forWhom": {
+      "eyebrow": "Para quién",
+      "headline": "Si tu clínica agenda por WhatsApp, gochat es para ti.",
+      "cards": {
+        "consultorios": {
+          "title": "Consultorios pequeños",
+          "body": "Uno a tres profesionales, agenda mixta, recepción compartida."
+        },
+        "clinicas": {
+          "title": "Clínicas polivalentes",
+          "body": "Varios servicios, múltiples profesionales, agenda con feriados y bloqueos."
+        },
+        "estetica": {
+          "title": "Centros de estética y bienestar",
+          "body": "Turnos por sesión, tratamientos con buffer entre citas."
+        },
+        "especialistas": {
+          "title": "Especialistas",
+          "body": "Odontología, kinesiología, psicología, nutrición. Cada uno con su ritmo."
+        }
+      }
+    },
+    "faq": {
+      "eyebrow": "Preguntas frecuentes",
+      "headline": "Lo que suelen preguntarnos.",
+      "items": {
+        "phone": {
+          "question": "¿Necesito un número de WhatsApp nuevo?",
+          "answer": "Sí. Recomendamos un número dedicado para la clínica, distinto del personal. Puede ser prepago o corporativo."
+        },
+        "install": {
+          "question": "¿El paciente tiene que instalar algo?",
+          "answer": "No. El paciente solo escribe al WhatsApp de la clínica, como siempre. No hay apps, cuentas ni descargas."
+        },
+        "business": {
+          "question": "¿Funciona con WhatsApp Business?",
+          "answer": "Sí. Usamos un número dedicado que puede ser Business. En la fase piloto usamos WAHA (una integración no oficial) para bajar costos."
+        },
+        "onboarding": {
+          "question": "¿Cuánto tarda dar de alta mi clínica?",
+          "answer": "Menos de una hora. Cargamos servicios, profesionales y horarios contigo. La misma tarde ya recibes citas por WhatsApp."
+        },
+        "privacy": {
+          "question": "¿Los datos de mis pacientes están seguros?",
+          "answer": "Sí. Todo cifrado en tránsito, datos aislados por clínica, y minimizamos lo que se almacena. Los mensajes viven en tu sesión de WhatsApp."
+        },
+        "price": {
+          "question": "¿Cuánto cuesta?",
+          "answer": "Estamos en fase piloto. Solicita una demo y armamos condiciones a la medida de tu clínica."
+        }
+      }
+    },
+    "cta": {
+      "headline": "Recupera las horas que tu equipo gasta en WhatsApp.",
+      "subheadline": "En menos de una hora tu clínica está agendando y confirmando por WhatsApp. Sin cambiar de número.",
+      "primaryCta": "Solicita tu demo",
+      "secondaryCta": "Ver la página pública de una clínica"
+    },
+    "footer": {
+      "brand": "gochat",
+      "statement": "Agendamiento por WhatsApp para clínicas. Menos no-shows, más pacientes atendidos.",
+      "columns": {
+        "product": {
+          "title": "Producto",
+          "links": {
+            "howItWorks": "Cómo funciona",
+            "features": "Funcionalidades",
+            "faq": "Preguntas frecuentes"
+          }
+        },
+        "company": {
+          "title": "Empresa",
+          "links": {
+            "contact": "Contacto",
+            "privacy": "Privacidad",
+            "terms": "Términos"
+          }
+        }
+      },
+      "language": "Idioma",
+      "copyright": "© {year} gochat. Hecho con cariño para clínicas de LATAM y Brasil."
+    }
   }
 }
