@@ -961,6 +961,12 @@
       "primaryCta": "Solicite sua demo",
       "secondaryCta": "Veja como funciona",
       "trust": "Em piloto com clínicas na LATAM e no Brasil.",
+      "trustStrip": {
+        "pilot": "Em piloto com clínicas na LATAM",
+        "whatsapp": "O WhatsApp que seus pacientes já usam",
+        "onboarding": "Onboarding em menos de 1 hora",
+        "multilang": "Português e español"
+      },
       "altReceptionist": "Recepcionista de clínica olhando seu WhatsApp com calma",
       "photoCaption": "Menos tempo no chat. Mais tempo na clínica.",
       "mock": {

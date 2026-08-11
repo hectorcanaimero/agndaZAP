@@ -1,8 +1,24 @@
 import Image from 'next/image';
 import { useTranslations } from 'next-intl';
-import { ArrowRight } from 'lucide-react';
+import {
+  ArrowRight,
+  FlaskConical,
+  Languages,
+  MessageCircle,
+  Zap,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { WhatsAppMock } from './WhatsAppMock';
+
+// Trust strip — señales de confianza CONCRETAS Y HONESTAS. No inventamos
+// clientes ("+X clínicas"), no fingimos logos de "as featured in". Cada
+// chip refleja una realidad verificable del producto o del piloto.
+const TRUST_ITEMS = [
+  { Icon: FlaskConical, key: 'pilot' },
+  { Icon: MessageCircle, key: 'whatsapp' },
+  { Icon: Zap, key: 'onboarding' },
+  { Icon: Languages, key: 'multilang' },
+] as const;
 
 // Marquee Hero — copy izquierda + doble evidencia en la derecha:
 // mock chat (producto) apilado con foto real de una recepcionista
@@ -60,7 +76,26 @@ export function Hero() {
               </Button>
             </div>
 
-            <p className="mt-6 text-sm text-neutral-500">{t('trust')}</p>
+            {/*
+              Trust strip: chips inline con icono + label. Visual: chips
+              transparentes con borde neutral suave — no compiten con el
+              CTA primario. En mobile hacen wrap natural (gap-y-2), en
+              desktop caen en una sola fila hasta lg.
+            */}
+            <ul className="mt-8 flex flex-wrap items-center gap-x-2.5 gap-y-2">
+              {TRUST_ITEMS.map(({ Icon, key }) => (
+                <li
+                  key={key}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white/70 px-3 py-1.5 text-xs font-medium text-neutral-700 backdrop-blur"
+                >
+                  <Icon
+                    className="h-3.5 w-3.5 text-brand-700"
+                    aria-hidden="true"
+                  />
+                  {t(`trustStrip.${key}`)}
+                </li>
+              ))}
+            </ul>
           </div>
 
           <div className="min-w-0 space-y-8 lg:space-y-6">

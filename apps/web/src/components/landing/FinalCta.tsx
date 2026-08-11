@@ -9,7 +9,7 @@ export function FinalCta() {
   const t = useTranslations('landing.cta');
 
   return (
-    <section id="cta" className="bg-neutral-950 py-20 lg:py-28">
+    <section id="cta" className="bg-neutral-50 py-20 lg:py-28">
       <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-700 via-brand-600 to-brand-500 p-8 sm:p-12 lg:p-14">
           {/* Textura decorativa sutil — radial de puntos claros. */}

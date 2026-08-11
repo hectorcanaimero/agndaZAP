@@ -40,9 +40,16 @@ export default async function LandingPage({
         <ProblemSection />
         <HowItWorksSection />
         <FeaturesSection />
-        <Testimonial />
+        {/*
+          Orden: ForWhom antes de FAQ para que el visitante se auto-identifique
+          ("¿es para mi consultorio?") antes de las preguntas de detalle.
+          Testimonial va JUSTO antes de FinalCta — patrón probado
+          "social proof → CTA" (levantamos confianza inmediatamente antes
+          de pedir la acción).
+        */}
         <ForWhomSection />
         <FaqSection />
+        <Testimonial />
         <FinalCta />
       </main>
       <Footer />
