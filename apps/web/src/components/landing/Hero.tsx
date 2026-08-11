@@ -1,27 +1,26 @@
+import Image from 'next/image';
 import { useTranslations } from 'next-intl';
 import { ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { WhatsAppMock } from './WhatsAppMock';
 
-// Marquee Hero macrostructure — bold entrance con headline display grande,
-// subhead sustancial, dos CTAs, y enrichment CSS-art a la derecha.
-// En mobile: copy arriba, mock debajo (columna única).
+// Marquee Hero — copy izquierda + doble evidencia en la derecha:
+// mock chat (producto) apilado con foto real de una recepcionista
+// (humano). La foto solo aparece desktop; mobile solo mock para no
+// alargar el hero.
 export function Hero() {
   const t = useTranslations('landing.hero');
 
   return (
     <section className="relative overflow-x-clip bg-white">
-      {/* Grid de fondo sutil — decorativo, aria-hidden.
-          Motivo: reforzar sensación de "sistema" / "agenda" sin ruido. */}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 -z-10 [background-image:linear-gradient(to_right,rgba(0,0,0,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(0,0,0,0.04)_1px,transparent_1px)] [background-size:56px_56px] [mask-image:radial-gradient(ellipse_at_top,black,transparent_70%)]"
       />
 
       <div className="mx-auto max-w-6xl px-4 pb-16 pt-16 sm:px-6 sm:pt-24 lg:px-8 lg:pb-24 lg:pt-28">
-        <div className="grid items-center gap-12 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-16">
-          {/* Copy */}
-          <div className="min-w-0">
+        <div className="grid items-start gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-16">
+          <div className="min-w-0 lg:pt-6">
             <span className="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-medium uppercase tracking-widest text-brand-800">
               <span
                 aria-hidden="true"
@@ -64,9 +63,34 @@ export function Hero() {
             <p className="mt-6 text-sm text-neutral-500">{t('trust')}</p>
           </div>
 
-          {/* Mock */}
-          <div className="min-w-0 lg:pl-4">
+          <div className="min-w-0 space-y-8 lg:space-y-6">
             <WhatsAppMock />
+
+            <div className="relative hidden lg:block">
+              <div className="relative aspect-[16/10] w-full overflow-hidden rounded-3xl border border-neutral-200 shadow-lg shadow-neutral-900/10">
+                <Image
+                  src="/landing/hero-receptionist.jpg"
+                  alt={t('altReceptionist')}
+                  fill
+                  sizes="520px"
+                  className="object-cover object-[center_25%]"
+                  priority
+                />
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 via-transparent"
+                />
+                <div className="absolute bottom-4 left-4 right-4">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-neutral-800 shadow-md backdrop-blur">
+                    <span
+                      aria-hidden="true"
+                      className="h-1.5 w-1.5 rounded-full bg-brand-600"
+                    />
+                    {t('photoCaption')}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

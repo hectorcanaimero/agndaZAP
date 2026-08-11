@@ -71,3 +71,7 @@ skills-lock.json
 
 # Playwright MCP artifacts (snapshots temporales por sesión)
 .playwright-mcp/
+
+# Da Vinci — carpeta local de generación (manifest + outputs sin curar).
+# Los assets finales viven en apps/web/public/landing/ (curados a mano).
+apps/*/assets/generated/

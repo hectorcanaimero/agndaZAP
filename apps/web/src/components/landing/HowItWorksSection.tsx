@@ -1,12 +1,18 @@
 import { useTranslations } from 'next-intl';
+import { IconChatWrite, IconCalendarCheck, IconDashboard } from './icons';
 
-// How it works — tres pasos genuinamente ordinales (los números 01/02/03
-// están permitidos por Hallmark porque el contenido ES secuencial).
-// Layout: tres columnas desktop, apiladas mobile, con línea conectora sutil.
+// How it works — tres pasos ordinales (los números 01/02/03 son OK acá,
+// el contenido ES secuencial). Cada paso lleva su icono custom hand-built
+// más el número — doble reforzamiento visual sin caer en iconografía
+// genérica (lucide + circulito con número es EL patrón AI landing).
+const STEPS = [
+  { key: 'one', Icon: IconChatWrite },
+  { key: 'two', Icon: IconCalendarCheck },
+  { key: 'three', Icon: IconDashboard },
+] as const;
+
 export function HowItWorksSection() {
   const t = useTranslations('landing.howItWorks');
-
-  const steps = ['one', 'two', 'three'] as const;
 
   return (
     <section id="how-it-works" className="bg-white py-20 lg:py-28">
@@ -24,16 +30,18 @@ export function HowItWorksSection() {
         </div>
 
         <ol className="relative mt-14 grid gap-8 md:grid-cols-3 lg:mt-20 lg:gap-12">
-          {/* Línea conectora horizontal — solo desktop, decorativa */}
           <span
             aria-hidden="true"
-            className="pointer-events-none absolute left-0 right-0 top-6 hidden h-px bg-gradient-to-r from-transparent via-brand-200 to-transparent md:block"
+            className="pointer-events-none absolute left-0 right-0 top-8 hidden h-px bg-gradient-to-r from-transparent via-brand-200 to-transparent md:block"
           />
 
-          {steps.map((key) => (
+          {STEPS.map(({ key, Icon }) => (
             <li key={key} className="relative min-w-0">
-              <div className="flex items-center gap-4">
-                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full border-2 border-brand-600 bg-white font-display text-base font-semibold text-brand-700">
+              <div className="relative z-10 flex items-center gap-3">
+                <span className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl border border-neutral-200 bg-white text-brand-700 shadow-sm">
+                  <Icon className="h-7 w-7" />
+                </span>
+                <span className="font-display text-4xl font-semibold leading-none text-neutral-300">
                   {t(`steps.${key}.number`)}
                 </span>
               </div>

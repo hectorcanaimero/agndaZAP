@@ -1,33 +1,31 @@
 import { useTranslations } from 'next-intl';
 import {
-  BellRing,
-  UserRoundCheck,
-  BookText,
-  Users,
-  Star,
-  Globe2,
-} from 'lucide-react';
+  IconReminder,
+  IconHandoff,
+  IconKnowledge,
+  IconMultiPro,
+  IconFeedback,
+  IconMultiLang,
+} from './icons';
 
+// Bento asymmetric layout — rompe la grid uniforme 3×2 que es el patrón
+// canónico de landing SaaS AI-era. Recordatorios (el diferenciador
+// principal del producto) ocupa 2 columnas y se destaca con tratamiento
+// visual distinto (fondo gradient + textura + icono grande).
 const ITEMS = [
-  { key: 'reminders', Icon: BellRing },
-  { key: 'handoff', Icon: UserRoundCheck },
-  { key: 'faq', Icon: BookText },
-  { key: 'multiPro', Icon: Users },
-  { key: 'feedback', Icon: Star },
-  { key: 'multiTenant', Icon: Globe2 },
+  { key: 'reminders', Icon: IconReminder, span: 'md:col-span-2 lg:row-span-2' },
+  { key: 'handoff', Icon: IconHandoff, span: '' },
+  { key: 'faq', Icon: IconKnowledge, span: '' },
+  { key: 'multiPro', Icon: IconMultiPro, span: '' },
+  { key: 'feedback', Icon: IconFeedback, span: '' },
+  { key: 'multiTenant', Icon: IconMultiLang, span: 'md:col-span-2 lg:col-span-1' },
 ] as const;
 
-// Features grid — 3x2 desktop, 2x3 tablet, 1 columna mobile.
-// Sin celebración excesiva: cada tarjeta es un ícono + título + body,
-// mismo peso visual (rechaza los patrones "1 feature huge + 5 chiquitas").
 export function FeaturesSection() {
   const t = useTranslations('landing.features');
 
   return (
-    <section
-      id="features"
-      className="bg-neutral-50 py-20 lg:py-28"
-    >
+    <section id="features" className="bg-white py-20 lg:py-28">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <div className="max-w-2xl">
           <span className="text-xs font-medium uppercase tracking-widest text-brand-700">
@@ -41,23 +39,54 @@ export function FeaturesSection() {
           </h2>
         </div>
 
-        <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:mt-16 lg:grid-cols-3">
-          {ITEMS.map(({ key, Icon }) => (
-            <article
-              key={key}
-              className="min-w-0 rounded-2xl border border-neutral-200 bg-white p-6 transition-shadow hover:shadow-md"
-            >
-              <div className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-brand-600 text-white">
-                <Icon className="h-5 w-5" aria-hidden="true" />
-              </div>
-              <h3 className="mt-5 text-base font-semibold text-neutral-950">
-                {t(`items.${key}.title`)}
-              </h3>
-              <p className="mt-2 text-sm leading-relaxed text-neutral-600">
-                {t(`items.${key}.body`)}
-              </p>
-            </article>
-          ))}
+        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:mt-16 lg:grid-cols-3 lg:auto-rows-[minmax(0,1fr)]">
+          {ITEMS.map(({ key, Icon, span }, idx) => {
+            const isFeatured = idx === 0;
+            return (
+              <article
+                key={key}
+                className={`group relative min-w-0 overflow-hidden rounded-2xl border p-6 transition-shadow hover:shadow-md ${span} ${
+                  isFeatured
+                    ? 'border-brand-200 bg-gradient-to-br from-brand-50 via-white to-white lg:p-8'
+                    : 'border-neutral-200 bg-white'
+                }`}
+              >
+                {isFeatured && (
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-brand-100/50 blur-2xl"
+                  />
+                )}
+                <div className="relative">
+                  <div
+                    className={`inline-flex items-center justify-center rounded-xl ${
+                      isFeatured
+                        ? 'h-12 w-12 bg-brand-600 text-white'
+                        : 'h-10 w-10 bg-brand-50 text-brand-700'
+                    }`}
+                  >
+                    <Icon className={isFeatured ? 'h-6 w-6' : 'h-5 w-5'} />
+                  </div>
+                  <h3
+                    className={`mt-5 font-semibold text-neutral-950 ${
+                      isFeatured
+                        ? 'font-display text-xl sm:text-2xl'
+                        : 'text-base'
+                    }`}
+                  >
+                    {t(`items.${key}.title`)}
+                  </h3>
+                  <p
+                    className={`mt-2 leading-relaxed text-neutral-600 ${
+                      isFeatured ? 'text-base' : 'text-sm'
+                    }`}
+                  >
+                    {t(`items.${key}.body`)}
+                  </p>
+                </div>
+              </article>
+            );
+          })}
         </div>
       </div>
     </section>

@@ -1,15 +1,18 @@
 import { useTranslations } from 'next-intl';
-import { Stethoscope, Hospital, Sparkles, GraduationCap } from 'lucide-react';
+import {
+  IconConsultorio,
+  IconClinic,
+  IconWellness,
+  IconSpecialist,
+} from './icons';
 
 const CARDS = [
-  { key: 'consultorios', Icon: Stethoscope },
-  { key: 'clinicas', Icon: Hospital },
-  { key: 'estetica', Icon: Sparkles },
-  { key: 'especialistas', Icon: GraduationCap },
+  { key: 'consultorios', Icon: IconConsultorio },
+  { key: 'clinicas', Icon: IconClinic },
+  { key: 'estetica', Icon: IconWellness },
+  { key: 'especialistas', Icon: IconSpecialist },
 ] as const;
 
-// Para quién — grid 2x2 desktop, apilado mobile. Rompe el patrón feature-grid
-// para no repetir la misma forma dos secciones seguidas.
 export function ForWhomSection() {
   const t = useTranslations('landing.forWhom');
 
@@ -36,7 +39,7 @@ export function ForWhomSection() {
             >
               <div className="flex items-start gap-4">
                 <div className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700 transition-colors group-hover:bg-brand-100">
-                  <Icon className="h-5 w-5" aria-hidden="true" />
+                  <Icon className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-lg font-semibold text-neutral-950">

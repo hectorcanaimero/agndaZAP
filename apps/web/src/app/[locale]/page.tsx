@@ -5,6 +5,7 @@ import { Hero } from '@/components/landing/Hero';
 import { ProblemSection } from '@/components/landing/ProblemSection';
 import { HowItWorksSection } from '@/components/landing/HowItWorksSection';
 import { FeaturesSection } from '@/components/landing/FeaturesSection';
+import { Testimonial } from '@/components/landing/Testimonial';
 import { ForWhomSection } from '@/components/landing/ForWhomSection';
 import { FaqSection } from '@/components/landing/FaqSection';
 import { FinalCta } from '@/components/landing/FinalCta';
@@ -39,6 +40,7 @@ export default async function LandingPage({
         <ProblemSection />
         <HowItWorksSection />
         <FeaturesSection />
+        <Testimonial />
         <ForWhomSection />
         <FaqSection />
         <FinalCta />

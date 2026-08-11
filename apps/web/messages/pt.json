@@ -961,6 +961,8 @@
       "primaryCta": "Solicite sua demo",
       "secondaryCta": "Veja como funciona",
       "trust": "Em piloto com clínicas na LATAM e no Brasil.",
+      "altReceptionist": "Recepcionista de clínica olhando seu WhatsApp com calma",
+      "photoCaption": "Menos tempo no chat. Mais tempo na clínica.",
       "mock": {
         "clinicName": "Clínica Aurora",
         "clinicStatus": "online",
@@ -1043,6 +1045,13 @@
           "body": "Português e español. Cada clínica configura seu fuso horário. Os lembretes respeitam feriados e bloqueios."
         }
       }
+    },
+    "testimonial": {
+      "badge": "Piloto em andamento",
+      "altPortrait": "Retrato de uma dona de clínica participante do piloto do gochat",
+      "quote": "Antes eu respondia WhatsApp entre um paciente e outro. Agora entro no painel de manhã e o dia já está montado.",
+      "author": "Dona de clínica",
+      "role": "Piloto gochat · LATAM"
     },
     "forWhom": {
       "eyebrow": "Para quem",
