@@ -1108,8 +1108,40 @@
     "cta": {
       "headline": "Recupera las horas que tu equipo gasta en WhatsApp.",
       "subheadline": "En menos de una hora tu clínica está agendando y confirmando por WhatsApp. Sin cambiar de número.",
-      "primaryCta": "Solicita tu demo",
-      "secondaryCta": "Ver la página pública de una clínica"
+      "trust": "Sin tarjeta. Sin instalación. Onboarding acompañado.",
+      "form": {
+        "labels": {
+          "name": "Tu nombre",
+          "phone": "WhatsApp de contacto",
+          "clinicType": "Tipo de negocio (opcional)",
+          "consent": "Acepto que me contacten por WhatsApp o email para coordinar la demo."
+        },
+        "placeholders": {
+          "name": "Ej: María González",
+          "phone": "+52 55 1234 5678",
+          "clinicType": "Elegí una opción"
+        },
+        "clinicTypes": {
+          "consultorio": "Consultorio individual",
+          "clinica": "Clínica multi-profesional",
+          "estetica": "Estética o wellness",
+          "especialista": "Especialista independiente",
+          "otro": "Otro"
+        },
+        "submit": "Quiero probarlo",
+        "submitting": "Enviando…",
+        "successToast": "Recibimos tu mensaje. Te escribimos en breve.",
+        "successTitle": "Listo. Te contactamos en menos de 24 horas.",
+        "successBody": "Vamos a escribirte por WhatsApp para coordinar la demo y responder tus dudas.",
+        "errors": {
+          "nameMin": "Ingresá al menos 2 caracteres.",
+          "phoneInvalid": "Formato inválido. Ej: +52 55 1234 5678.",
+          "consent": "Necesitamos tu autorización para contactarte.",
+          "rateLimit": "Recibimos muchas solicitudes. Probá de nuevo en un minuto.",
+          "validation": "Revisá los datos e intentá de nuevo.",
+          "generic": "No pudimos enviar el mensaje. Probá de nuevo."
+        }
+      }
     },
     "footer": {
       "brand": "gochat",

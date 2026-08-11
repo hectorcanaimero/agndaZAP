@@ -338,3 +338,36 @@ model FaqChunk {
 
   @@index([clinicId])
 }
+
+// ─────────────────────────── Marketing / Leads ───────────────────────────
+// Prospects capturados desde la landing pública. NO tienen FK a Clinic
+// porque todavía no son clientes — son candidatos a serlo. El follow-up
+// es manual (por ahora): el owner ve la lista, contacta por WhatsApp, y
+// va marcando `status` conforme avanza el funnel.
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  DEMO
+  CONVERTED
+  LOST
+}
+
+model Lead {
+  id          String     @id @default(cuid())
+  name        String     @db.VarChar(80)
+  phone       String     @db.VarChar(20) // E.164 normalizado con `+`
+  clinicType  String?    @db.VarChar(40) // consultorio|clinica|estetica|especialista|otro
+  notes       String?    @db.VarChar(500)
+  source      String     @default("landing") @db.VarChar(20)
+  locale      String     @db.VarChar(2)  // es | pt
+  ip          String?    @db.VarChar(45) // IPv6 max 45
+  userAgent   String?    @db.VarChar(500)
+  status      LeadStatus @default(NEW)
+  contactedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([status, createdAt])
+  @@index([phone])
+}
