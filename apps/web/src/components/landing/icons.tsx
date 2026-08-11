@@ -1,5 +1,5 @@
 /*
- * Iconos hand-built SVG para la landing de gochat.
+ * Iconos hand-built SVG para la landing de Showly.
  *
  * Motivación: reemplazar el pack lucide (que se ve idéntico a cualquier otra
  * landing SaaS AI-era) por un set custom con estilo propio — trazo 1.75px,

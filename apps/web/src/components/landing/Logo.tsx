@@ -16,11 +16,11 @@ export function Logo({ variant = 'full', className }: LogoProps) {
         variant === 'full' && 'text-xl font-semibold tracking-tight',
         className,
       )}
-      aria-label="gochat"
+      aria-label="Showly"
     >
       <LogoMark className="h-7 w-7" />
       {variant === 'full' && (
-        <span className="font-sans text-neutral-900 lowercase">gochat</span>
+        <span className="font-sans text-neutral-900">Showly</span>
       )}
     </span>
   );

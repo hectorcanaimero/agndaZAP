@@ -17,7 +17,7 @@ const config: Config = {
     },
     extend: {
       colors: {
-        // Paleta base — la ajustamos cuando arranque el branding real de AgendaZap.
+        // Paleta base — la ajustamos cuando arranque el branding real de Showly.
         // Escala 50-900 completa para poder construir todas las variantes semánticas
         // sin hardcodear hex. Ver `src/components/ui/tokens.ts` para los tokens
         // derivados (APPOINTMENT_STATUS_TOKENS, CONVERSATION_STATE_TOKENS, etc.).

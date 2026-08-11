@@ -49,7 +49,7 @@ export default async function LoginPage({
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 backdrop-blur-sm ring-1 ring-white/25">
               <Sparkles className="h-5 w-5 text-white" strokeWidth={2.25} />
             </div>
-            <span className="text-lg font-semibold tracking-tight">AgendaZap</span>
+            <span className="text-lg font-semibold tracking-tight">Showly</span>
           </div>
 
           {/* Copy central */}

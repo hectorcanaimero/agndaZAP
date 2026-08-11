@@ -1,13 +1,29 @@
-import Image from 'next/image';
 import { useTranslations } from 'next-intl';
-import { ArrowRight } from 'lucide-react';
+import {
+  ArrowRight,
+  FlaskConical,
+  Languages,
+  MessageCircle,
+  Zap,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { WhatsAppMock } from './WhatsAppMock';
 
-// Marquee Hero — copy izquierda + doble evidencia en la derecha:
-// mock chat (producto) apilado con foto real de una recepcionista
-// (humano). La foto solo aparece desktop; mobile solo mock para no
-// alargar el hero.
+// Trust strip — señales de confianza CONCRETAS Y HONESTAS. No inventamos
+// clientes ("+X clínicas"), no fingimos logos de "as featured in". Cada
+// chip refleja una realidad verificable del producto o del piloto.
+const TRUST_ITEMS = [
+  { Icon: FlaskConical, key: 'pilot' },
+  { Icon: MessageCircle, key: 'whatsapp' },
+  { Icon: Zap, key: 'onboarding' },
+  { Icon: Languages, key: 'multilang' },
+] as const;
+
+// Hero — copy + trust strip a la izquierda, mock del bot a la derecha.
+// La foto de la recepcionista se quito: mandaba un mensaje ambiguo ("va a
+// ser reemplazada") justo para el segmento hesitante con automatizacion.
+// El mock ahora tiene frame de telefono realista y peso visual suficiente
+// para llevar la derecha solo.
 export function Hero() {
   const t = useTranslations('landing.hero');
 
@@ -60,37 +76,30 @@ export function Hero() {
               </Button>
             </div>
 
-            <p className="mt-6 text-sm text-neutral-500">{t('trust')}</p>
+            {/*
+              Trust strip: chips inline con icono + label. Visual: chips
+              transparentes con borde neutral suave — no compiten con el
+              CTA primario. En mobile hacen wrap natural (gap-y-2), en
+              desktop caen en una sola fila hasta lg.
+            */}
+            <ul className="mt-8 flex flex-wrap items-center gap-x-2.5 gap-y-2">
+              {TRUST_ITEMS.map(({ Icon, key }) => (
+                <li
+                  key={key}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white/70 px-3 py-1.5 text-xs font-medium text-neutral-700 backdrop-blur"
+                >
+                  <Icon
+                    className="h-3.5 w-3.5 text-brand-700"
+                    aria-hidden="true"
+                  />
+                  {t(`trustStrip.${key}`)}
+                </li>
+              ))}
+            </ul>
           </div>
 
-          <div className="min-w-0 space-y-8 lg:space-y-6">
+          <div className="min-w-0">
             <WhatsAppMock />
-
-            <div className="relative hidden lg:block">
-              <div className="relative aspect-[16/10] w-full overflow-hidden rounded-3xl border border-neutral-200 shadow-lg shadow-neutral-900/10">
-                <Image
-                  src="/landing/hero-receptionist.jpg"
-                  alt={t('altReceptionist')}
-                  fill
-                  sizes="520px"
-                  className="object-cover object-[center_25%]"
-                  priority
-                />
-                <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 via-transparent"
-                />
-                <div className="absolute bottom-4 left-4 right-4">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-neutral-800 shadow-md backdrop-blur">
-                    <span
-                      aria-hidden="true"
-                      className="h-1.5 w-1.5 rounded-full bg-brand-600"
-                    />
-                    {t('photoCaption')}
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>

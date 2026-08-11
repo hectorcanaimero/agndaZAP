@@ -20,6 +20,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { FaqModule } from './faq/faq.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { HealthModule } from './health/health.module';
+import { LeadsModule } from './leads/leads.module';
 
 /**
  * Raíz de la app. La validación global (ValidationPipe) se aplica en main.ts.
@@ -54,6 +55,7 @@ import { HealthModule } from './health/health.module';
     FaqModule,
     FeedbackModule,
     HealthModule,
+    LeadsModule,
   ],
 })
 export class AppModule {}

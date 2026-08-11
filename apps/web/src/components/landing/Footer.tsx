@@ -44,6 +44,14 @@ export function Footer() {
               </li>
               <li>
                 <a
+                  href="#pricing"
+                  className="text-neutral-700 transition-colors hover:text-brand-700"
+                >
+                  {t('columns.product.links.pricing')}
+                </a>
+              </li>
+              <li>
+                <a
                   href="#faq"
                   className="text-neutral-700 transition-colors hover:text-brand-700"
                 >
@@ -61,7 +69,7 @@ export function Footer() {
             <ul className="mt-4 space-y-3 text-sm">
               <li>
                 <a
-                  href="mailto:hola@gochat.app"
+                  href="mailto:hola@showly.app"
                   className="text-neutral-700 transition-colors hover:text-brand-700"
                 >
                   {t('columns.company.links.contact')}

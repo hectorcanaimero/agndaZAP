@@ -1,5 +1,5 @@
 /**
- * Design tokens semánticos de AgendaZap.
+ * Design tokens semánticos de Showly.
  *
  * Fuente de verdad de las clases Tailwind para estados y visualizaciones.
  * Cualquier componente que necesite colorear un status DEBE consumir estos

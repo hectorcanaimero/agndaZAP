@@ -1,5 +1,5 @@
 /**
- * Prisma seed — AgendaZap
+ * Prisma seed — Showly
  *
  * Datos mínimos y reproducibles para probar el flujo end-to-end del endpoint
  * público (`/api/public/clinics/demo/*`) y la FSM del bot en local, MÁS un
@@ -184,7 +184,7 @@ async function main() {
     clinicId: string | null;
   }> = [
     {
-      email: 'super@agendazap.dev',
+      email: 'super@showly.dev',
       plain: 'super1234',
       name: 'Super Admin',
       role: 'SUPERADMIN',
@@ -279,7 +279,7 @@ async function main() {
 
   console.log('\nseed v1 aplicado:');
   console.log(`  clínica: ${clinic.slug} (${clinic.id})`);
-  console.log('  users:   super@agendazap.dev · admin@demo.dev');
+  console.log('  users:   super@showly.dev · admin@demo.dev');
   console.log(
     `  data:    ${services.length} services · ${professionals.length} professionals · ${patientsCount} patients · ${appointmentsCount} appointments · ${remindersCount} reminders · ${conversationsCount} conversations · ${faqSamples.length} FAQs`,
   );

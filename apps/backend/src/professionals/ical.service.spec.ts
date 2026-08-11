@@ -108,7 +108,7 @@ describe('IcalService', () => {
       ]);
       const ics = await svc.buildFeed('prof-1');
       expect(ics).toContain('BEGIN:VEVENT');
-      expect(ics).toContain('UID:appt-appt-1@agendazap');
+      expect(ics).toContain('UID:appt-appt-1@showly');
       expect(ics).toContain('DTSTART:20300601T140000Z');
       expect(ics).toContain('DTEND:20300601T143000Z');
       expect(ics).toContain('SUMMARY:Ana · Consulta');

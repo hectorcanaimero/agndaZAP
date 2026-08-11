@@ -72,7 +72,7 @@ export class IcalService {
     if (!prof) {
       // No filtramos con clinicId acá porque el token ya prueba conocimiento
       // del ID. Si el profesional fue borrado, devolvemos un feed vacío válido.
-      return this.emptyFeed('AgendaZap');
+      return this.emptyFeed('Showly');
     }
 
     const now = DateTime.now();
@@ -110,7 +110,7 @@ export class IcalService {
     const lines: string[] = [
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
-      'PRODID:-//AgendaZap//iCal Feed//ES',
+      'PRODID:-//Showly//iCal Feed//ES',
       'CALSCALE:GREGORIAN',
       'METHOD:PUBLISH',
       `X-WR-CALNAME:${this.escape(`${clinicName} · ${professionalName}`)}`,
@@ -120,7 +120,7 @@ export class IcalService {
     for (const a of appts) {
       lines.push(
         'BEGIN:VEVENT',
-        `UID:appt-${a.id}@agendazap`,
+        `UID:appt-${a.id}@showly`,
         `DTSTAMP:${this.formatUtc(a.updatedAt)}`,
         `DTSTART:${this.formatUtc(a.startAt)}`,
         `DTEND:${this.formatUtc(a.endAt)}`,
@@ -195,7 +195,7 @@ export class IcalService {
       [
         'BEGIN:VCALENDAR',
         'VERSION:2.0',
-        'PRODID:-//AgendaZap//iCal Feed//ES',
+        'PRODID:-//Showly//iCal Feed//ES',
         'CALSCALE:GREGORIAN',
         `X-WR-CALNAME:${this.escape(name)}`,
         'END:VCALENDAR',

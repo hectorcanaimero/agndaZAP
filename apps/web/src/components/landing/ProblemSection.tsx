@@ -43,7 +43,7 @@ export function ProblemSection() {
               {t('eyebrow')}
             </span>
             <h2
-              className="mt-3 font-display text-3xl font-semibold leading-tight tracking-tight text-neutral-950 sm:text-4xl lg:text-5xl"
+              className="mt-3 font-display text-2xl font-semibold leading-tight tracking-tight text-neutral-950 sm:text-3xl lg:text-4xl"
               style={{ overflowWrap: 'anywhere' }}
             >
               {t('headline')}

@@ -111,7 +111,7 @@ export function LoginForm({ locale }: LoginFormProps) {
           <Sparkles className="h-4 w-4" strokeWidth={2.25} />
         </div>
         <span className="text-base font-semibold tracking-tight text-foreground">
-          AgendaZap
+          Showly
         </span>
       </div>
 

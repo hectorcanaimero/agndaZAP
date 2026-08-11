@@ -179,7 +179,7 @@ export function PanelShell({ locale, me, children }: PanelShellProps) {
             <Sparkles className="h-4 w-4" strokeWidth={2.25} />
           </div>
           <span className="text-base font-semibold tracking-tight">
-            AgendaZap
+            Showly
           </span>
         </div>
 
@@ -303,7 +303,7 @@ export function PanelShell({ locale, me, children }: PanelShellProps) {
               <Sparkles className="h-3.5 w-3.5" strokeWidth={2.25} />
             </div>
             <p className="min-w-0 truncate text-sm font-semibold">
-              {me.clinic?.name ?? 'AgendaZap'}
+              {me.clinic?.name ?? 'Showly'}
             </p>
           </div>
           {/* Avatar iniciales — abre logout via dropdown también en mobile */}

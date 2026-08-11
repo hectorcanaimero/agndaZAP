@@ -1,5 +1,5 @@
 /**
- * Auth client para el panel admin de AgendaZap.
+ * Auth client para el panel admin de Showly.
  *
  * Deuda documentada (MVP):
  * - El JWT vive en un cookie no-httpOnly. Motivo: el SPA cliente necesita leer
@@ -12,7 +12,7 @@
 import { API_URL } from './api';
 
 /** Nombre del cookie donde vive el accessToken. */
-export const AUTH_COOKIE_NAME = 'agendazap_token';
+export const AUTH_COOKIE_NAME = 'showly_token';
 
 /** Cookie válido por 24h — matchea `expiresIn` del JWT en el backend. */
 const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24;

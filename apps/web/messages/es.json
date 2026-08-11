@@ -940,14 +940,14 @@
   },
   "landing": {
     "meta": {
-      "title": "gochat — Agendamiento por WhatsApp para clínicas",
-      "description": "gochat agenda, confirma y recuerda las citas de tu clínica por WhatsApp. Menos no-shows, más pacientes atendidos."
+      "title": "Showly — Agendamiento por WhatsApp para clínicas",
+      "description": "Showly agenda, confirma y recuerda las citas de tu clínica por WhatsApp. Menos no-shows, más pacientes atendidos."
     },
     "nav": {
-      "brand": "gochat",
+      "brand": "Showly",
       "howItWorks": "Cómo funciona",
       "features": "Funcionalidades",
-      "pricing": "Precio",
+      "pricing": "Precios",
       "faq": "Preguntas",
       "signIn": "Iniciar sesión",
       "primaryCta": "Solicita tu demo",
@@ -957,12 +957,16 @@
     "hero": {
       "eyebrow": "Agendamiento por WhatsApp para clínicas",
       "headline": "Deja de perder pacientes por no-show.",
-      "subheadline": "gochat agenda, confirma y recuerda las citas de tu clínica por WhatsApp. Sin apps, sin capacitación, sin fricción para el paciente.",
+      "subheadline": "Showly agenda, confirma y recuerda las citas de tu clínica por WhatsApp. Sin apps, sin capacitación, sin fricción para el paciente.",
       "primaryCta": "Solicita tu demo",
       "secondaryCta": "Ver cómo funciona",
       "trust": "En piloto con clínicas de LATAM y Brasil.",
-      "altReceptionist": "Recepcionista de clínica revisando su WhatsApp con calma",
-      "photoCaption": "Menos tiempo en el chat. Más tiempo con la clínica.",
+      "trustStrip": {
+        "pilot": "En piloto con clínicas de LATAM",
+        "whatsapp": "El WhatsApp que ya usan tus pacientes",
+        "onboarding": "Onboarding en menos de 1 hora",
+        "multilang": "Español y português"
+      },
       "mock": {
         "clinicName": "Clínica Aurora",
         "clinicStatus": "en línea",
@@ -1006,7 +1010,7 @@
         },
         "two": {
           "number": "02",
-          "title": "gochat agenda, confirma y recuerda.",
+          "title": "Showly agenda, confirma y recuerda.",
           "body": "El bot entiende la consulta, ofrece horarios reales de tu agenda, crea la cita y envía recordatorios 24h y 3h antes."
         },
         "three": {
@@ -1048,14 +1052,58 @@
     },
     "testimonial": {
       "badge": "Piloto en curso",
-      "altPortrait": "Retrato de una dueña de clínica participante del piloto de gochat",
+      "altPortrait": "Retrato de una dueña de clínica participante del piloto de Showly",
       "quote": "Antes contestaba WhatsApp entre paciente y paciente. Ahora entro al panel a la mañana y ya tengo el día armado.",
       "author": "Dueña de clínica",
-      "role": "Piloto gochat · LATAM"
+      "role": "Piloto Showly · LATAM"
+    },
+    "pricing": {
+      "eyebrow": "Precios",
+      "headline": "Un solo plan mientras dure el piloto.",
+      "subheadline": "Sin tiers confusos, sin letra chica. Todo incluido para las clínicas que arrancan con nosotros.",
+      "badge": "Piloto",
+      "price": "Gratis",
+      "priceNote": "mientras dure el piloto",
+      "description": "Sin tarjeta de crédito. Sin compromiso. Tomamos la clínica de la mano en el arranque.",
+      "includesTitle": "Todo incluido",
+      "features": {
+        "bot": "Bot de agendamiento por WhatsApp",
+        "reminders": "Recordatorios 24h y 3h antes",
+        "panel": "Panel web para tu equipo (agenda, bandeja, dashboard)",
+        "multiLang": "Español y português",
+        "onboarding": "Onboarding acompañado en menos de 1 hora",
+        "unlimited": "Sin límite de citas ni de pacientes"
+      },
+      "cta": "Quiero entrar al piloto",
+      "afterPilot": "Cuando salgamos del piloto te avisaremos con 30 días de anticipación. Sin sorpresas."
+    },
+    "security": {
+      "eyebrow": "Seguridad y datos",
+      "headline": "Diseñado desde el código para clínicas.",
+      "subheadline": "Los datos de tus pacientes son sensibles. En vez de logos de compliance, te contamos cómo está hecho por dentro.",
+      "pillars": {
+        "isolation": {
+          "title": "Aislamiento por clínica",
+          "body": "Cada consulta a la base filtra por tu clínica. Es un patrón obligatorio en el código: ningún dato de otro tenant puede aparecer en tu panel."
+        },
+        "dedicated": {
+          "title": "WhatsApp dedicado por clínica",
+          "body": "Cada clínica corre en su propia sesión de WhatsApp, con su número. No compartimos canal entre tenants ni mezclamos conversaciones."
+        },
+        "noPii": {
+          "title": "Sin datos personales en logs",
+          "body": "Nombres, teléfonos y notas de pacientes no viajan a nuestros logs de servidor. Solo registramos IP y estado para depurar y frenar abuso."
+        },
+        "accessControl": {
+          "title": "Panel protegido por defecto",
+          "body": "Todo el panel exige sesión con JWT y valida el rol en cada acción. Los endpoints públicos (agendar, contacto) son la excepción explícita, no la regla."
+        }
+      },
+      "footnote": "Estamos en piloto — todavía no tenemos certificaciones formales como HIPAA o ISO 27001. Lo que sí tenemos son estas garantías escritas en el código, y las podemos mostrar cuando quieras."
     },
     "forWhom": {
       "eyebrow": "Para quién",
-      "headline": "Si tu clínica agenda por WhatsApp, gochat es para ti.",
+      "headline": "Si tu clínica agenda por WhatsApp, Showly es para ti.",
       "cards": {
         "consultorios": {
           "title": "Consultorios pequeños",
@@ -1108,11 +1156,43 @@
     "cta": {
       "headline": "Recupera las horas que tu equipo gasta en WhatsApp.",
       "subheadline": "En menos de una hora tu clínica está agendando y confirmando por WhatsApp. Sin cambiar de número.",
-      "primaryCta": "Solicita tu demo",
-      "secondaryCta": "Ver la página pública de una clínica"
+      "trust": "Sin tarjeta. Sin instalación. Onboarding acompañado.",
+      "form": {
+        "labels": {
+          "name": "Tu nombre",
+          "phone": "WhatsApp de contacto",
+          "clinicType": "Tipo de negocio (opcional)",
+          "consent": "Acepto que me contacten por WhatsApp o email para coordinar la demo."
+        },
+        "placeholders": {
+          "name": "Ej: María González",
+          "phone": "+52 55 1234 5678",
+          "clinicType": "Elegí una opción"
+        },
+        "clinicTypes": {
+          "consultorio": "Consultorio individual",
+          "clinica": "Clínica multi-profesional",
+          "estetica": "Estética o wellness",
+          "especialista": "Especialista independiente",
+          "otro": "Otro"
+        },
+        "submit": "Quiero probarlo",
+        "submitting": "Enviando…",
+        "successToast": "Recibimos tu mensaje. Te escribimos en breve.",
+        "successTitle": "Listo. Te contactamos en menos de 24 horas.",
+        "successBody": "Vamos a escribirte por WhatsApp para coordinar la demo y responder tus dudas.",
+        "errors": {
+          "nameMin": "Ingresá al menos 2 caracteres.",
+          "phoneInvalid": "Formato inválido. Ej: +52 55 1234 5678.",
+          "consent": "Necesitamos tu autorización para contactarte.",
+          "rateLimit": "Recibimos muchas solicitudes. Probá de nuevo en un minuto.",
+          "validation": "Revisá los datos e intentá de nuevo.",
+          "generic": "No pudimos enviar el mensaje. Probá de nuevo."
+        }
+      }
     },
     "footer": {
-      "brand": "gochat",
+      "brand": "Showly",
       "statement": "Agendamiento por WhatsApp para clínicas. Menos no-shows, más pacientes atendidos.",
       "columns": {
         "product": {
@@ -1120,6 +1200,7 @@
           "links": {
             "howItWorks": "Cómo funciona",
             "features": "Funcionalidades",
+            "pricing": "Precios",
             "faq": "Preguntas frecuentes"
           }
         },
@@ -1133,7 +1214,7 @@
         }
       },
       "language": "Idioma",
-      "copyright": "© {year} gochat. Hecho con cariño para clínicas de LATAM y Brasil."
+      "copyright": "© {year} Showly. Hecho con cariño para clínicas de LATAM y Brasil."
     }
   }
 }
