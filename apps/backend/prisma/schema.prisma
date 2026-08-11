@@ -50,6 +50,7 @@ model Clinic {
   appointments  Appointment[]
   conversations Conversation[]
   faqChunks     FaqChunk[]
+  feedback      Feedback[]
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -100,6 +101,12 @@ model Professional {
   // Color de calendar (hex, ej "#3b82f6"). Para diferenciar visualmente cuando
   // hay varios profesionales en la misma agenda.
   color     String?
+  // Follow-up post-atención: si `followUpEnabled=true`, cuando una cita del
+  // profesional pasa a ATENDIDA se encola un job BullMQ con delay =
+  // `followUpDelayHours` que le manda un mensaje al paciente pidiéndole
+  // feedback (escala 1-5 + comentario opcional). Ver ADR 0012.
+  followUpEnabled     Boolean @default(false)
+  followUpDelayHours  Int     @default(2)
   user      User?
   services  Service[] @relation("ProfessionalServices")
   businessHours BusinessHour[]
@@ -203,6 +210,7 @@ model Appointment {
   outcome        String?  // atendio | no_show | null
 
   reminders      Reminder[]
+  feedback       Feedback?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -231,6 +239,32 @@ model Reminder {
   sentAt        DateTime?
 
   @@index([fireAt, status])
+}
+
+// ─────────────────────────── Feedback (satisfacción post-atención) ────────────
+
+// Respuesta de satisfacción del paciente después de una cita ATENDIDA.
+// El disparo lo hace el processor `follow-ups` (ver `FollowUpsService`) N horas
+// después que `Appointment.status` pasa a ATENDIDA — N configurable por
+// `Professional.followUpDelayHours`. El bot pide `score` (1-5) y opcional
+// `comment` libre. Ver ADR 0012.
+//
+// `appointmentId` es unique — un paciente solo puede dejar 1 feedback por
+// cita. Si intenta responder dos veces, el segundo score se ignora
+// silenciosamente (el bot le agradece igual).
+model Feedback {
+  id            String   @id @default(cuid())
+  clinicId      String
+  clinic        Clinic   @relation(fields: [clinicId], references: [id])
+  appointmentId String   @unique
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  // Escala 1-5 (1 muy mala, 5 excelente). Ver ADR 0012 sobre por qué NO NPS 0-10.
+  score         Int
+  comment       String?
+  respondedAt   DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  @@index([clinicId, respondedAt])
 }
 
 // ─────────────────────────── Conversaciones (bandeja) ───────────────────────────

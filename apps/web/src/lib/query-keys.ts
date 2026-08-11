@@ -70,4 +70,14 @@ export const queryKeys = {
   patients: (q?: string) => ['patients', q ?? ''] as const,
   patient: (id: string) => ['patient', id] as const,
   patientHistory: (id: string) => ['patient', id, 'history'] as const,
+  /**
+   * Feedback post-atención. Ambos endpoints (`/api/feedback` y
+   * `/api/feedback/summary`) se invalidan al PATCH-ear un profesional
+   * (por si tocaron follow-up) — el prefijo `['feedback']` cubre ambos.
+   */
+  feedback: (filters?: {
+    professionalId?: string;
+    limit?: number;
+  }) => ['feedback', filters ?? {}] as const,
+  feedbackSummary: ['feedback', 'summary'] as const,
 } as const;

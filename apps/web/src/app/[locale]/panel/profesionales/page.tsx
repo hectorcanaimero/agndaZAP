@@ -13,6 +13,8 @@ interface Professional {
   avatarUrl: string | null;
   licenseNumber: string | null;
   color: string | null;
+  followUpEnabled: boolean;
+  followUpDelayHours: number;
   services: Array<{ id: string; name: string }>;
 }
 

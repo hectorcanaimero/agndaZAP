@@ -187,6 +187,12 @@ export class ProfessionalsController {
         data: {
           ...(dto.name !== undefined ? { name: dto.name } : {}),
           ...(dto.active !== undefined ? { active: dto.active } : {}),
+          ...(dto.followUpEnabled !== undefined
+            ? { followUpEnabled: dto.followUpEnabled }
+            : {}),
+          ...(dto.followUpDelayHours !== undefined
+            ? { followUpDelayHours: dto.followUpDelayHours }
+            : {}),
           ...this.pickProfileFields(dto),
           ...(dto.serviceIds
             ? {

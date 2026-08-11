@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { DateTime } from 'luxon';
+import { FollowUpsService } from '../follow-ups/follow-ups.service';
 import { KnowledgeService } from '../knowledge/knowledge.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RemindersService } from '../reminders/reminders.service';
@@ -29,6 +30,7 @@ describe('BotService — FSM de agendamiento', () => {
   let prisma: Deep<PrismaService>;
   let waha: Deep<WahaService>;
   let reminders: Deep<RemindersService>;
+  let followUps: Deep<FollowUpsService>;
   let intent: Deep<IntentService>;
   let availability: Deep<AvailabilityService>;
   let scheduling: Deep<SchedulingService>;
@@ -118,6 +120,11 @@ describe('BotService — FSM de agendamiento', () => {
       cancelForAppointment: jest.fn(),
       confirmAppointment: jest.fn(),
     };
+    followUps = {
+      scheduleForAppointment: jest.fn().mockResolvedValue(undefined),
+      cancelForAppointment: jest.fn().mockResolvedValue(undefined),
+      recordFeedback: jest.fn().mockResolvedValue({ created: true }),
+    };
     intent = { detect: jest.fn().mockResolvedValue(Intent.AGENDAR) };
     availability = {
       getSlots: jest.fn().mockResolvedValue([
@@ -150,6 +157,7 @@ describe('BotService — FSM de agendamiento', () => {
       prisma as unknown as PrismaService,
       waha as unknown as WahaService,
       reminders as unknown as RemindersService,
+      followUps as unknown as FollowUpsService,
       intent as unknown as IntentService,
       availability as unknown as AvailabilityService,
       scheduling as unknown as SchedulingService,
