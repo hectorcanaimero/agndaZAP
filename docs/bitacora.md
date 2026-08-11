@@ -1,5 +1,32 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-08-10 — Pacientes con historial (primer consumidor del MasterDetailShell)
+- Gap cerrado: el modelo `Patient` existía como referencia en `Appointment` y `Conversation` pero no tenía página propia. El operador no podía ver "quiénes son los pacientes de la clínica" ni consolidar su historial. Nueva ruta `/panel/pacientes` con master-detail.
+- **Primer consumidor del `<MasterDetailShell>` post-refactor** — validación práctica del componente extraído en el PR #12. El shell escaló bien: cero cambios necesarios, se usa con las props documentadas (`mobileSheetMaxWidth="sm:max-w-lg"` para dar más espacio al detail de 3 secciones).
+- Backend:
+  - Nuevo `PatientsModule` con `PatientsController` (`GET /`, `GET /:id`, `GET /:id/history`, `PATCH /:id`).
+  - `list` con búsqueda case-insensitive server-side (`contains + mode: insensitive` en Postgres via Prisma) por `name` y `phone`. Paginación con `limit`/`offset`. `_count.appointments` inline para el badge sin N+1.
+  - `history` devuelve últimas 50 citas ordenadas desc + conversación ligada (uno-a-uno, tomamos la más reciente si hay varias). Excluye `notes` de citas por PII hygiene.
+  - `update` sólo acepta `name` y `consent`. **Consent es ratchet legal** — solo se puede prender (false→true). Enviar `consent: false` con estado actual `true` se ignora silenciosamente para no perder evidencia LGPD/GDPR. Body vacío → no-op (evita UPDATE innecesario + `updatedAt` bump).
+  - Sin `POST /` — pacientes nacen automáticamente al crear cita o desde el bot. "Nuevo paciente manual" es baja prioridad.
+  - Sin cambios de schema.
+  - **15 tests nuevos** cubriendo list (sin q, con q, trim, limit/offset, aplana _count), findOne (happy + cross-tenant), history (404 + happy + short-circuit sin patient + conversation null), update (name, ratchet true→false ignorado, ratchet false→true, cross-tenant, body vacío). **337/337 verdes** en full suite.
+- Frontend:
+  - `PatientsClient` con `<MasterDetailShell>`. Búsqueda **server-side** (a diferencia de servicios/profesionales que filtran client-side) — pacientes pueden ser miles, cargar todos y filtrar en memoria escala mal. La `q` va en la query key para cachear por búsqueda.
+  - Row con avatar circular (iniciales del nombre o últimas 2 cifras del phone), meta con teléfono formateado (mismo `formatPhone` que conversaciones — cubre AR y BR) y contador de citas + badge verde de "Consent OK" cuando corresponde.
+  - Detail con 3 secciones:
+    1. **Identidad** — name editable, phone readonly con botón "Abrir en WhatsApp" (deep link `wa.me`), checkbox de consent (disabled si ya está en true — ratchet visual).
+    2. **Historial de citas** — timeline con chip de fecha (día + mes) tipo agenda, badge de status con color, servicio + profesional. Slice a 10 con "y N más" si hay más.
+    3. **Conversación** — link a `/panel/conversaciones?open={id}` con el último mensaje + estado como preview.
+  - Empty state SVG específico: silueta persona + 3 líneas al costado (evocando "ficha con historial") + sparkle amber.
+- Nav: entrada nueva "Pacientes" en la sección "Operación" con icono `UserRound`.
+- i18n: bloque `panel.patients` completo (~40 keys) + `panel.nav.patients` en es/pt. Paridad estricta validada con `diff <(jq)`. Missing keys scan corrido antes del commit.
+- Deuda:
+  - No hay UI para crear paciente manualmente → sigue naciendo del bot/cita.
+  - No hay merge de duplicados (mismo paciente con 2 phones) — flow separado con auditoría cuando aparezca la necesidad.
+  - No hay campos nuevos (birthdate, email, notes internas) — se agregan cuando la clínica los pida específicamente.
+- Archivos tocados: `apps/backend/src/patients/{patients.controller,patients.module,dto/{list-patients,update-patient}}.ts` (nuevos), `apps/backend/src/app.module.ts`, `apps/backend/src/patients/patients.controller.spec.ts` (nuevo), `apps/web/src/app/[locale]/panel/pacientes/{page,PatientsClient}.tsx` (nuevos), `apps/web/src/app/[locale]/panel/PanelShell.tsx`, `apps/web/src/lib/query-keys.ts`, `apps/web/messages/{es,pt}.json`.
+
 ## 2026-08-10 — Refactor: extract MasterDetailShell + useMobileSheet
 - Cierre del rollout master-detail: extracción de los helpers compartidos que estaban duplicados en los 5 clientes CRUD del panel (servicios, profesionales, horarios, bloqueos, faq).
 - Nuevo módulo `apps/web/src/components/panel/master-detail/`:

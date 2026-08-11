@@ -119,6 +119,7 @@
       "dashboard": "Dashboard",
       "agenda": "Agenda",
       "conversations": "Conversaciones",
+      "patients": "Pacientes",
       "services": "Servicios",
       "professionals": "Profesionales",
       "businessHours": "Horarios",
@@ -278,6 +279,59 @@
         "errPhone": "Teléfono inválido. Usá formato internacional (ej: +54 9 11 5555 5555).",
         "errServiceOrProfessional": "Elegí servicio y profesional.",
         "errConsent": "El consentimiento del paciente es obligatorio."
+      }
+    },
+    "patients": {
+      "title": "Pacientes",
+      "subtitle": "Todas las personas que agendaron o escribieron a la clínica.",
+      "loadError": "No se pudieron cargar los pacientes ({status}).",
+      "emptyList": "Sin pacientes cargados todavía.",
+      "noSearchResults": "Sin resultados para tu búsqueda.",
+      "searchPlaceholder": "Buscar por nombre o teléfono…",
+      "close": "Cerrar",
+      "cancel": "Cancelar",
+      "save": "Guardar cambios",
+      "saving": "Guardando…",
+      "saved": "Paciente actualizado.",
+      "saveFailed": "No se pudo guardar el paciente.",
+      "loading": "Cargando…",
+      "unnamed": "Sin nombre",
+      "detailLabel": "Paciente",
+      "openInWhatsApp": "Abrir en WhatsApp",
+      "countLabel": "{n, plural, one {# paciente} other {# pacientes}}",
+      "countMatch": "{n, plural, one {# coincide} other {# coinciden}}",
+      "appointmentCount": "{n, plural, one {# cita} other {# citas}}",
+      "consentShort": "Consent OK",
+      "moreAppointments": "y {n} más…",
+      "noAppointments": "Este paciente todavía no tiene citas.",
+      "noConversation": "Este paciente todavía no ha escrito por WhatsApp.",
+      "noMessages": "Sin mensajes",
+      "empty": {
+        "title": "Elegí un paciente",
+        "description": "Vas a ver su ficha, historial de citas y última conversación por WhatsApp."
+      },
+      "sections": {
+        "identity": "Identidad",
+        "appointments": "Historial de citas",
+        "conversation": "Conversación por WhatsApp"
+      },
+      "fields": {
+        "name": "Nombre",
+        "phone": "Teléfono",
+        "consent": "Consent para uso de datos (LGPD/GDPR)"
+      },
+      "placeholders": {
+        "name": "Ej: Ana Pérez"
+      },
+      "hints": {
+        "phone": "El teléfono es el identificador del paciente. Para cambiarlo, la persona tiene que crear una ficha nueva desde el bot.",
+        "consent": "Marcá cuando el paciente lo confirme por WhatsApp o de forma presencial. Una vez otorgado no se puede revocar desde acá.",
+        "consentGranted": "El paciente ya otorgó consent. Para revocarlo, contactá a soporte."
+      },
+      "convState": {
+        "BOT": "El bot está atendiendo",
+        "NEEDS_HUMAN": "Necesita atención humana",
+        "HUMAN": "Un humano está respondiendo"
       }
     },
     "conversations": {

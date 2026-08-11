@@ -61,4 +61,13 @@ export const queryKeys = {
    * (ej. agenda para el slot picker).
    */
   clinicMe: ['clinicMe'] as const,
+  /**
+   * Pacientes: lista paginada con `q` (search). Cambiar la query key ante
+   * cada `q` distinto es intencional — permite cache por búsqueda y refetch
+   * si se vuelve al mismo query. Prefix `['patients']` sirve para invalidar
+   * todo al hacer un PATCH.
+   */
+  patients: (q?: string) => ['patients', q ?? ''] as const,
+  patient: (id: string) => ['patient', id] as const,
+  patientHistory: (id: string) => ['patient', id, 'history'] as const,
 } as const;
