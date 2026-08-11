@@ -382,6 +382,14 @@ Idem para `web`. Este check es manual por ahora; automatizarlo en CI post-piloto
 
 **Base (piloto)**:
 
+- **`GET /api/health`** — endpoint público (sin auth) que responde 200
+  con `{ ok, db, redis, timestamp }`. Chequea Postgres (`SELECT 1`) y
+  Redis (`PING`). Responde 200 con `ok: false` cuando hay problemas —
+  el orquestador decide qué es "unhealthy". Consumido por:
+  - Docker healthcheck (agregar a `docker-compose.prod.yml` — cuando se
+    documente el override).
+  - Uptime Robot / BetterUptime externo: pegar cada 5 min a
+    `https://api.tudominio.com/api/health`, alertar si `ok !== true`.
 - `docker compose logs -f backend web` — tail de logs. Sin agregador
   externo por ahora.
 - `docker stats` — CPU/RAM en tiempo real.
@@ -529,13 +537,46 @@ Documentado en [[adr/0004-pii-y-compliance]] y [[adr/0005-auth-mvp-y-deuda]]:
 
 - **Backups off-site automatizados**: rclone → B2 post-piloto.
 - **Alerting WAHA disconnect** → Slack.
-- **Health check endpoint del backend** (`/api/health` público sin auth,
-  chequeo por Uptime Robot). Hoy: usamos `GET /api/dashboard/metrics`
-  esperando 401.
+- ~~**Health check endpoint del backend**~~ ✅ **Listo** — `GET /api/health`
+  público responde `{ ok, db, redis, timestamp }`. Ver sección 11.
 - **Grafana + Prometheus** para métricas de containers.
-- **Sentry** para errores del backend.
+- **Sentry** para errores del backend (opcional — hoy los logs
+  estructurados de NestJS + `docker logs` cubren MVP).
 - **Kubernetes / Nomad** si escalás a >20 clínicas concurrentes.
 - **Multi-región** (LATAM + Europa) cuando el churn de latencia se note.
+
+---
+
+## 16. Quality gates — validación pre-merge
+
+Todos los PRs contra `staged` o `main` corren automáticamente el
+workflow `.github/workflows/ci.yml`, que valida:
+
+### Backend
+- `pnpm exec tsc --noEmit` — TypeScript strict.
+- `pnpm test` — Jest full suite.
+
+### Web
+- `pnpm exec tsc --noEmit` — TypeScript strict (incluye chequeo
+  type-safe de `next-intl` — `IntlMessages` global, ver
+  `apps/web/global.d.ts`).
+- `node scripts/i18n-check.mjs` — paridad estricta de paths escalares
+  `es.json` ↔ `pt.json` + missing keys por consumidor. Cierra el patrón
+  de `MISSING_MESSAGE` / `FORMATTING_ERROR` que apareció 3+ veces en
+  producción antes de que el chequeo estuviera automatizado.
+
+### Local (mismos comandos que CI)
+
+```bash
+pnpm check          # todo (backend + web + i18n)
+pnpm check:backend  # solo backend (tsc + tests)
+pnpm check:web      # solo web (tsc + i18n)
+pnpm i18n:check     # solo i18n (paridad + missing keys)
+```
+
+**Regla**: no mergear PRs con CI en rojo. GitHub debería tener
+"require status checks to pass" activado en `staged`/`main` (setup
+manual en Settings → Branches).
 
 Referencias: [[PRD]], [[ARCHITECTURE]], [[onboarding-clinica]],
 [[runbook-panel]].
