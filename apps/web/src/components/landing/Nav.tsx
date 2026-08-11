@@ -17,6 +17,7 @@ export function Nav() {
   const links = [
     { href: '#how-it-works', label: t('howItWorks') },
     { href: '#features', label: t('features') },
+    { href: '#pricing', label: t('pricing') },
     { href: '#faq', label: t('faq') },
   ];
 

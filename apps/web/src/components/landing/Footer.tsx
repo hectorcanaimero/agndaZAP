@@ -44,6 +44,14 @@ export function Footer() {
               </li>
               <li>
                 <a
+                  href="#pricing"
+                  className="text-neutral-700 transition-colors hover:text-brand-700"
+                >
+                  {t('columns.product.links.pricing')}
+                </a>
+              </li>
+              <li>
+                <a
                   href="#faq"
                   className="text-neutral-700 transition-colors hover:text-brand-700"
                 >

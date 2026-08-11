@@ -947,7 +947,7 @@
       "brand": "gochat",
       "howItWorks": "Como funciona",
       "features": "Recursos",
-      "pricing": "Preço",
+      "pricing": "Preços",
       "faq": "Perguntas",
       "signIn": "Entrar",
       "primaryCta": "Solicite sua demo",
@@ -1059,6 +1059,26 @@
       "author": "Dona de clínica",
       "role": "Piloto gochat · LATAM"
     },
+    "pricing": {
+      "eyebrow": "Preços",
+      "headline": "Um único plano enquanto durar o piloto.",
+      "subheadline": "Sem tiers confusos, sem letra miúda. Tudo incluído para as clínicas que começam com a gente.",
+      "badge": "Piloto",
+      "price": "Grátis",
+      "priceNote": "enquanto durar o piloto",
+      "description": "Sem cartão de crédito. Sem compromisso. Levamos a clínica pela mão no início.",
+      "includesTitle": "Tudo incluído",
+      "features": {
+        "bot": "Bot de agendamento pelo WhatsApp",
+        "reminders": "Lembretes 24h e 3h antes",
+        "panel": "Painel web para sua equipe (agenda, caixa de entrada, dashboard)",
+        "multiLang": "Português e español",
+        "onboarding": "Onboarding acompanhado em menos de 1 hora",
+        "unlimited": "Sem limite de consultas ou pacientes"
+      },
+      "cta": "Quero entrar no piloto",
+      "afterPilot": "Quando sairmos do piloto avisamos com 30 dias de antecedência. Sem surpresas."
+    },
     "forWhom": {
       "eyebrow": "Para quem",
       "headline": "Se sua clínica agenda pelo WhatsApp, o gochat é para você.",
@@ -1158,6 +1178,7 @@
           "links": {
             "howItWorks": "Como funciona",
             "features": "Recursos",
+            "pricing": "Preços",
             "faq": "Perguntas frequentes"
           }
         },
