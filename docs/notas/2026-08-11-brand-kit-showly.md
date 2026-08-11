@@ -108,10 +108,18 @@ magick 32.png 64.png 512.png favicon.ico
 - [x] Actualizar `apps/web/src/app/[locale]/layout.tsx` con `metadata.icons` y
       `metadata.openGraph.images`. *Hecho — se usa el Metadata API de Next 15
       en vez de `<link rel="icon">` manual.*
-- [ ] Actualizar el mock de teléfono del hero (WhatsApp preview) para usar el favicon
-      como avatar de la conversación.
-- [ ] Registrar tokens `navy` y `teal` en `tailwind.config.ts` como colores semánticos
-      del brand (`brand-navy`, `brand-teal`).
+- [~] ~~Actualizar el mock de teléfono del hero (WhatsApp preview) para usar el favicon
+      como avatar de la conversación.~~ **Descartado 2026-08-11** — al revisar
+      `WhatsAppMock.tsx` se confirmó que el avatar "A" representa a la clínica cliente
+      del ejemplo ("Clínica Aurora"), no al producto Showly. El mock retrata cómo se
+      ve el WhatsApp de una clínica que USA Showly; poner el favicon Showly ahí sería
+      conceptualmente engañoso (el paciente le habla a su clínica, no a la plataforma).
+      El comentario intencional en `WhatsAppMock.tsx:14-27` ya justifica la decisión.
+- [x] Registrar tokens `navy` y `teal` en `tailwind.config.ts`. *Hecho 2026-08-11 —
+      agregados como `brand.navy` (`#0F2A4A`) y `brand.teal` (`#28D9B9`) dentro del
+      objeto `brand.*` existente. NO se tocó la escala verde `brand.50-900` porque
+      representa el canal WhatsApp (mock del hero, tokens de estado del panel), no al
+      producto Showly. Se documentó la coexistencia en el comentario del config.*
 
 ## Enlaces
 
