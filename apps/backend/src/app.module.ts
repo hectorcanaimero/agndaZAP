@@ -14,6 +14,7 @@ import { TimeOffModule } from './time-off/time-off.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { ClinicsModule } from './clinics/clinics.module';
 import { ConversationsModule } from './conversations/conversations.module';
+import { PatientsModule } from './patients/patients.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { FaqModule } from './faq/faq.module';
 import { HealthModule } from './health/health.module';
@@ -45,6 +46,7 @@ import { HealthModule } from './health/health.module';
     AppointmentsModule,
     ClinicsModule,
     ConversationsModule,
+    PatientsModule,
     DashboardModule,
     FaqModule,
     HealthModule,
