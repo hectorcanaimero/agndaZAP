@@ -58,9 +58,10 @@ público y técnico. Un solo nombre para toda la superficie.
 
 ### Email de contacto
 
-`hola@gochat.app` → `hola@showly.app`. El dominio `showly.app` se registra
-por separado. Si al momento del deploy todavía no está registrado, se
-levanta un TODO en el Footer para no dejar mailto roto en producción.
+`hola@gochat.app` → `hola@showly.tech`. El dominio final elegido para el
+producto es `showly.tech` (documentado en `docs/notas/2026-08-11-brand-kit-showly.md`).
+Actualización sobre el borrador inicial de este ADR (que anticipaba
+`showly.app` como default).
 
 ### Lo que NO se cambia (fuera de scope)
 

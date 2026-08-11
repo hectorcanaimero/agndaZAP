@@ -42,6 +42,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[notas/2026-08-09-rag-faq|2026-08-09 — Bloque RAG FAQ (KnowledgeModule)]]
 - [[notas/2026-08-09-f5-rediseno-shadcn-recharts|2026-08-09 — F5 rediseño shadcn + Recharts (4 pantallas grandes)]]
 - [[notas/2026-08-10-nombre-gochat-y-logo|2026-08-10 — Nombre `gochat` para la marca pública + logo]]
+- [[notas/2026-08-11-brand-kit-showly|2026-08-11 — Brand kit de Showly (logo, paleta, favicon)]]
 
 ## Flujo de trabajo
 - [[skills-y-flujo|Skills, agentes y flujo de trabajo]]

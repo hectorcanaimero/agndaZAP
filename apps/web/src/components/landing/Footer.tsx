@@ -69,7 +69,7 @@ export function Footer() {
             <ul className="mt-4 space-y-3 text-sm">
               <li>
                 <a
-                  href="mailto:hola@showly.app"
+                  href="mailto:hola@showly.tech"
                   className="text-neutral-700 transition-colors hover:text-brand-700"
                 >
                   {t('columns.company.links.contact')}
