@@ -40,6 +40,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[notas/2026-08-09-panel-backend-cruds|2026-08-09 — Panel Backend: TenantContext + CRUDs (Etapa 1)]]
 - [[notas/2026-08-09-rag-faq|2026-08-09 — Bloque RAG FAQ (KnowledgeModule)]]
 - [[notas/2026-08-09-f5-rediseno-shadcn-recharts|2026-08-09 — F5 rediseño shadcn + Recharts (4 pantallas grandes)]]
+- [[notas/2026-08-10-nombre-gochat-y-logo|2026-08-10 — Nombre `gochat` para la marca pública + logo]]
 
 ## Flujo de trabajo
 - [[skills-y-flujo|Skills, agentes y flujo de trabajo]]
