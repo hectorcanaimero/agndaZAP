@@ -8,6 +8,7 @@ import { FeaturesSection } from '@/components/landing/FeaturesSection';
 import { PricingSection } from '@/components/landing/PricingSection';
 import { Testimonial } from '@/components/landing/Testimonial';
 import { ForWhomSection } from '@/components/landing/ForWhomSection';
+import { SecuritySection } from '@/components/landing/SecuritySection';
 import { FaqSection } from '@/components/landing/FaqSection';
 import { FinalCta } from '@/components/landing/FinalCta';
 import { Footer } from '@/components/landing/Footer';
@@ -46,14 +47,20 @@ export default async function LandingPage({
           - Pricing DESPUES de Features: primero convencemos de qué hace,
             luego respondemos "¿cuánto cuesta?" antes de que el visitante
             se vaya buscándolo en el FAQ.
-          - ForWhom antes de FAQ para que el visitante se auto-identifique
-            ("¿es para mi consultorio?") antes de las preguntas de detalle.
+          - ForWhom antes de Security para que el visitante primero se
+            auto-identifique ("¿es para mi consultorio?") y RECIEN AHI le
+            respondamos "¿y los datos de mis pacientes?" — la barrera #1
+            en healthcare.
+          - Security antes de FAQ: cerramos la objeción sensible con peso
+            propio (fondo oscuro, mismo tratamiento que Testimonial) y
+            dejamos que el FAQ resuelva las dudas menores.
           - Testimonial JUSTO antes de FinalCta — patrón probado
             "social proof → CTA" (levantamos confianza inmediatamente
             antes de pedir la acción).
         */}
         <PricingSection />
         <ForWhomSection />
+        <SecuritySection />
         <FaqSection />
         <Testimonial />
         <FinalCta />
