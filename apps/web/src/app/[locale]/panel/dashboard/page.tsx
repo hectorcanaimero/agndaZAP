@@ -5,9 +5,10 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { fetcher, getTokenFromCookies } from '@/lib/auth';
+import { fetcher, getTokenFromCookies, type AuthMe } from '@/lib/auth';
 import { DashboardTrendChart } from './DashboardTrendChart';
 import { LucideIcon } from './LucideIcon';
+import { OnboardingProgressCard } from './OnboardingProgressCard';
 
 interface DashboardMetrics {
   noShowRate: number;
@@ -56,9 +57,30 @@ export default async function DashboardPage({
   const t = await getTranslations('panel.dashboard');
 
   const token = await getTokenFromCookies();
-  const res = await fetcher<DashboardMetrics>('/api/dashboard/metrics', {
-    token,
-  });
+  const [res, meRes] = await Promise.all([
+    fetcher<DashboardMetrics>('/api/dashboard/metrics', { token }),
+    fetcher<AuthMe>('/api/auth/me', { token }),
+  ]);
+
+  // Widget Zeigarnik: mostrar solo si onboardingCompletedAt sigue null.
+  // Los flags de "done" son heurísticos — se leen del progress JSON que el
+  // wizard mantiene actualizado. Sin él, asumimos todo pending.
+  const showOnboardingWidget =
+    meRes.ok &&
+    meRes.data.clinic &&
+    meRes.data.clinic.onboardingCompletedAt === null;
+  const onboardingProgress = (
+    (meRes.ok && meRes.data.clinic?.onboardingProgress) as
+      | Record<string, unknown>
+      | null
+      | undefined
+  ) ?? null;
+  const widgetProgress = {
+    hasService: Boolean(onboardingProgress?.serviceId),
+    hasProfessional: Boolean(onboardingProgress?.professionalId),
+    hasHours: Boolean(onboardingProgress?.hoursPreset),
+    hasWhatsapp: false, // fase 1: no rastreamos si conectó WA en el JSON
+  };
 
   if (!res.ok) {
     return (
@@ -89,6 +111,14 @@ export default async function DashboardPage({
 
   return (
     <div className="max-w-6xl space-y-6">
+      {showOnboardingWidget && meRes.ok && meRes.data.clinic ? (
+        <OnboardingProgressCard
+          locale={locale}
+          clinicId={meRes.data.clinic.id}
+          progress={widgetProgress}
+        />
+      ) : null}
+
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-gray-900">
           {t('title')}
