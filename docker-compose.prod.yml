@@ -1,9 +1,9 @@
-# AgendaZap — Docker Compose para producción
+# Showly — Docker Compose para producción
 #
 # Diferencias clave respecto a `docker-compose.yml` (dev):
 #  - Sin `platform: linux/amd64` (asumimos server x86_64 nativo).
 #  - db + redis SIN puerto expuesto a host (accesibles sólo por la red interna).
-#  - Volúmenes en paths absolutos del host (`/srv/agendazap/data/*`).
+#  - Volúmenes en paths absolutos del host (`/srv/showly/data/*`).
 #  - `restart: unless-stopped` en TODOS los servicios.
 #  - `backend` + `web` con Dockerfiles multi-stage (context = raíz del repo).
 #  - Env vars vienen de `.env.production` (NO commiteado, copiarlo al servidor).
@@ -27,6 +27,10 @@ x-logging: &default-logging
     max-size: "50m"
     max-file: "5"
 
+# Nombre del proyecto compose (mismo que dev): containers `showly-*`
+# independiente del nombre del folder de checkout.
+name: showly
+
 services:
   db:
     image: pgvector/pgvector:pg15
@@ -36,7 +40,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
-      - /srv/agendazap/data/db:/var/lib/postgresql/data
+      - /srv/showly/data/db:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 5s
@@ -50,7 +54,7 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
-      - /srv/agendazap/data/redis:/data
+      - /srv/showly/data/redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -78,7 +82,7 @@ services:
       WHATSAPP_SWAGGER_USERNAME: ${WHATSAPP_SWAGGER_USERNAME}
       WHATSAPP_SWAGGER_PASSWORD: ${WHATSAPP_SWAGGER_PASSWORD}
     volumes:
-      - /srv/agendazap/data/waha:/app/.sessions
+      - /srv/showly/data/waha:/app/.sessions
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
       interval: 30s
@@ -158,8 +162,8 @@ services:
       - "443:443/udp"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - /srv/agendazap/data/caddy/data:/data
-      - /srv/agendazap/data/caddy/config:/config
+      - /srv/showly/data/caddy/data:/data
+      - /srv/showly/data/caddy/config:/config
     depends_on:
       backend:
         condition: service_healthy

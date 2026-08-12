@@ -1,4 +1,4 @@
-# SPEC técnico — AgendaZap (MVP)
+# SPEC técnico — Showly (MVP)
 
 Complementa el [PRD](./PRD.md) y la [Arquitectura](./ARCHITECTURE.md). Aquí van los contratos,
 las reglas de negocio precisas y los escenarios de aceptación (Gherkin) que definen "hecho".

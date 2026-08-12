@@ -1,10 +1,10 @@
-# PRD — AgendaZap (MVP)
+# PRD — Showly (MVP)
 
 **Producto:** Sistema de agendamiento por WhatsApp con recordatorios anti no-show para clínicas y consultorios.
 **Autor:** Alejandro (Condor-Martech)
 **Fecha:** 8 de agosto de 2026
 **Versión:** 0.1 (MVP)
-**Nombre de trabajo:** AgendaZap (provisional)
+**Nombre del producto:** Showly (rebrand desde "AgendaZap" — ver [[adr/0013-rename-a-showly]])
 
 ---
 

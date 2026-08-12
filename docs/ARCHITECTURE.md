@@ -1,4 +1,4 @@
-# Arquitectura — AgendaZap
+# Arquitectura — Showly
 
 ## Visión de alto nivel
 

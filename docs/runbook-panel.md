@@ -12,7 +12,7 @@ qué botón, qué esperar, qué hacer si algo se rompe.
 ## 1. Login
 
 - **URL**: `https://<panel-host>/es/login` (para pt: `/pt/login`).
-- **Credenciales**: las que te dio el equipo de AgendaZap al onboarding.
+- **Credenciales**: las que te dio el equipo de Showly al onboarding.
   Email + password.
 - **Después del login**: te redirige a `/panel` (dashboard).
 
@@ -274,13 +274,13 @@ y no hay revocación remota (deuda [[adr/0005-auth-mvp-y-deuda]] §6).
 
 | Síntoma | Diagnóstico | Solución |
 |---------|-------------|----------|
-| WAHA desconectada — el bot no responde a nadie | Sesión WAHA cayó (celular sin señal, restart del container, etc.). | Contactar a AgendaZap. Mientras tanto, atender por bandeja **manualmente** — cada convo requerirá takeover. |
+| WAHA desconectada — el bot no responde a nadie | Sesión WAHA cayó (celular sin señal, restart del container, etc.). | Contactar a Showly. Mientras tanto, atender por bandeja **manualmente** — cada convo requerirá takeover. |
 | Cita duplicada en la agenda | Bug o creación desde 2 canales simultáneos (bot + panel). | Cancelá una desde el panel (CANCELADA). Si es un patrón que se repite, reportar. |
 | Paciente no recibió recordatorio | (1) Cita creada a menos de 3h → offset omitido; (2) WAHA se desconectó entre schedule y fire; (3) el paciente bloqueó el número. | Ver [[onboarding-clinica]] §12. Regla operativa: para citas a menos de 4h, mandar recordatorio manualmente por bandeja. |
 | Bandeja llena de spam / bots random | Números random escribiendo "hola" o mensajes automáticos. | Ignorar. No responder. El estado queda BOT. Podemos discutir agregar rate-limit por chatId post-piloto. |
-| Un paciente reclama que "confirmó" pero la cita quedó como NO_SHOW | Confirmó fuera del formato esperado ("ok!" en vez de "sí"). El bot no lo interpretó. | Compensar: crear cita nueva sin cargo o disculpa. Reportar a AgendaZap para mejorar el matching. |
+| Un paciente reclama que "confirmó" pero la cita quedó como NO_SHOW | Confirmó fuera del formato esperado ("ok!" en vez de "sí"). El bot no lo interpretó. | Compensar: crear cita nueva sin cargo o disculpa. Reportar a Showly para mejorar el matching. |
 | El dashboard muestra `tasa de no-show = 0%` | O no hay ninguna cita cerrada aún (menos de 30d de historia), o todas fueron ATENDIDA. | Esperar más data. Ojo: la métrica cuenta sólo cerradas (ATENDIDA + NO_SHOW), ignora PENDIENTE / CANCELADA. |
-| El sistema me dejó fuera después de 5 intentos de login | Rate-limit por email (15 min ventana, 5 fails máx). | Esperar 15 minutos. Si urgente, contactar a AgendaZap para reset. |
+| El sistema me dejó fuera después de 5 intentos de login | Rate-limit por email (15 min ventana, 5 fails máx). | Esperar 15 minutos. Si urgente, contactar a Showly para reset. |
 
 ---
 
@@ -297,13 +297,13 @@ Recomendaciones para que la clínica saque el máximo:
 4. **Revisar el dashboard cada lunes**. Si la no-show rate sube 3 semanas
    seguidas → algo cambió, hablar con el equipo.
 5. **Guardar el password de forma segura** (gestor de contraseñas).
-   Rotarlo cada 3-6 meses (por ahora manual — pedir reset a AgendaZap).
+   Rotarlo cada 3-6 meses (por ahora manual — pedir reset a Showly).
 
 ---
 
 ## 10. Contacto / escalation
 
-- **Soporte AgendaZap**: <email de soporte>.
+- **Soporte Showly**: <email de soporte>.
 - **Emergencia** (bot totalmente caído, panel inaccesible): <teléfono>.
 - **Feedback / feature requests**: <formulario o email>.
 

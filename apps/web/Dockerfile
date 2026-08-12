@@ -1,4 +1,4 @@
-# AgendaZap web — multi-stage Dockerfile.
+# Showly web — multi-stage Dockerfile.
 #
 # Contexto: se buildea DESDE LA RAÍZ del monorepo. Ver
 # `docker-compose.prod.yml`:
