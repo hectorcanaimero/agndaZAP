@@ -1,4 +1,4 @@
-# Skills, agentes y flujo de trabajo — AgendaZap
+# Skills, agentes y flujo de trabajo — Showly
 
 Referencia de las herramientas de IA que usa este proyecto y en qué orden aplicarlas.
 Objetivo: mantener disciplina (validar y especificar antes de codear) y no saltar pasos.

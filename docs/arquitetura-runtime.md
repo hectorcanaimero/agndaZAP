@@ -6,7 +6,7 @@ fecha: 2026-08-09
 tags: [arquitetura, runtime, diagrama, multi-tenant]
 ---
 
-# Arquitetura Runtime — AgendaZap
+# Arquitetura Runtime — Showly
 
 Mapa vivo dos processos, serviços e integrações em execução. Do paciente ao
 agendamento, passando pelo bot WhatsApp, painel web e lembretes anti no-show.
@@ -14,10 +14,10 @@ agendamento, passando pelo bot WhatsApp, painel web e lembretes anti no-show.
 > [!info] Diagrama interativo
 > O diagrama abaixo é um HTML autocontido gerado com [archify](https://github.com/anthropics/skills).
 > Suporta tema claro/escuro, foco por nó, atalhos `?`, `/`, `M`, `L`, `R`, `F` e exportação
-> para PNG/SVG. Abra `diagramas/agendazap-arquitetura.html` no navegador para a versão
+> para PNG/SVG. Abra `diagramas/showly-arquitetura.html` no navegador para a versão
 > completa.
 
-<iframe src="diagramas/agendazap-arquitetura.html" width="100%" height="720" style="border: 1px solid #333; border-radius: 8px;"></iframe>
+<iframe src="diagramas/showly-arquitetura.html" width="100%" height="720" style="border: 1px solid #333; border-radius: 8px;"></iframe>
 
 ## Componentes
 
@@ -27,7 +27,7 @@ agendamento, passando pelo bot WhatsApp, painel web e lembretes anti no-show.
 - **Recepção / Admin** — usa o painel `/panel/*` (autenticado com JWT).
 - **Profissional** — usa o app Flutter (autenticado com JWT).
 
-### Aplicação AgendaZap (dentro do boundary multi-tenant)
+### Aplicação Showly (dentro do boundary multi-tenant)
 - **Next.js Público** (`apps/web`) — SSR da página pública de agendamento.
 - **Next.js Painel** (`apps/web`) — mesmo Next, rota `/panel/*` autenticada.
 - **NestJS API** (`apps/backend`, `:4000`) — API REST em `/api/*` + webhook
@@ -87,9 +87,9 @@ volumes Docker e checklist Hetzner.
 ```bash
 # do repositório (com Node ≥18)
 node ~/.claude/skills/archify/bin/archify.mjs render architecture \
-  /tmp/agendazap-arquitetura.architecture.json \
-  docs/diagramas/agendazap-arquitetura.html
+  /tmp/showly-arquitetura.architecture.json \
+  docs/diagramas/showly-arquitetura.html
 ```
 
-Fonte JSON: `/tmp/agendazap-arquitetura.architecture.json` (mover para
-`docs/diagramas/agendazap-arquitetura.architecture.json` se quiser versionar).
+Fonte JSON: `/tmp/showly-arquitetura.architecture.json` (mover para
+`docs/diagramas/showly-arquitetura.architecture.json` se quiser versionar).

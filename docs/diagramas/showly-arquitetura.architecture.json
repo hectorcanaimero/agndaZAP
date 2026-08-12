@@ -2,9 +2,9 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "AgendaZap — Arquitetura Runtime",
+    "title": "Showly — Arquitetura Runtime",
     "subtitle": "Do paciente ao agendamento: bot WhatsApp, painel web e lembretes anti no-show",
-    "output": "agendazap-arquitetura.html",
+    "output": "showly-arquitetura.html",
     "quality_profile": "standard"
   },
   "components": [
@@ -27,7 +27,7 @@
     { "id": "llm-router", "type": "external", "label": "LLM Router", "sublabel": "DeepSeek → Gemini · OpenAI (embeddings)", "pos": [740, 480], "size": [220, 60] }
   ],
   "boundaries": [
-    { "kind": "region", "label": "Aplicação AgendaZap (multi-tenant por clinicId)", "wraps": ["next-publico", "next-painel", "nest-api", "reminders-worker", "postgres", "redis"] }
+    { "kind": "region", "label": "Aplicação Showly (multi-tenant por clinicId)", "wraps": ["next-publico", "next-painel", "nest-api", "reminders-worker", "postgres", "redis"] }
   ],
   "connections": [
     { "id": "wa-in", "from": "paciente-wa", "to": "waha", "label": "mensagem", "variant": "emphasis", "fromSide": "top", "toSide": "left", "route": "orthogonal-v" },

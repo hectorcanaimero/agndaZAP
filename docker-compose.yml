@@ -1,16 +1,21 @@
+# Nombre del proyecto compose: aterriza los containers como `showly-*`
+# sin depender del nombre del folder de checkout. Ver `main.ts` (referencia
+# a `docker exec showly-redis-1`) y `docs/smoke-e2e.md`.
+name: showly
+
 services:
   db:
     image: pgvector/pgvector:pg15
     environment:
-      POSTGRES_USER: agendazap
-      POSTGRES_PASSWORD: agendazap
-      POSTGRES_DB: agendazap
+      POSTGRES_USER: showly
+      POSTGRES_PASSWORD: showly
+      POSTGRES_DB: showly
     ports:
       - "5432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U agendazap"]
+      test: ["CMD-SHELL", "pg_isready -U showly"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -57,7 +62,7 @@ services:
       redis:
         condition: service_started
     environment:
-      DATABASE_URL: postgresql://agendazap:agendazap@db:5432/agendazap
+      DATABASE_URL: postgresql://showly:showly@db:5432/showly
       REDIS_URL: redis://redis:6379
       WAHA_BASE_URL: http://waha:3000
       WAHA_API_KEY: ${WAHA_API_KEY:-dev-waha-key}

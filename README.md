@@ -1,4 +1,4 @@
-# AgendaZap
+# Showly
 
 > Agendamiento por WhatsApp con recordatorios anti no-show para clínicas y consultorios.
 
@@ -90,8 +90,8 @@ Requisitos: **Node 20+**, **pnpm 9+**, **Docker Compose**.
 
 ```bash
 # 1. Clonar
-git clone <repo-url> agendazap
-cd agendazap
+git clone <repo-url> showly
+cd showly
 
 # 2. Copiar la env
 cp .env.example .env
@@ -104,8 +104,8 @@ docker compose up -d db redis waha
 pnpm install
 
 # 5. Aplicar migraciones + seed con data de ejemplo
-pnpm --filter @agendazap/backend prisma migrate deploy
-pnpm --filter @agendazap/backend prisma db seed
+pnpm --filter @showly/backend prisma migrate deploy
+pnpm --filter @showly/backend prisma db seed
 
 # 6. Levantar backend + web en dos terminales
 pnpm dev:backend         # NestJS en :4000
@@ -130,7 +130,7 @@ Para el walkthrough completo del smoke E2E: ver [`docs/smoke-e2e.md`](./docs/smo
 ## Estructura del monorepo
 
 ```
-agendazap/
+showly/
 ├── README.md · CLAUDE.md · docker-compose.yml
 ├── docs/                            # vault Obsidian: PRD, SPEC, ARCHITECTURE, ADRs, notas
 │   ├── PRD.md · SPEC.md · ARCHITECTURE.md · INDEX.md · bitacora.md
@@ -141,9 +141,9 @@ agendazap/
 │   ├── adr/                         # decisiones de arquitectura
 │   └── notas/                       # descubrimientos y gotchas
 ├── packages/
-│   └── shared/                      # @agendazap/shared — tipos TS backend↔web
+│   └── shared/                      # @showly/shared — tipos TS backend↔web
 ├── apps/
-│   ├── backend/                     # @agendazap/backend — NestJS
+│   ├── backend/                     # @showly/backend — NestJS
 │   │   ├── prisma/                  # schema, migrations, seed, reindex-faq
 │   │   └── src/
 │   │       ├── auth/                # JWT + guards multi-tenant + RBAC
@@ -156,7 +156,7 @@ agendazap/
 │   │       ├── services/ · professionals/ · business-hours/ · time-off/
 │   │       ├── appointments/ · conversations/ · dashboard/ · faq/
 │   │       └── main.ts · app.module.ts
-│   ├── web/                         # @agendazap/web — Next.js 15
+│   ├── web/                         # @showly/web — Next.js 15
 │   │   └── src/app/[locale]/
 │   │       ├── agendar/[clinicSlug]/  # página pública
 │   │       ├── login/
@@ -176,7 +176,7 @@ Ver [`.env.example`](./.env.example) para la lista completa. Las críticas:
 
 | Variable            | Uso                                                    |
 |---------------------|--------------------------------------------------------|
-| `DATABASE_URL`      | Postgres con pgvector. En dev: `postgresql://agendazap:agendazap@localhost:5432/agendazap` |
+| `DATABASE_URL`      | Postgres con pgvector. En dev: `postgresql://showly:showly@localhost:5432/showly` |
 | `REDIS_URL`         | Redis para BullMQ + rate-limit                         |
 | `JWT_SECRET`        | Mínimo 32 chars, `openssl rand -base64 48`. Fail-fast en prod si es dev-* |
 | `WEBHOOK_TOKEN`     | Token custom del webhook WAHA (obligatorio en prod)    |
@@ -202,14 +202,14 @@ pnpm build                      # backend + web
 
 # Test
 pnpm test                       # todos los tests unitarios
-pnpm --filter @agendazap/backend test    # solo backend
+pnpm --filter @showly/backend test    # solo backend
 
 # Prisma
-pnpm --filter @agendazap/backend prisma migrate dev --name <descripcion>
-pnpm --filter @agendazap/backend prisma migrate deploy
-pnpm --filter @agendazap/backend prisma db seed
-pnpm --filter @agendazap/backend prisma studio
-pnpm --filter @agendazap/backend prisma:reindex-faq
+pnpm --filter @showly/backend prisma migrate dev --name <descripcion>
+pnpm --filter @showly/backend prisma migrate deploy
+pnpm --filter @showly/backend prisma db seed
+pnpm --filter @showly/backend prisma studio
+pnpm --filter @showly/backend prisma:reindex-faq
 ```
 
 ---
@@ -248,7 +248,7 @@ Correr tests:
 
 ```bash
 pnpm test                       # todos
-pnpm --filter @agendazap/backend test -- --watch    # watch mode
+pnpm --filter @showly/backend test -- --watch    # watch mode
 ```
 
 Antes de un PR:

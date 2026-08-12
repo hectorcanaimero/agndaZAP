@@ -1,4 +1,4 @@
-# AgendaZap backend — multi-stage Dockerfile.
+# Showly backend — multi-stage Dockerfile.
 #
 # Contexto: se buildea DESDE LA RAÍZ del monorepo para poder acceder a
 # `pnpm-workspace.yaml`, `pnpm-lock.yaml` y `packages/`. Ver

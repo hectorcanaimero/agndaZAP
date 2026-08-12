@@ -150,7 +150,7 @@ async function bootstrap(): Promise<void> {
   // `WahaHealthMonitor.checkAll()`. El `jobId` fijo hace que BullMQ dedupe el
   // repeatable a través de restarts del backend (idempotente). Si se revierte
   // este bloque, limpiar el estado del repeatable con:
-  //   docker exec agendazap-redis-1 redis-cli DEL bull:waha-health:*
+  //   docker exec showly-redis-1 redis-cli DEL bull:waha-health:*
   const healthQueue = app.get<Queue>(WAHA_HEALTH_QUEUE_TOKEN);
   const healthMonitor = app.get(WahaHealthMonitor);
   const intervalMin = Number(process.env.WAHA_HEALTH_INTERVAL_MIN ?? 5);
