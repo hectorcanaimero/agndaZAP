@@ -153,7 +153,7 @@ export function LeadForm() {
         aria-live="polite"
         className="flex items-start gap-4 rounded-2xl bg-white p-6 shadow-lg sm:p-8"
       >
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-700">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-teal/15 text-brand-navy">
           <CheckCircle2 className="h-6 w-6" aria-hidden="true" />
         </div>
         <div className="min-w-0">
@@ -281,11 +281,17 @@ export function LeadForm() {
         </p>
       ) : null}
 
+      {/*
+        Batch 4: invertimos la jerarquía cromática — teal como acento sobre
+        el fondo navy del FinalCta. El texto en navy garantiza contraste
+        AA sobre teal (#28D9B9). El botón mantiene h-12 y w-full para no
+        romper el ritmo del form.
+      */}
       <Button
         type="submit"
         size="lg"
         disabled={submitting}
-        className="mt-6 h-12 w-full text-base"
+        className="mt-6 h-12 w-full bg-brand-teal text-brand-navy text-base font-semibold shadow-sm hover:bg-brand-teal/90"
       >
         {submitting ? (
           t('submitting')

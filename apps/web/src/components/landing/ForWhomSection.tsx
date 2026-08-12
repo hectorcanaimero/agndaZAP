@@ -20,11 +20,11 @@ export function ForWhomSection() {
     <section className="bg-white py-20 lg:py-28">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <div className="max-w-3xl">
-          <span className="text-xs font-medium uppercase tracking-widest text-brand-700">
+          <span className="text-xs font-medium uppercase tracking-widest text-brand-navy">
             {t('eyebrow')}
           </span>
           <h2
-            className="mt-3 font-display text-2xl font-semibold leading-tight tracking-tight text-neutral-950 sm:text-3xl lg:text-4xl"
+            className="mt-3 text-3xl font-bold leading-tight tracking-tight text-neutral-950 sm:text-4xl lg:text-5xl"
             style={{ overflowWrap: 'anywhere' }}
           >
             {t('headline')}
@@ -35,10 +35,10 @@ export function ForWhomSection() {
           {CARDS.map(({ key, Icon }) => (
             <article
               key={key}
-              className="group min-w-0 rounded-2xl border border-neutral-200 bg-gradient-to-br from-white to-neutral-50 p-6 transition-colors hover:border-brand-300"
+              className="group min-w-0 rounded-2xl border border-neutral-200 bg-gradient-to-br from-white to-neutral-50 p-6 transition-colors hover:border-brand-teal/40"
             >
               <div className="flex items-start gap-4">
-                <div className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700 transition-colors group-hover:bg-brand-100">
+                <div className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand-teal/10 text-brand-teal ring-1 ring-inset ring-brand-teal/20 transition-colors group-hover:bg-brand-teal/20">
                   <Icon className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">

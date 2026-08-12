@@ -1,59 +1,73 @@
 import { useTranslations } from 'next-intl';
-import { IconChatWrite, IconCalendarCheck, IconDashboard } from './icons';
+import { FadeIn } from './motion/FadeIn';
+import { Stagger, StaggerItem } from './motion/Stagger';
+import { SectionEyebrow } from './SectionEyebrow';
 
-// How it works — tres pasos ordinales (los números 01/02/03 son OK acá,
-// el contenido ES secuencial). Cada paso lleva su icono custom hand-built
-// más el número — doble reforzamiento visual sin caer en iconografía
-// genérica (lucide + circulito con número es EL patrón AI landing).
+// How it works (Batch 3) — fondo brand.navy #0F2A4A para crear contraste
+// contra las secciones light vecinas y darle peso visual al núcleo del
+// producto. Cada paso lleva imagen ilustrada 4:3 (SVG hand-crafted, ver
+// /public/landing/how-step-*.svg + manifest), número discreto en teal +
+// título y body en blanco/neutral-300. Zoom sutil en hover con CSS puro
+// (nada de framer-motion — eso es Batch 4).
+//
+// Usamos <img> nativo con dimensiones explícitas (evita CLS) en vez de
+// next/image porque son SVG locales (~3KB c/u) y activar `dangerouslyAllowSVG`
+// para todo el proyecto sería un cambio global fuera de scope del batch.
 const STEPS = [
-  { key: 'one', Icon: IconChatWrite },
-  { key: 'two', Icon: IconCalendarCheck },
-  { key: 'three', Icon: IconDashboard },
+  { key: 'one', img: '/landing/how-step-1.svg' },
+  { key: 'two', img: '/landing/how-step-2.svg' },
+  { key: 'three', img: '/landing/how-step-3.svg' },
 ] as const;
 
 export function HowItWorksSection() {
   const t = useTranslations('landing.howItWorks');
 
   return (
-    <section id="how-it-works" className="bg-white py-20 lg:py-28">
+    <section id="how-it-works" className="bg-brand-navy py-24 md:py-32">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-        <div className="max-w-2xl">
-          <span className="text-xs font-medium uppercase tracking-widest text-brand-700">
-            {t('eyebrow')}
-          </span>
+        <FadeIn className="max-w-3xl">
+          <SectionEyebrow variant="dark">{t('eyebrow')}</SectionEyebrow>
           <h2
-            className="mt-3 font-display text-2xl font-semibold leading-tight tracking-tight text-neutral-950 sm:text-3xl lg:text-4xl"
+            className="mt-3 text-4xl md:text-5xl font-bold tracking-tight text-white text-balance"
             style={{ overflowWrap: 'anywhere' }}
           >
             {t('headline')}
           </h2>
-        </div>
+        </FadeIn>
 
-        <ol className="relative mt-14 grid gap-8 md:grid-cols-3 lg:mt-20 lg:gap-12">
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute left-0 right-0 top-8 hidden h-px bg-gradient-to-r from-transparent via-brand-200 to-transparent md:block"
-          />
+        <Stagger
+          as="ol"
+          gap={0.12}
+          className="mt-16 grid grid-cols-1 gap-8 md:mt-20 md:grid-cols-3 lg:gap-10"
+        >
+          {STEPS.map(({ key, img }) => (
+            <StaggerItem as="li" key={key} className="group flex min-w-0 flex-col">
+              <span className="font-mono text-sm font-semibold uppercase tracking-[0.3em] text-brand-teal/70">
+                {t(`steps.${key}.number`)}
+              </span>
 
-          {STEPS.map(({ key, Icon }) => (
-            <li key={key} className="relative min-w-0">
-              <div className="relative z-10 flex items-center gap-3">
-                <span className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl border border-neutral-200 bg-white text-brand-700 shadow-sm">
-                  <Icon className="h-7 w-7" />
-                </span>
-                <span className="font-display text-4xl font-semibold leading-none text-neutral-300">
-                  {t(`steps.${key}.number`)}
-                </span>
+              <div className="mt-4 aspect-[4/3] overflow-hidden rounded-xl ring-1 ring-white/10 bg-white/5">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={img}
+                  alt={t(`steps_alt.${key}`)}
+                  width={800}
+                  height={600}
+                  loading="lazy"
+                  decoding="async"
+                  className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.02]"
+                />
               </div>
-              <h3 className="mt-6 text-xl font-semibold text-neutral-950 sm:text-2xl">
+
+              <h3 className="mt-6 text-xl font-semibold text-white">
                 {t(`steps.${key}.title`)}
               </h3>
-              <p className="mt-3 text-base text-neutral-600">
+              <p className="mt-2 text-base leading-relaxed text-neutral-300">
                 {t(`steps.${key}.body`)}
               </p>
-            </li>
+            </StaggerItem>
           ))}
-        </ol>
+        </Stagger>
       </div>
     </section>
   );

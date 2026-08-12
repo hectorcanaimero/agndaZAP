@@ -36,7 +36,7 @@ export function Nav() {
             <a
               key={l.href}
               href={l.href}
-              className="text-sm font-medium text-neutral-700 transition-colors hover:text-neutral-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded-sm"
+              className="text-sm font-medium text-neutral-700 transition-colors hover:text-neutral-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy focus-visible:ring-offset-2 rounded-sm"
             >
               {l.label}
             </a>
@@ -50,7 +50,15 @@ export function Nav() {
           >
             {t('signIn')}
           </Link>
-          <Button asChild size="sm">
+          {/*
+            CTA primary override a navy. Ver Hero.tsx para el racional:
+            verde queda reservado al canal WhatsApp, navy es el brand.
+          */}
+          <Button
+            asChild
+            size="sm"
+            className="bg-brand-navy text-white hover:bg-brand-navy/90"
+          >
             <a href="#cta">{t('primaryCta')}</a>
           </Button>
         </div>
@@ -58,7 +66,7 @@ export function Nav() {
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-md text-neutral-900 md:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-md text-neutral-900 md:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy"
           aria-expanded={open}
           aria-label={open ? t('closeMenu') : t('openMenu')}
         >
@@ -89,7 +97,7 @@ export function Nav() {
             <a
               href="#cta"
               onClick={() => setOpen(false)}
-              className="mt-2 inline-flex items-center justify-center rounded-md bg-brand-600 px-3 py-2.5 text-base font-semibold text-white hover:bg-brand-700"
+              className="mt-2 inline-flex items-center justify-center rounded-md bg-brand-navy px-3 py-2.5 text-base font-semibold text-white hover:bg-brand-navy/90"
             >
               {t('primaryCta')}
             </a>

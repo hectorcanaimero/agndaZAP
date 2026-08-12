@@ -1,14 +1,16 @@
 import { useTranslations } from 'next-intl';
 import { ArrowRight, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { FadeIn } from './motion/FadeIn';
+import { SectionEyebrow } from './SectionEyebrow';
 
 // PricingSection — tier ÚNICO porque el producto está en piloto real.
 // Copy 100% honesto: gratis mientras dure el piloto, sin fingir tiers ni
 // precios inventados. Cuando salga del piloto se avisa con 30 dias. El
 // unico CTA es #cta (mismo form del FinalCta) para no fragmentar el funnel.
 //
-// Diseño: card centrado sobre bg claro. Featured price grande (font-display,
-// tamano hero) + lista de features con check verde. Footer note pequena que
+// Diseño: card centrado sobre bg claro. Featured price grande en Inter bold
+// (tamano hero) + lista de features con check verde. Footer note pequena que
 // explica el "cuando salgamos del piloto" para evitar sorpresas futuras.
 const FEATURES = [
   'bot',
@@ -25,12 +27,10 @@ export function PricingSection() {
   return (
     <section id="pricing" className="bg-neutral-50 py-20 lg:py-28">
       <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
-        <div className="text-center">
-          <span className="text-xs font-medium uppercase tracking-widest text-brand-700">
-            {t('eyebrow')}
-          </span>
+        <FadeIn className="flex flex-col items-center text-center">
+          <SectionEyebrow variant="light">{t('eyebrow')}</SectionEyebrow>
           <h2
-            className="mt-3 font-display text-3xl font-semibold leading-tight tracking-tight text-neutral-950 sm:text-4xl lg:text-5xl"
+            className="mt-3 text-4xl font-bold leading-tight tracking-tight text-neutral-950 sm:text-5xl"
             style={{ overflowWrap: 'anywhere' }}
           >
             {t('headline')}
@@ -38,19 +38,17 @@ export function PricingSection() {
           <p className="mx-auto mt-4 max-w-xl text-base text-neutral-600 sm:text-lg">
             {t('subheadline')}
           </p>
-        </div>
+        </FadeIn>
 
-        <article className="mt-12 overflow-hidden rounded-3xl border-2 border-brand-200 bg-white shadow-xl shadow-brand-900/5 lg:mt-16">
-          <div className="border-b border-neutral-100 bg-gradient-to-br from-brand-50 via-white to-white p-8 text-center sm:p-10">
-            <span className="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-white px-3 py-1 text-xs font-medium uppercase tracking-widest text-brand-800">
-              <span
-                aria-hidden="true"
-                className="h-1.5 w-1.5 rounded-full bg-brand-600"
-              />
-              {t('badge')}
-            </span>
+        <FadeIn
+          as="article"
+          delay={0.1}
+          className="mt-12 overflow-hidden rounded-3xl border-2 border-brand-navy/20 bg-white shadow-xl shadow-brand-navy/5 lg:mt-16"
+        >
+          <div className="flex flex-col items-center border-b border-neutral-100 bg-gradient-to-br from-brand-navy/5 via-white to-white p-8 text-center sm:p-10">
+            <SectionEyebrow variant="light">{t('badge')}</SectionEyebrow>
             <div className="mt-6 flex items-baseline justify-center gap-2">
-              <span className="font-display text-6xl font-semibold leading-none tracking-tight text-neutral-950 sm:text-7xl">
+              <span className="text-6xl font-extrabold leading-none tracking-tight text-neutral-950 sm:text-7xl">
                 {t('price')}
               </span>
               <span className="text-base text-neutral-500">{t('priceNote')}</span>
@@ -69,7 +67,7 @@ export function PricingSection() {
                 <li key={key} className="flex items-start gap-2.5">
                   <span
                     aria-hidden="true"
-                    className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700"
+                    className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-teal/15 text-brand-navy"
                   >
                     <Check className="h-3 w-3" strokeWidth={3} />
                   </span>
@@ -80,7 +78,12 @@ export function PricingSection() {
               ))}
             </ul>
 
-            <Button asChild size="lg" className="mt-8 h-12 w-full text-base">
+            {/* CTA override a navy — coherente con Hero/Nav. */}
+            <Button
+              asChild
+              size="lg"
+              className="mt-8 h-12 w-full text-base bg-brand-navy text-white hover:bg-brand-navy/90"
+            >
               <a href="#cta">
                 {t('cta')}
                 <ArrowRight className="ml-1 h-4 w-4" aria-hidden="true" />
@@ -91,7 +94,7 @@ export function PricingSection() {
               {t('afterPilot')}
             </p>
           </div>
-        </article>
+        </FadeIn>
       </div>
     </section>
   );

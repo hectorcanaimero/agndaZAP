@@ -29,7 +29,7 @@ export function Footer() {
               <li>
                 <a
                   href="#how-it-works"
-                  className="text-neutral-700 transition-colors hover:text-brand-700"
+                  className="text-neutral-700 transition-colors hover:text-brand-navy"
                 >
                   {t('columns.product.links.howItWorks')}
                 </a>
@@ -37,7 +37,7 @@ export function Footer() {
               <li>
                 <a
                   href="#features"
-                  className="text-neutral-700 transition-colors hover:text-brand-700"
+                  className="text-neutral-700 transition-colors hover:text-brand-navy"
                 >
                   {t('columns.product.links.features')}
                 </a>
@@ -45,7 +45,7 @@ export function Footer() {
               <li>
                 <a
                   href="#pricing"
-                  className="text-neutral-700 transition-colors hover:text-brand-700"
+                  className="text-neutral-700 transition-colors hover:text-brand-navy"
                 >
                   {t('columns.product.links.pricing')}
                 </a>
@@ -53,10 +53,18 @@ export function Footer() {
               <li>
                 <a
                   href="#faq"
-                  className="text-neutral-700 transition-colors hover:text-brand-700"
+                  className="text-neutral-700 transition-colors hover:text-brand-navy"
                 >
                   {t('columns.product.links.faq')}
                 </a>
+              </li>
+              <li>
+                <Link
+                  href="/seguridad"
+                  className="text-neutral-700 transition-colors hover:text-brand-navy"
+                >
+                  {t('columns.product.links.security')}
+                </Link>
               </li>
             </ul>
           </div>
@@ -70,7 +78,7 @@ export function Footer() {
               <li>
                 <a
                   href="mailto:hola@showly.tech"
-                  className="text-neutral-700 transition-colors hover:text-brand-700"
+                  className="text-neutral-700 transition-colors hover:text-brand-navy"
                 >
                   {t('columns.company.links.contact')}
                 </a>
@@ -78,7 +86,7 @@ export function Footer() {
               <li>
                 <Link
                   href="/login"
-                  className="text-neutral-700 transition-colors hover:text-brand-700"
+                  className="text-neutral-700 transition-colors hover:text-brand-navy"
                 >
                   {t('columns.company.links.privacy')}
                 </Link>
@@ -86,7 +94,7 @@ export function Footer() {
               <li>
                 <Link
                   href="/login"
-                  className="text-neutral-700 transition-colors hover:text-brand-700"
+                  className="text-neutral-700 transition-colors hover:text-brand-navy"
                 >
                   {t('columns.company.links.terms')}
                 </Link>
