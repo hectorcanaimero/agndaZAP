@@ -41,6 +41,15 @@ model Clinic {
   // Valores esperados: "formal" | "cercano" | "tecnico". Default null = "cercano".
   botTone       String?
 
+  // ─── Onboarding wizard first-time (ver docs/notas/2026-08-11-onboarding-wizard.md) ─
+  // `onboardingCompletedAt` es señal boolean barata para middleware + /auth/me:
+  // null = pending, timestamp = done. `onboardingProgress` es JSON abierto que
+  // guarda { currentStep, clinicType, serviceId, professionalId, hoursPreset,
+  // wahaAttempts } — permite iterar steps sin migration futura y no perder
+  // referencias si el user hace refresh mid-step.
+  onboardingCompletedAt DateTime?
+  onboardingProgress    Json?
+
   users         User[]
   professionals Professional[]
   services      Service[]
