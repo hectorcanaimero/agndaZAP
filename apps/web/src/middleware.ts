@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import createIntlMiddleware from 'next-intl/middleware';
-import { AUTH_COOKIE_NAME, decodeJwtPayload } from '@/lib/auth';
+import {
+  AUTH_COOKIE_NAME,
+  ONBOARDING_HINT_COOKIE_NAME,
+  decodeJwtPayload,
+} from '@/lib/auth';
 import { routing } from './i18n/routing';
 
 /**
@@ -19,6 +23,9 @@ const intlMiddleware = createIntlMiddleware(routing);
 const LOCALES_PATTERN = routing.locales.join('|');
 const PANEL_REGEX = new RegExp(`^/(?:${LOCALES_PATTERN})/panel(?:/.*)?$`);
 const LOGIN_REGEX = new RegExp(`^/(?:${LOCALES_PATTERN})/login/?$`);
+const ONBOARDING_REGEX = new RegExp(
+  `^/(?:${LOCALES_PATTERN})/onboarding(?:/.*)?$`,
+);
 const LOCALE_PREFIX_REGEX = new RegExp(`^/(${LOCALES_PATTERN})(?:/|$)`);
 
 type Locale = (typeof routing.locales)[number];
@@ -42,6 +49,52 @@ export default function middleware(request: NextRequest) {
       loginUrl.pathname = `/${locale}/login`;
       loginUrl.searchParams.set('next', pathname);
       return NextResponse.redirect(loginUrl);
+    }
+
+    // Onboarding suave: si el CLINIC_ADMIN todavía no completó el wizard,
+    // lo mandamos al primer step. PROFESSIONAL nunca cae al wizard.
+    // La cookie hint es UX-only — el backend re-valida en cada endpoint.
+    // Si la cookie no existe, el layout.tsx del panel la re-setea desde
+    // /auth/me — el user pasa una vez pero después ya queda bien.
+    const hint = request.cookies.get(ONBOARDING_HINT_COOKIE_NAME)?.value;
+    if (hint === 'pending' && session.role !== 'PROFESSIONAL') {
+      const locale = extractLocale(pathname);
+      const onboardingUrl = request.nextUrl.clone();
+      onboardingUrl.pathname = `/${locale}/onboarding`;
+      onboardingUrl.search = '';
+      return NextResponse.redirect(onboardingUrl);
+    }
+  }
+
+  // Guard del onboarding: solo entra con sesión válida. Si ya completó (cookie
+  // hint = done) y no viene con ?rerun=1 explícito, lo mandamos al dashboard —
+  // el wizard first-time no se repite por accidente.
+  if (ONBOARDING_REGEX.test(pathname)) {
+    const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
+    const session = token ? decodeJwtPayload(token) : null;
+    const isValid = session && session.exp * 1000 > Date.now();
+    if (!isValid) {
+      const locale = extractLocale(pathname);
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = `/${locale}/login`;
+      loginUrl.searchParams.set('next', pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+    const hint = request.cookies.get(ONBOARDING_HINT_COOKIE_NAME)?.value;
+    const rerun = request.nextUrl.searchParams.get('rerun') === '1';
+    if (hint === 'done' && !rerun) {
+      const locale = extractLocale(pathname);
+      const panelUrl = request.nextUrl.clone();
+      panelUrl.pathname = `/${locale}/panel/dashboard`;
+      panelUrl.search = '';
+      return NextResponse.redirect(panelUrl);
+    }
+    if (session.role === 'PROFESSIONAL') {
+      const locale = extractLocale(pathname);
+      const panelUrl = request.nextUrl.clone();
+      panelUrl.pathname = `/${locale}/panel/dashboard`;
+      panelUrl.search = '';
+      return NextResponse.redirect(panelUrl);
     }
   }
 

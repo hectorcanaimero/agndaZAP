@@ -12,7 +12,13 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { login, type LoginResponse } from '@/lib/auth';
+import {
+  fetcher,
+  login,
+  writeOnboardingHint,
+  type AuthMe,
+  type LoginResponse,
+} from '@/lib/auth';
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -60,13 +66,36 @@ export function LoginForm({ locale }: LoginFormProps) {
     { email: string; password: string }
   >({
     mutationFn: ({ email, password }) => login(email, password),
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       if (result.ok) {
+        // Post-login: pegamos a /auth/me para saber si el CLINIC_ADMIN todavía
+        // no completó el onboarding. Seteamos la cookie hint que consume el
+        // middleware, y elegimos el target del reload en consecuencia.
+        // PROFESSIONAL nunca cae al wizard — respeta el nextPath si vino.
+        const meRes = await fetcher<AuthMe>('/api/auth/me');
+        let target: string;
+        if (meRes.ok) {
+          const isAdmin = meRes.data.role !== 'PROFESSIONAL';
+          const needsOnboarding =
+            isAdmin && !meRes.data.clinic?.onboardingCompletedAt;
+          writeOnboardingHint(needsOnboarding ? 'pending' : 'done');
+          if (needsOnboarding) {
+            target = `/${locale}/onboarding`;
+          } else {
+            target =
+              nextPath && nextPath.startsWith(`/${locale}/panel`)
+                ? nextPath
+                : `/${locale}/panel/dashboard`;
+          }
+        } else {
+          // Fallback si /auth/me falla: dejamos que el layout del panel
+          // maneje la sync. Sin hint, el middleware no redirige.
+          target =
+            nextPath && nextPath.startsWith(`/${locale}/panel`)
+              ? nextPath
+              : `/${locale}/panel/dashboard`;
+        }
         // Full reload para que el middleware corra con el cookie ya seteado.
-        const target =
-          nextPath && nextPath.startsWith(`/${locale}/panel`)
-            ? nextPath
-            : `/${locale}/panel/dashboard`;
         window.location.assign(target);
         return;
       }

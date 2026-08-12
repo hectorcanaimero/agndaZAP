@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { setRequestLocale } from 'next-intl/server';
 import type { ReactNode } from 'react';
 import { fetcher, getSession, getTokenFromCookies, type AuthMe } from '@/lib/auth';
+import { OnboardingHintSync } from './OnboardingHintSync';
 import { PanelShell } from './PanelShell';
 
 /**
@@ -50,8 +51,20 @@ export default async function PanelLayout({
           clinic: null,
         };
 
+  const onboardingCompletedAt =
+    me.clinic?.onboardingCompletedAt !== undefined &&
+    me.clinic?.onboardingCompletedAt !== null
+      ? typeof me.clinic.onboardingCompletedAt === 'string'
+        ? me.clinic.onboardingCompletedAt
+        : new Date(me.clinic.onboardingCompletedAt).toISOString()
+      : null;
+
   return (
     <PanelShell locale={locale} me={me}>
+      <OnboardingHintSync
+        onboardingCompletedAt={onboardingCompletedAt}
+        isProfessional={me.role === 'PROFESSIONAL'}
+      />
       {children}
     </PanelShell>
   );

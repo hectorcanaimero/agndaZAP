@@ -14,6 +14,16 @@ import { API_URL } from './api';
 /** Nombre del cookie donde vive el accessToken. */
 export const AUTH_COOKIE_NAME = 'showly_token';
 
+/**
+ * Cookie hint de estado del onboarding. Solo lectura por middleware Next.js
+ * para redirect UX (`pending` → mandar al wizard, `done` → dejar entrar al
+ * panel). El backend re-valida en cada endpoint; esta cookie NO autoriza nada.
+ *
+ * Valores esperados: `'pending' | 'done'`. Ausente = comportamiento neutro
+ * (el user pasa al panel; layout.tsx re-setea la cookie desde /auth/me).
+ */
+export const ONBOARDING_HINT_COOKIE_NAME = 'showly_onboarding';
+
 /** Cookie válido por 24h — matchea `expiresIn` del JWT en el backend. */
 const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24;
 
@@ -26,6 +36,11 @@ export interface Session {
   exp: number;
 }
 
+export type OnboardingHintValue = 'pending' | 'done';
+
+/** Shape libre del progreso del wizard — el shell lo tipa más fuerte. */
+export type OnboardingProgress = Record<string, unknown> | null;
+
 export interface AuthMe {
   id: string;
   email: string;
@@ -37,6 +52,8 @@ export interface AuthMe {
     slug: string;
     timezone: string;
     locale: string;
+    onboardingCompletedAt: string | null;
+    onboardingProgress: OnboardingProgress;
   } | null;
 }
 
@@ -120,6 +137,29 @@ export function clearTokenFromDocument(): void {
 }
 
 /**
+ * Client-side: escribe el hint de onboarding. Middleware la lee para
+ * decidir redirect a /onboarding vs /panel. NO es fuente de verdad —
+ * el backend siempre re-valida.
+ */
+export function writeOnboardingHint(value: OnboardingHintValue): void {
+  if (typeof document === 'undefined') return;
+  const secure =
+    typeof window !== 'undefined' && window.location.protocol === 'https:'
+      ? '; Secure'
+      : '';
+  document.cookie = `${ONBOARDING_HINT_COOKIE_NAME}=${value}; path=/; max-age=${COOKIE_MAX_AGE_SECONDS}; SameSite=Lax${secure}`;
+}
+
+/**
+ * Client-side: borra el hint de onboarding. Se llama en logout junto con
+ * el token — así el próximo user en el mismo browser no hereda estado.
+ */
+export function clearOnboardingHint(): void {
+  if (typeof document === 'undefined') return;
+  document.cookie = `${ONBOARDING_HINT_COOKIE_NAME}=; path=/; max-age=0; SameSite=Lax`;
+}
+
+/**
  * Server-side: lee la sesión del cookie usando `next/headers`. Sólo válida
  * para Server Components / Server Actions / Route Handlers.
  */
@@ -187,9 +227,12 @@ export async function login(
 
 /**
  * Client-side: borra el cookie y redirige a `/[locale]/login`.
+ * También limpia el hint de onboarding — evita que el próximo user en el
+ * mismo browser hereda estado ajeno.
  */
 export function logout(locale: string): void {
   clearTokenFromDocument();
+  clearOnboardingHint();
   if (typeof window !== 'undefined') {
     window.location.href = `/${locale}/login`;
   }
