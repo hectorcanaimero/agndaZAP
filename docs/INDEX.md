@@ -44,6 +44,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[notas/2026-08-10-nombre-gochat-y-logo|2026-08-10 — Nombre `gochat` para la marca pública + logo]]
 - [[notas/2026-08-11-brand-kit-showly|2026-08-11 — Brand kit de Showly (logo, paleta, favicon)]]
 - [[notas/2026-08-11-onboarding-wizard|2026-08-11 — Plan del wizard de onboarding first-time para CLINIC_ADMIN]]
+- [[notas/2026-08-11-onboarding-wizard|2026-08-11 — Plan del wizard de onboarding first-time para CLINIC_ADMIN]]
 
 ## Flujo de trabajo
 - [[skills-y-flujo|Skills, agentes y flujo de trabajo]]
