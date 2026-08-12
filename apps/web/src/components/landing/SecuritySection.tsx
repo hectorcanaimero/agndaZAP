@@ -36,17 +36,17 @@ const PILLARS = [
 ] as const;
 
 export function SecuritySection() {
-  const t = useTranslations('landing.security');
+  const t = useTranslations('landing.securityPage');
 
   return (
     <section id="security" className="bg-neutral-900 py-20 text-white lg:py-28">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <div className="max-w-2xl">
-          <span className="text-xs font-medium uppercase tracking-widest text-brand-300">
+          <span className="text-xs font-medium uppercase tracking-widest text-brand-teal">
             {t('eyebrow')}
           </span>
           <h2
-            className="mt-3 font-display text-3xl font-semibold leading-tight tracking-tight text-white sm:text-4xl lg:text-5xl"
+            className="mt-3 text-4xl font-bold leading-tight tracking-tight text-white sm:text-5xl"
             style={{ overflowWrap: 'anywhere' }}
           >
             {t('headline')}

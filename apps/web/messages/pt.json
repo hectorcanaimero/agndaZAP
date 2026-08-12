@@ -977,7 +977,7 @@
   },
   "landing": {
     "meta": {
-      "title": "Showly — Agendamento pelo WhatsApp para clínicas",
+      "title": "Showly | Agendamento pelo WhatsApp para clínicas",
       "description": "O Showly agenda, confirma e lembra as consultas da sua clínica pelo WhatsApp. Menos faltas, mais pacientes atendidos."
     },
     "nav": {
@@ -1020,7 +1020,7 @@
     "problem": {
       "eyebrow": "O problema",
       "headline": "O WhatsApp da sua clínica virou um caos.",
-      "subheadline": "Em consultas na LATAM o no-show costuma estar entre 20% e 30%. Cada horário vazio é dinheiro que não volta — e ainda por cima ninguém sabe quanto custou.",
+      "subheadline": "A falta é o imposto invisível da sua clínica. Ninguém mede, mas todo mundo paga: o buraco na agenda, o paciente que não volta e a equipe que já não confia nos lembretes manuais.",
       "points": {
         "one": {
           "title": "A recepção vive respondendo.",
@@ -1034,6 +1034,10 @@
           "title": "O horário se perde.",
           "body": "Quando alguém não aparece, aquele slot não volta. E você nem sabe quanto custou."
         }
+      },
+      "callout": {
+        "headline": "3 faltas por semana.",
+        "body": "12 por mês. Um mês inteiro de agenda perdida no ano."
       }
     },
     "howItWorks": {
@@ -1048,13 +1052,18 @@
         "two": {
           "number": "02",
           "title": "O Showly agenda, confirma e lembra.",
-          "body": "O bot entende o pedido, oferece horários reais da sua agenda, cria a consulta e envia lembretes 24h e 3h antes."
+          "body": "Entende o pedido, oferece horários reais da sua agenda, cria a consulta e envia lembretes 24h e 3h antes."
         },
         "three": {
           "number": "03",
           "title": "Você vê tudo pelo painel.",
-          "body": "Agenda visual, caixa de conversas e dashboard de faltas. Assume a conversa quando o bot não der conta."
+          "body": "Agenda visual, caixa de conversas e faltas do dia num relance. Assume a conversa quando quiser."
         }
+      },
+      "steps_alt": {
+        "one": "Ilustração de um chat de WhatsApp com um paciente pedindo horário",
+        "two": "Ilustração do Showly oferecendo horários e confirmando a consulta no WhatsApp",
+        "three": "Ilustração do painel web do Showly com a agenda do dia e as conversas"
       }
     },
     "features": {
@@ -1062,24 +1071,24 @@
       "headline": "O que sua clínica precisa todos os dias.",
       "items": {
         "reminders": {
-          "title": "Lembretes anti-falta",
-          "body": "Configuráveis por clínica. 24h e 3h antes por padrão. O paciente confirma com um SIM ou pede para remarcar."
+          "title": "Lembretes que confirmam",
+          "body": "24h e 3h antes de cada consulta, no automático. O paciente confirma com um SIM ou pede para remarcar. Você só é avisado quando algo muda."
         },
         "handoff": {
-          "title": "Sua equipe assume o chat",
-          "body": "Quando o bot não entende ou o paciente pede uma pessoa, sua equipe assume a conversa e o bot se cala."
-        },
-        "faq": {
-          "title": "Responde suas dúvidas frequentes",
-          "body": "Preços, endereço, horários, formas de pagamento. O bot responde a partir da sua própria base — sem inventar."
+          "title": "Sua equipe assume o chat quando quiser",
+          "body": "Quando o paciente pede uma pessoa ou você quer entrar, sua equipe assume a conversa e o Showly se cala."
         },
         "multiPro": {
           "title": "Cada profissional com sua agenda",
-          "body": "Cada profissional com sua agenda, serviços, horários e feed iCal para sincronizar com Google Calendar ou iPhone."
+          "body": "Cada profissional com seus serviços, horários e bloqueios. Sincroniza com o Google Calendar ou iPhone sem instalar nada."
+        },
+        "faq": {
+          "title": "Responde suas dúvidas frequentes",
+          "body": "Preços, endereço, horários, formas de pagamento. O Showly responde com o que você cadastrou. Sem invenção."
         },
         "feedback": {
-          "title": "Pesquisa de 1 a 5 após a consulta",
-          "body": "Pesquisa automática de 1 a 5 estrelas depois de cada consulta. Sem formulários, sem enquetes externas."
+          "title": "Avalie cada consulta",
+          "body": "O paciente avalia de 1 a 5 estrelas depois de cada visita. Sem formulários externos nem links estranhos."
         },
         "multiTenant": {
           "title": "Português e español, cada clínica no seu fuso",
@@ -1096,8 +1105,8 @@
     },
     "pricing": {
       "eyebrow": "Preços",
-      "headline": "Um único plano enquanto durar o piloto.",
-      "subheadline": "Um único plano enquanto durar o piloto. Tudo incluído para as clínicas que começam com a gente.",
+      "headline": "Grátis enquanto durar o piloto.",
+      "subheadline": "Sem cartão, sem compromisso. Te acompanhamos até a clínica agendar sozinha.",
       "badge": "Piloto",
       "price": "Grátis",
       "priceNote": "enquanto durar o piloto",
@@ -1114,9 +1123,23 @@
       "cta": "Quero entrar no piloto",
       "afterPilot": "Quando sairmos do piloto avisamos 30 dias antes. Nem um centavo antes disso."
     },
-    "security": {
+    "securityStrip": {
       "eyebrow": "Segurança e dados",
-      "headline": "O que fizemos no código — não no marketing.",
+      "headline": "Os dados dos seus pacientes ficam isolados por clínica.",
+      "chips": {
+        "isolation": { "label": "Isolamento por clínica" },
+        "dedicated": { "label": "WhatsApp dedicado" },
+        "noPii": { "label": "Sem dados pessoais nos logs" },
+        "accessControl": { "label": "Painel protegido por padrão" }
+      },
+      "ctaLabel": "Como protegemos seus dados",
+      "ariaMore": "Ver detalhes sobre segurança e proteção de dados"
+    },
+    "securityPage": {
+      "metaTitle": "Segurança e dados | Showly",
+      "metaDescription": "Como o Showly protege os dados dos seus pacientes: isolamento por clínica, WhatsApp dedicado, minimização de PII nos logs e painel protegido por padrão.",
+      "eyebrow": "Segurança e dados",
+      "headline": "O que fizemos no código. Não no marketing.",
       "subheadline": "Os dados dos seus pacientes são sensíveis. Em vez de listar selos de compliance, te contamos como o sistema é por dentro.",
       "pillars": {
         "isolation": {
@@ -1136,7 +1159,7 @@
           "body": "Todo o painel exige sessão com JWT e valida o papel do usuário em cada ação. Os endpoints públicos (agendar, contato) são a exceção explícita, não a regra."
         }
       },
-      "footnote": "Estamos em piloto — ainda não temos certificações formais como LGPD auditada ou ISO 27001. O que temos são estas garantias escritas no código, e podemos mostrar quando quiser."
+      "footnote": "Estamos em piloto: ainda não temos certificações formais como LGPD auditada ou ISO 27001. O que temos são estas garantias escritas no código, e podemos mostrar quando quiser."
     },
     "forWhom": {
       "eyebrow": "Para quem",
@@ -1238,7 +1261,8 @@
             "howItWorks": "Como funciona",
             "features": "Recursos",
             "pricing": "Preços",
-            "faq": "Perguntas frequentes"
+            "faq": "Perguntas frequentes",
+            "security": "Segurança"
           }
         },
         "company": {

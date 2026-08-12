@@ -93,11 +93,9 @@ const config: Config = {
       fontFamily: {
         // Inter — body/UI para toda la app (mejora legibilidad del panel también).
         // Cargada via next/font en el root layout como `--font-inter`.
+        // También cubre todos los headings tras sacar Fraunces del sistema
+        // (batch 2 anti-slop): usamos `font-sans font-bold/extrabold` en H1-H3.
         sans: ['var(--font-inter)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        // Fraunces — display serif variable, roman only. Solo para la landing
-        // marketing (`font-display`). No se usa en panel/agendar.
-        // Roman only — Hallmark prohíbe italic headers (gate 38a).
-        display: ['var(--font-fraunces)', 'ui-serif', 'Georgia', 'serif'],
       },
       // Bloque de motion cut de Hallmark: durations + easings tokenizados
       // para animar solo transform/opacity. No hay framer-motion en el proyecto.

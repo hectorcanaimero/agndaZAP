@@ -67,7 +67,7 @@ export function WhatsAppMock() {
             />
             <div
               aria-hidden="true"
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/95 font-display text-sm font-semibold text-brand-800 shadow-sm"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/95 text-sm font-bold text-brand-800 shadow-sm"
             >
               A
             </div>

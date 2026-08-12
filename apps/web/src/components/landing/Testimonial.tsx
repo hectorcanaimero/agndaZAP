@@ -1,5 +1,7 @@
 import Image from 'next/image';
 import { useTranslations } from 'next-intl';
+import { FadeIn } from './motion/FadeIn';
+import { SectionEyebrow } from './SectionEyebrow';
 
 // Sección de testimonio del piloto — humaniza la landing y rompe el
 // ritmo card-grid-card-grid entre Features y ForWhom. Copy honesto:
@@ -10,7 +12,7 @@ export function Testimonial() {
 
   return (
     <section className="bg-neutral-950 py-20 text-white lg:py-28">
-      <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+      <FadeIn className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
         <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] lg:items-center lg:gap-14">
           <div className="relative min-w-0">
             <div className="relative aspect-square w-full max-w-sm overflow-hidden rounded-3xl border border-white/10 shadow-2xl">
@@ -24,21 +26,15 @@ export function Testimonial() {
             </div>
             <div
               aria-hidden="true"
-              className="absolute -inset-4 -z-10 rounded-[2rem] bg-gradient-to-br from-brand-500/20 to-transparent blur-3xl"
+              className="absolute -inset-4 -z-10 rounded-[2rem] bg-gradient-to-br from-brand-teal/20 to-transparent blur-3xl"
             />
           </div>
 
           <figure className="min-w-0">
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-3 py-1 text-xs font-medium uppercase tracking-widest text-brand-300">
-              <span
-                aria-hidden="true"
-                className="h-1.5 w-1.5 rounded-full bg-brand-400"
-              />
-              {t('badge')}
-            </span>
+            <SectionEyebrow variant="dark">{t('badge')}</SectionEyebrow>
             <blockquote className="mt-6">
               <p
-                className="font-display text-2xl leading-snug text-white sm:text-3xl lg:text-4xl"
+                className="text-2xl font-semibold leading-snug tracking-tight text-white sm:text-3xl lg:text-4xl text-balance"
                 style={{ overflowWrap: 'anywhere' }}
               >
                 {t('quote')}
@@ -51,7 +47,7 @@ export function Testimonial() {
             </figcaption>
           </figure>
         </div>
-      </div>
+      </FadeIn>
     </section>
   );
 }
