@@ -330,3 +330,123 @@ ADRs:
 
 Referencias: [[onboarding-clinica]], [[runbook-panel]], [[PRD]] §8,
 [[SPEC]] §3.
+
+---
+
+## 11. Escenario 8 — Onboarding wizard first-time (nuevo)
+
+Valida el flujo self-service del CLINIC_ADMIN entrando por primera vez.
+Ver [[notas/2026-08-11-onboarding-wizard]] para el diseño completo.
+
+**Setup**: crear una clínica nueva sin `Service` (via Prisma Studio o SQL) +
+un `User` CLINIC_ADMIN con bcrypt del password. Este user representa un
+admin que nunca vio el panel antes.
+
+```bash
+# Crear clínica virgen (via SQL directo — POST /clinics es v2)
+docker compose exec -T db psql -U showly -c "
+INSERT INTO \"Clinic\" (id, name, slug, timezone, locale, \"wahaSession\", \"createdAt\", \"updatedAt\")
+VALUES ('smoke-onb-1', 'Clínica Smoke Onboarding', 'smoke-onb', 'America/Caracas', 'es',
+        'smoke-onb-session', NOW(), NOW());
+"
+
+# Crear admin (password: onboarding1234)
+HASH='$2a$10$YourBcryptHashHere'  # generar con: node -e "console.log(require('bcrypt').hashSync('onboarding1234', 10))"
+docker compose exec -T db psql -U showly -c "
+INSERT INTO \"User\" (id, email, password, name, role, \"clinicId\", \"createdAt\", \"updatedAt\")
+VALUES ('smoke-onb-user', 'smoke-onb@demo.dev', '$HASH', 'Smoke Onboarding', 'CLINIC_ADMIN',
+        'smoke-onb-1', NOW(), NOW());
+"
+```
+
+Flujo happy path:
+
+- [ ] Login con `smoke-onb@demo.dev` / `onboarding1234` desde `/es/login`.
+- [ ] Verificar redirect automático a `/es/onboarding/1` (middleware +
+      cookie hint `showly_onboarding=pending` seteada por LoginForm).
+- [ ] Step 1 (Bienvenida): título muestra "Bienvenido a Showly, Clínica
+      Smoke Onboarding". Elegir tipo "Odontología". Checkbox "Cargar 5
+      preguntas frecuentes" pre-marcada. Click "Empezar".
+- [ ] Step 2 (Servicio): aparecen 5 chips ("Consulta de control",
+      "Limpieza dental", etc). Click en "Limpieza dental" → pre-llena
+      name + duration=45. Click "Continuar".
+- [ ] Verificar en DB: `SELECT id, name, "durationMin" FROM "Service"
+      WHERE "clinicId"='smoke-onb-1';` — 1 row con "Limpieza dental".
+- [ ] Verificar FAQ background: `SELECT COUNT(*) FROM "FaqChunk" WHERE
+      "clinicId"='smoke-onb-1';` — ~6 FAQs creadas.
+- [ ] Step 3 (Profesional): name pre-fill "Smoke Onboarding" (del user).
+      Checkbox "También hace: Limpieza dental" marcada. Elegir 1 color.
+      Click "Continuar".
+- [ ] Verificar M-N: `SELECT p.name FROM "Professional" p WHERE
+      "clinicId"='smoke-onb-1';` — 1 row. Chequear services relation
+      creada.
+- [ ] Step 4 (Horarios): 3 preset cards visibles. Default seleccionado
+      "Comercial clásico". Click "Continuar".
+- [ ] Verificar bulk: `SELECT COUNT(*) FROM "BusinessHour" WHERE
+      "clinicId"='smoke-onb-1';` — 5 rows (L-V 9-18).
+- [ ] Step 5 (WhatsApp): card idle con botón "Conectar mi WhatsApp
+      Business". Click → status transiciona a starting → qr-visible
+      con QR 280×280 + 3 instrucciones.
+- [ ] Escanear QR con celular real (o mockear WAHA). Al llegar a
+      WORKING → confetti + auto-navigate a step 6.
+- [ ] Step 6 (Celebration): título "Todo listo, Smoke Onboarding".
+      Link público visible + botón "Copiar" funciona. Click "Ir al
+      panel".
+- [ ] Verificar completed: `SELECT "onboardingCompletedAt" FROM
+      "Clinic" WHERE id='smoke-onb-1';` — timestamp seteado (no null).
+- [ ] Verificar cookie: en DevTools → Application → Cookies →
+      `showly_onboarding=done`.
+- [ ] En `/es/panel/dashboard`: **NO** debe aparecer el widget
+      Zeigarnik (todo completo).
+
+Path de abandono:
+
+- [ ] Repetir 1-3 con user nuevo, completar solo steps 1-2, click
+      "Guardar y salir" (icono X del header).
+- [ ] Verificar redirect a `/es/panel/dashboard`.
+- [ ] Widget "Completa tu configuración · 25%" visible arriba del
+      dashboard con checklist: ✓ Servicio · ⃝ Profesional · ⃝ Horarios ·
+      ⃝ WhatsApp.
+- [ ] Click "Continuar →" → redirect a `/es/onboarding` que retoma en
+      step 3 (el `onboardingProgress.currentStep` guardado).
+- [ ] Verificar dismiss del widget: click "×" — desaparece per-session.
+      Refresh de la página lo mantiene oculto. Logout + login → vuelve
+      a aparecer (Zeigarnik pull).
+
+Path de skip WhatsApp:
+
+- [ ] Completar steps 1-4 normalmente. En step 5, click "Configurar
+      más tarde" (botón secundario).
+- [ ] AlertDialog aparece: "¿Estás seguro?" + copy sobre "sin WhatsApp
+      no puedes recibir mensajes".
+- [ ] Click "Volver a intentar" → dialog cierra, sigue en step 5.
+- [ ] Click "Configurar más tarde" otra vez → click "Saltar de todos
+      modos" → redirect a `/es/panel/dashboard`.
+- [ ] Verificar `onboardingCompletedAt` **seteado** (skip cuenta como
+      completed en el flow user-side).
+- [ ] Widget del dashboard muestra "WhatsApp conectado" ⃝ pendiente.
+
+Multi-tenant safety:
+
+- [ ] Login como admin de OTRA clínica (`admin@demo.dev`). Verificar
+      que **NO** se ven los datos de `smoke-onb-1` en ninguna pantalla
+      del panel — el tenant isolation debe estar intacto tras crear
+      todas las entidades del onboarding.
+
+Rol PROFESSIONAL:
+
+- [ ] Crear un user PROFESSIONAL vinculado a la clínica virgen (via
+      SQL). Login con ese user → verificar redirect directo a
+      `/es/panel/dashboard`, sin pasar por `/onboarding`. Los
+      profesionales nunca ven el wizard.
+
+Cleanup:
+
+```bash
+# Después del smoke, limpiar la clínica de test
+docker compose exec -T db psql -U showly -c "
+DELETE FROM \"Clinic\" WHERE id='smoke-onb-1';
+"
+# Los cascade van a limpiar Service, Professional, BusinessHour,
+# FaqChunk, User (vinculado por clinicId).
+```
