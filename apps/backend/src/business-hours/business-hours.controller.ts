@@ -18,6 +18,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { tenantWhere, type AuthUser } from '../auth/tenant-context.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateBusinessHourDto } from './dto/create-business-hour.dto';
+import { CreateBusinessHoursBulkDto } from './dto/create-business-hours-bulk.dto';
 import { UpdateBusinessHourDto } from './dto/update-business-hour.dto';
 
 /**
@@ -71,6 +72,51 @@ export class BusinessHoursController {
         professionalId: dto.professionalId ?? null,
       },
     });
+  }
+
+  /**
+   * Creación atómica de N BusinessHour dentro de una transacción Prisma.
+   *
+   * El caso de uso principal es el step 4 del wizard de onboarding: aplicar
+   * un preset (L-V 9-18, o partido con dos turnos) que genera 5-14 rows a la
+   * vez. Con N POST individuales, un fallo parcial deja horarios rotos que
+   * requieren cleanup manual. Con la transacción, o entran todos o ninguno.
+   *
+   * Validamos rangos + tenant del profesional para CADA row antes de tocar
+   * la DB — así fallamos rápido con un 400 claro en lugar de que la
+   * transacción reviente a mitad de camino con un error genérico.
+   */
+  @Post('bulk')
+  async createBulk(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreateBusinessHoursBulkDto,
+    @Query('clinicId') clinicIdOverride?: string,
+  ) {
+    const scope = tenantWhere(user, clinicIdOverride);
+
+    for (const row of dto.hours) {
+      this.assertRange(row.startMinutes, row.endMinutes);
+    }
+    const uniqueProfIds = Array.from(
+      new Set(dto.hours.map((h) => h.professionalId).filter(Boolean)),
+    ) as string[];
+    for (const profId of uniqueProfIds) {
+      await this.assertProfessionalInClinic(scope.clinicId, profId);
+    }
+
+    return this.prisma.$transaction(
+      dto.hours.map((row) =>
+        this.prisma.businessHour.create({
+          data: {
+            clinicId: scope.clinicId,
+            weekday: row.weekday,
+            startMinutes: row.startMinutes,
+            endMinutes: row.endMinutes,
+            professionalId: row.professionalId ?? null,
+          },
+        }),
+      ),
+    );
   }
 
   @Get()
