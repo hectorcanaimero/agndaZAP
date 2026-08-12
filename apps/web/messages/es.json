@@ -1277,5 +1277,156 @@
       "language": "Idioma",
       "copyright": "© {year} Showly. Hecho con cariño para clínicas de LATAM y Brasil."
     }
+  },
+  "onboarding": {
+    "shell": {
+      "saveAndExit": "Guardar y salir",
+      "progress": "{current} de {total} pasos · {percent}%",
+      "back": "Volver",
+      "next": "Continuar",
+      "creating": "Guardando…",
+      "footNote": "En cualquier momento puedes cerrar. Guardamos tu avance.",
+      "stepLabels": {
+        "1": "Bienvenida",
+        "2": "Servicio",
+        "3": "Profesional",
+        "4": "Horarios",
+        "5": "WhatsApp"
+      }
+    },
+    "step1": {
+      "title": "Bienvenido a Showly, {clinicName}",
+      "subtitle": "Vamos a configurar tu agenda en 5 pasos. Toma unos 5 minutos.",
+      "clinicType": {
+        "question": "¿Qué tipo de clínica es?",
+        "dentistry": "Odontología",
+        "aesthetics": "Estética",
+        "general_medicine": "Medicina general",
+        "physiotherapy": "Kinesiología",
+        "psychology": "Psicología",
+        "other": "Otro"
+      },
+      "prefillFaqs": {
+        "title": "Cargar 5 preguntas frecuentes por mí",
+        "help": "Vamos a crear preguntas típicas (horarios, ubicación, formas de pago) que puedes editar después."
+      },
+      "cta": "Empezar"
+    },
+    "step2": {
+      "title": "¿Cuál es tu servicio más común?",
+      "subtitle": "Después puedes agregar más desde el panel.",
+      "suggestions": "Sugerencias para tu tipo de clínica",
+      "name": "Nombre del servicio",
+      "namePlaceholder": "Consulta, limpieza, sesión…",
+      "duration": "Duración",
+      "durationOption": "{mins} minutos",
+      "togglePrice": "Agregar precio (opcional)",
+      "priceOptional": "Precio en centavos",
+      "priceHint": "Ej: 5000 = $50. Se muestra al paciente al reservar.",
+      "errors": {
+        "createFailed": "No pudimos crear el servicio. Probá de nuevo."
+      }
+    },
+    "step3": {
+      "title": "¿Quién va a atender?",
+      "subtitle": "Puede ser el dueño, un especialista o tú mismo. Después puedes agregar más.",
+      "name": "Nombre del profesional",
+      "namePlaceholder": "Nombre y apellido",
+      "linkService": "También hace: {serviceName}",
+      "linkServiceHint": "Si lo destildas, este profesional no aparecerá al reservar ese servicio.",
+      "colorLabel": "Color en la agenda",
+      "colorSwatch": "Color {color}",
+      "optionalToggle": "Más datos (opcional)",
+      "email": "Email",
+      "phone": "Teléfono (WhatsApp)",
+      "specialty": "Especialidad",
+      "specialtyPlaceholder": "Ej: Ortodoncia, dermatología…",
+      "errors": {
+        "createFailed": "No pudimos crear el profesional. Probá de nuevo."
+      }
+    },
+    "step4": {
+      "title": "¿Cuándo atiendes?",
+      "subtitle": "Elige un preset. Después puedes personalizar por profesional desde el panel.",
+      "presetLegend": "Preset de horarios",
+      "presets": {
+        "weekdays-9-18": "Comercial clásico (L-V 9 a 18)",
+        "saturday-included": "Fin de semana también (L-S 9 a 18)",
+        "split-shift": "Turno partido (L-V 9-13 y 15-19)"
+      },
+      "customLater": "Podés personalizar horarios específicos por profesional más adelante desde Panel → Horarios.",
+      "errors": {
+        "createFailed": "No pudimos guardar los horarios. Probá de nuevo.",
+        "emptyPreset": "Elige un preset antes de continuar."
+      }
+    },
+    "step5": {
+      "title": "Conecta tu WhatsApp Business",
+      "subtitle": "Escanea un QR desde tu celular. Toma unos 30 segundos.",
+      "states": {
+        "idle": "Cuando estés listo, escanea el código con tu celular.",
+        "starting": "Preparando conexión…",
+        "connected": {
+          "title": "¡Tu WhatsApp está conectado!",
+          "subtitle": "Tu bot ya puede recibir citas de tus pacientes."
+        },
+        "failed": {
+          "title": "No pudimos conectar",
+          "subtitle": "Intenta de nuevo. Si sigue fallando, contáctanos por soporte."
+        }
+      },
+      "qr": {
+        "alt": "Código QR para vincular WhatsApp"
+      },
+      "instructions": {
+        "1": "Abre WhatsApp Business en tu celular",
+        "2": "Ve a Menú → Dispositivos vinculados",
+        "3": "Toca 'Vincular un dispositivo' y escanea el QR"
+      },
+      "howItWorks": {
+        "title": "¿Cómo funciona esta conexión?",
+        "body": "Showly se conecta a tu WhatsApp como si fuera un dispositivo vinculado — la misma tecnología que WhatsApp Web. Tu número sigue siendo tuyo y puedes desconectarlo cuando quieras desde Panel → Configuración → WhatsApp. No usamos la API oficial de Meta (que requiere aprobación y costos por mensaje), pero esto nos permite estar activos en minutos."
+      },
+      "actions": {
+        "connect": "Conectar mi WhatsApp Business",
+        "retry": "Reintentar",
+        "later": "Configurar más tarde"
+      },
+      "confirmSkip": {
+        "title": "¿Estás seguro?",
+        "body": "Sin WhatsApp conectado, Showly no puede recibir mensajes de tus pacientes. Puedes configurarlo desde Panel → Configuración → WhatsApp cuando quieras.",
+        "stay": "Volver a intentar",
+        "leave": "Saltar de todos modos"
+      },
+      "toasts": {
+        "rateLimited": "Un momento… demasiadas solicitudes seguidas.",
+        "slowStart": "Está tardando más de lo normal. Si no aparece el QR en unos segundos, prueba reintentar.",
+        "startFailed": "No pudimos iniciar la conexión con WhatsApp."
+      }
+    },
+    "celebration": {
+      "title": "¡Todo listo, {name}!",
+      "subtitle": "Tu clínica {clinicName} está en línea. Ya podés compartir tu link de agendamiento.",
+      "shareLink": {
+        "label": "Tu link público",
+        "copy": "Copiar",
+        "help": "Compartelo con tus pacientes por WhatsApp, redes o poné el QR en la puerta de tu consultorio."
+      },
+      "linkCopied": "Link copiado al portapapeles",
+      "linkCopyFailed": "No pudimos copiar. Selecciónalo manualmente.",
+      "goToPanel": "Ir al panel"
+    },
+    "dashboardWidget": {
+      "title": "Completa tu configuración · {percent}%",
+      "subtitle": "Te quedan {n, plural, one {# paso} other {# pasos}} para que tu bot esté 100% funcional.",
+      "dismiss": "Descartar",
+      "items": {
+        "service": "Primer servicio",
+        "professional": "Primer profesional",
+        "hours": "Horarios",
+        "whatsapp": "WhatsApp conectado"
+      },
+      "continue": "Continuar"
+    }
   }
 }
