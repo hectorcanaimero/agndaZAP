@@ -13,6 +13,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { tenantWhere, type AuthUser } from '../auth/tenant-context.util';
 import { PrismaService } from '../prisma/prisma.service';
+import { OnboardingProgressDto } from './dto/onboarding-progress.dto';
 import { UpdateClinicDto } from './dto/update-clinic.dto';
 
 /**
@@ -54,6 +55,8 @@ export class ClinicsController {
         botFallback: true,
         botHandoffMsg: true,
         botTone: true,
+        onboardingCompletedAt: true,
+        onboardingProgress: true,
       },
     });
     if (!clinic) throw new NotFoundException('clínica no encontrada');
@@ -136,6 +139,73 @@ export class ClinicsController {
         `clinic settings update clinicId=${scope.clinicId} by=${user.userId} keys=${Object.keys(dto).join(',')}`,
       );
     }
+
+    return updated;
+  }
+
+  /**
+   * Onboarding wizard progress. Endpoint separado de `PATCH /me` para no
+   * pollute el DTO principal — son concerns distintos (config vs progreso).
+   *
+   * - `progress` hace merge shallow sobre el JSON existente (el cliente manda
+   *   solo las keys que cambian, no reenvía todo el objeto).
+   * - `completed=true` setea `onboardingCompletedAt = NOW()` de forma
+   *   idempotente: llamados subsecuentes NO actualizan el timestamp.
+   * - Log SIN PII: solo clinicId + userId + step + flag completed.
+   *
+   * Ver docs/notas/2026-08-11-onboarding-wizard.md §Backend.
+   */
+  @Patch('me/onboarding')
+  @Roles('CLINIC_ADMIN', 'SUPERADMIN')
+  async updateOnboarding(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: OnboardingProgressDto,
+    @Query('clinicId') clinicIdOverride?: string,
+  ) {
+    const scope = tenantWhere(user, clinicIdOverride);
+
+    // Merge shallow del progress: leer el existente, mergear con lo nuevo,
+    // guardar. Prisma no tiene un `jsonb ||` nativo cross-driver, y la
+    // cardinalidad esperada es baja (~1 write cada pocos segundos por user).
+    const before = await this.prisma.clinic.findUnique({
+      where: { id: scope.clinicId },
+      select: { onboardingProgress: true, onboardingCompletedAt: true },
+    });
+    if (!before) throw new NotFoundException('clínica no encontrada');
+
+    const nextProgress =
+      dto.progress !== undefined
+        ? {
+            ...((before.onboardingProgress as Record<string, unknown>) ?? {}),
+            ...dto.progress,
+          }
+        : (before.onboardingProgress as Record<string, unknown> | null);
+
+    // Idempotencia: si ya está completado, no re-escribimos el timestamp.
+    const nextCompletedAt =
+      dto.completed === true && before.onboardingCompletedAt === null
+        ? new Date()
+        : before.onboardingCompletedAt;
+
+    const updated = await this.prisma.clinic.update({
+      where: { id: scope.clinicId },
+      data: {
+        ...(dto.progress !== undefined
+          ? { onboardingProgress: nextProgress ?? undefined }
+          : {}),
+        ...(dto.completed === true && before.onboardingCompletedAt === null
+          ? { onboardingCompletedAt: nextCompletedAt }
+          : {}),
+      },
+      select: {
+        onboardingCompletedAt: true,
+        onboardingProgress: true,
+      },
+    });
+
+    this.logger.log(
+      `onboarding.progress clinicId=${scope.clinicId} by=${user.userId} step=${dto.step ?? '-'} completed=${dto.completed === true}`,
+    );
 
     return updated;
   }

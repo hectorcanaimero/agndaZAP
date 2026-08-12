@@ -25,6 +25,11 @@ export interface LoginResult {
 /**
  * Snapshot del user + su clínica (si aplica). Usado por `GET /auth/me`.
  * NUNCA incluye `password`.
+ *
+ * `onboardingCompletedAt` y `onboardingProgress` los consume el wizard
+ * (`/[locale]/onboarding/*`) para hidratar estado en SSR + decidir redirect.
+ * El middleware Next.js NO lee esto — usa un cookie hint por performance,
+ * pero panel/layout.tsx re-setea la cookie desde este snapshot en cada carga.
  */
 export interface AuthMe {
   id: string;
@@ -37,6 +42,8 @@ export interface AuthMe {
     slug: string;
     timezone: string;
     locale: string;
+    onboardingCompletedAt: Date | null;
+    onboardingProgress: unknown;
   } | null;
 }
 
@@ -148,6 +155,8 @@ export class AuthService {
             slug: true,
             timezone: true,
             locale: true,
+            onboardingCompletedAt: true,
+            onboardingProgress: true,
           },
         },
       },

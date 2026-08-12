@@ -284,6 +284,8 @@ describe('AuthService', () => {
           slug: 'clinica-a',
           timezone: 'America/Caracas',
           locale: 'es',
+          onboardingCompletedAt: new Date('2026-08-11T00:00:00Z'),
+          onboardingProgress: null,
         },
       });
       const me = await service.me('user-1');
@@ -291,6 +293,7 @@ describe('AuthService', () => {
       expect(me.clinic).toMatchObject({
         id: 'clinic-A',
         slug: 'clinica-a',
+        onboardingCompletedAt: expect.any(Date),
       });
     });
 
