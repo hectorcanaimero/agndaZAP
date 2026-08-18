@@ -51,9 +51,21 @@ async function main() {
   // compromiso obvio. Preferimos crashear que resembrar credenciales.
   // Whitelist explícito: sólo `development` y `test` — cualquier otro valor
   // (`staging`, `production`, undefined en Docker, etc.) es error.
+  //
+  // Bypass INTENCIONAL: setear SEED_ALLOW_PROD=1 (típicamente para bootstrap
+  // del primer SUPERADMIN + data demo en un ambiente nuevo). Genera warnings
+  // explícitos en el log y NUNCA debería quedar activado por default.
   const env = process.env.NODE_ENV ?? 'development';
-  if (!['development', 'test'].includes(env)) {
-    throw new Error(`seed sólo en development/test, actual: ${env}`);
+  const allowProdSeed = process.env.SEED_ALLOW_PROD === '1';
+  if (!['development', 'test'].includes(env) && !allowProdSeed) {
+    throw new Error(
+      `seed sólo en development/test, actual: ${env}. Bypass explícito: SEED_ALLOW_PROD=1`,
+    );
+  }
+  if (allowProdSeed && env === 'production') {
+    console.warn('⚠️  BYPASS ACTIVO: seed corriendo en PRODUCCIÓN por SEED_ALLOW_PROD=1');
+    console.warn('⚠️  Crea usuarios con passwords conocidos (super1234, demo1234).');
+    console.warn('⚠️  Rotar los passwords después del bootstrap si el ambiente es real.');
   }
 
   // 1) Clínica demo (upsert por slug — idempotente).
