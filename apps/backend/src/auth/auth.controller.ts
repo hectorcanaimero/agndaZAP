@@ -3,12 +3,12 @@ import {
   Controller,
   Get,
   HttpCode,
-  Logger,
   Post,
   Req,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { extractIp, MinimalRequest } from '../common/extract-ip';
 import { RateLimit } from '../public/rate-limit.guard';
 import { AuthMe, AuthService, LoginResult } from './auth.service';
@@ -29,10 +29,13 @@ import { LoginDto } from './dto/login.dto';
  */
 @Controller('auth')
 export class AuthController {
-  private readonly logger = new Logger('AuthController');
   private readonly trustProxy = process.env.TRUST_PROXY === 'true';
 
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    @InjectPinoLogger(AuthController.name)
+    private readonly logger: PinoLogger,
+  ) {}
 
   /**
    * Login. Mismo mensaje de error para "email inexistente" y "password mala"

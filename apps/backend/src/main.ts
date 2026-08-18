@@ -1,8 +1,14 @@
 import 'reflect-metadata';
-import { Logger, RequestMethod, ValidationPipe } from '@nestjs/common';
+// initSentry() DEBE llamarse ANTES de importar AppModule para capturar
+// errores de bootstrap (módulos que fallan al inicializar). El import
+// order no lo garantiza — la llamada explícita en bootstrap() sí.
+import { RequestMethod, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { Queue } from 'bullmq';
+import express from 'express';
 import helmet from 'helmet';
+import { Logger } from 'nestjs-pino';
+import { initSentry, isSentryEnabled } from './common/sentry/sentry.config';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
 import { WahaService } from './whatsapp/waha.service';
@@ -17,7 +23,11 @@ import { parseRedis } from './reminders/reminders.module';
 import { createFollowUpsWorker } from './follow-ups/follow-ups.processor';
 
 async function bootstrap(): Promise<void> {
-  const logger = new Logger('Bootstrap');
+  // Sentry ANTES que cualquier NestFactory / Module init. Sin esto, si un
+  // provider falla en su constructor, perdemos el error (no llega al filter).
+  if (isSentryEnabled()) {
+    initSentry();
+  }
 
   // Fail-fast en producción: si faltan env vars críticas, morir antes de bootstrappear
   // Nest (ahorra logs confusos y evita que arranque a medias). En dev seguimos con
@@ -55,9 +65,25 @@ async function bootstrap(): Promise<void> {
     if (jwtSecret.startsWith('dev-')) {
       throw new Error('JWT_SECRET no puede tener prefijo "dev-" en producción');
     }
+
+    // Observabilidad: en prod SENTRY_DSN no es opcional. Sin él quedamos
+    // ciegos frente a errores en las 40 clínicas del piloto.
+    if (!process.env.SENTRY_DSN) {
+      throw new Error('SENTRY_DSN es obligatoria en producción');
+    }
   }
 
-  const app = await NestFactory.create(AppModule, { bufferLogs: false });
+  // `bufferLogs: true` retiene los logs internos de Nest hasta que
+  // `app.useLogger()` los adopte — sin esto perdemos los mensajes de
+  // inicialización (module init, route mapping) en Pino.
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+
+  // Reemplazar el Logger default de Nest por Pino global. A partir de acá
+  // TODOS los `Logger.log()` internos de Nest y los `logger.log()` de este
+  // bootstrap salen como JSON estructurado con los base fields
+  // (service, env) y respetando el `redact` de PII.
+  const logger = app.get(Logger);
+  app.useLogger(logger);
 
   // Trust proxy: si el backend está detrás de un proxy confiable (Cloudflare,
   // nginx, ALB), Express necesita saberlo para resolver `req.ip` desde el
@@ -72,6 +98,23 @@ async function bootstrap(): Promise<void> {
       instance.set('trust proxy', 1);
     }
   }
+
+  // Body parsers con `verify` callback que preserva el buffer raw en `req.rawBody`.
+  // Necesario para verificar HMAC del webhook WAHA sobre los bytes originales
+  // (JSON.stringify del body parseado no es determinístico — se pierden
+  // whitespace, orden de keys, encoding). Solo se guarda el raw en el path del
+  // webhook para no gastar memoria en TODO request.
+  const captureRawBody = (
+    req: express.Request & { rawBody?: Buffer },
+    _res: express.Response,
+    buf: Buffer,
+  ): void => {
+    if (req.url?.startsWith('/webhooks/')) {
+      req.rawBody = buf;
+    }
+  };
+  app.use(express.json({ verify: captureRawBody, limit: '1mb' }));
+  app.use(express.urlencoded({ extended: true, verify: captureRawBody }));
 
   // Helmet ANTES de CORS: headers de seguridad (X-Content-Type-Options,
   // Strict-Transport-Security, referrer-policy, etc.) aplican también a la

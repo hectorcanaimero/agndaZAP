@@ -4,7 +4,6 @@ import {
   Controller,
   ForbiddenException,
   Get,
-  Logger,
   NotFoundException,
   Param,
   Patch,
@@ -14,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { AppointmentStatus, Prisma } from '@prisma/client';
 import { DateTime } from 'luxon';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -54,14 +54,14 @@ import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
 @Controller('appointments')
 @UseGuards(RolesGuard)
 export class AppointmentsController {
-  private readonly logger = new Logger('AppointmentsController');
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly reminders: RemindersService,
     private readonly followUps: FollowUpsService,
     private readonly scheduling: SchedulingService,
     private readonly availability: AvailabilityService,
+    @InjectPinoLogger(AppointmentsController.name)
+    private readonly logger: PinoLogger,
   ) {}
 
   @Get()
@@ -333,7 +333,7 @@ export class AppointmentsController {
     }
 
     // Log de auditoría (CERO PII). apptId + old→new. `reason` NO se loguea.
-    this.logger.log(
+    this.logger.info(
       `appt status change apptId=${id} ${existing.status}->${dto.status} by=${user.userId}`,
     );
 
@@ -418,7 +418,7 @@ export class AppointmentsController {
     });
 
     // Log de auditoría (CERO PII). apptId + old→new startAt.
-    this.logger.log(
+    this.logger.info(
       `appt reschedule apptId=${id} ${existing.startAt.toISOString()}->${updated.startAt.toISOString()} by=${user.userId}`,
     );
 

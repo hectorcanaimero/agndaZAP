@@ -60,7 +60,18 @@ describe('PatientsController', () => {
       appointment: { findMany: jest.fn().mockResolvedValue([]) },
       conversation: { findFirst: jest.fn().mockResolvedValue(null) },
     };
-    controller = new PatientsController(prisma as unknown as PrismaService);
+    controller = new PatientsController(
+      prisma as unknown as PrismaService,
+      {
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+        trace: jest.fn(),
+        fatal: jest.fn(),
+        setContext: jest.fn(),
+      } as unknown as import('nestjs-pino').PinoLogger,
+    );
   });
 
   /* ─────────────────────── list ─────────────────────── */

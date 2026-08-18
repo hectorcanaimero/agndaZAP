@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { DateTime } from 'luxon';
+import { RequestContextService } from '../common/logger/request-context';
 import { PrismaService } from '../prisma/prisma.service';
 
 export const FOLLOW_UPS_QUEUE = 'follow-ups';
@@ -16,6 +17,7 @@ export class FollowUpsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly queue: Queue,
+    private readonly ctx: RequestContextService,
   ) {}
 
   // Encola el follow-up de una cita ATENDIDA. Idempotente por jobId derivado del
@@ -43,7 +45,11 @@ export class FollowUpsService {
     const delay = Math.max(0, appt.professional.followUpDelayHours) * 3_600_000;
     await this.queue.add(
       'send-follow-up',
-      { appointmentId },
+      {
+        appointmentId,
+        requestId: this.ctx.get('requestId'),
+        clinicId: appt.clinicId,
+      },
       {
         delay,
         // Un follow-up por cita. BullMQ ignora duplicados por jobId.

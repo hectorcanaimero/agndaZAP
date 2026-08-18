@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Get,
-  Logger,
   NotFoundException,
   Param,
   Patch,
@@ -10,6 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -38,9 +38,11 @@ import { UpdatePatientDto } from './dto/update-patient.dto';
 @UseGuards(RolesGuard)
 @Roles('CLINIC_ADMIN', 'SUPERADMIN')
 export class PatientsController {
-  private readonly logger = new Logger('PatientsController');
-
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @InjectPinoLogger(PatientsController.name)
+    private readonly logger: PinoLogger,
+  ) {}
 
   /**
    * `GET /api/patients?q=&limit=&offset=`
@@ -255,7 +257,7 @@ export class PatientsController {
       },
     });
 
-    this.logger.log(
+    this.logger.info(
       `patient update patientId=${id} by=${user.userId} keys=${Object.keys(data).join(',')}`,
     );
 

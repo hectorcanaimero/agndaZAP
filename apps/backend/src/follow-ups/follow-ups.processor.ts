@@ -1,5 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { Logger } from '@nestjs/common';
+import * as Sentry from '@sentry/nestjs';
 import { Worker, Job } from 'bullmq';
+import { requestContext } from '../common/logger/request-context';
+import { isSentryEnabled } from '../common/sentry/sentry.config';
 import { PrismaService } from '../prisma/prisma.service';
 import { WahaService } from '../whatsapp/waha.service';
 import { FOLLOW_UPS_QUEUE } from './follow-ups.service';
@@ -18,6 +22,34 @@ export function createFollowUpsWorker(
   return new Worker(
     FOLLOW_UPS_QUEUE,
     async (job: Job) => {
+      const store = {
+        requestId: (job.data.requestId as string) ?? randomUUID(),
+        clinicId: (job.data.clinicId as string) ?? undefined,
+      };
+      return await requestContext.run(store, async () => {
+        try {
+          return await handle(job);
+        } catch (err) {
+          if (isSentryEnabled()) {
+            Sentry.captureException(err, {
+              tags: {
+                queue: FOLLOW_UPS_QUEUE,
+                jobName: job.name,
+                jobId: String(job.id ?? '?'),
+                attempt: String(job.attemptsMade + 1),
+                ...(store.clinicId ? { clinicId: store.clinicId } : {}),
+              },
+              extra: { requestId: store.requestId, data: job.data },
+            });
+          }
+          throw err;
+        }
+      });
+    },
+    { connection },
+  );
+
+  async function handle(job: Job): Promise<void> {
       if (job.name !== 'send-follow-up') return;
       const { appointmentId } = job.data as { appointmentId: string };
 
@@ -72,7 +104,5 @@ export function createFollowUpsWorker(
       }
 
       logger.log(`follow-up enviado apptId=${appointmentId}`);
-    },
-    { connection },
-  );
+  }
 }
