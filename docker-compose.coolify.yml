@@ -1,0 +1,184 @@
+# Showly — Docker Compose para Coolify.
+#
+# Diferencias clave respecto a `docker-compose.prod.yml`:
+#  - SIN service `caddy`: Coolify ya trae Traefik en el server manejando
+#    80/443 + LetsEncrypt. Meter otro reverse proxy = colisión de puertos.
+#  - SIN `ports:` en ningún service (ni 80/443, ni 5432, ni nada al host).
+#    Todo se resuelve por la red interna del compose. Coolify Traefik hace
+#    de puente hacia afuera vía labels auto-generadas.
+#  - Services proxyables usan `expose:` en vez de `ports:` — abre el puerto
+#    al network interno sin bindear al host.
+#  - Volumes named (`db-data`, `redis-data`, `waha-data`) en vez de host
+#    paths absolutos (`/srv/showly/data/*`). Coolify los persiste y respalda.
+#  - `restart: always` en vez de `unless-stopped` (convención Coolify).
+#  - Env vars vienen de Coolify (no `.env.production` en disco). Se cargan
+#    vía `PATCH /applications/{uuid}/envs/bulk`. La interpolación `${VAR}`
+#    se resuelve con lo que Coolify inyecta.
+#
+# Orden de services proxyables (importa para `docker_compose_domains`):
+#   posición 1 → `waha`    → https://waha.showly.us
+#   posición 2 → `backend` → https://api.showly.us
+#   posición 3 → `web`     → https://showly.us
+#
+# Este orden se envía en el array `docker_compose_domains` al crear la app
+# en Coolify (ver docs/deploy-coolify.md o el skill de coolify).
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
+name: showly
+
+services:
+  db:
+    image: pgvector/pgvector:pg15
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    logging: *default-logging
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    logging: *default-logging
+
+  waha:
+    image: devlikeapro/waha:latest
+    restart: always
+    expose:
+      - "3000"
+    environment:
+      WAHA_API_KEY: ${WAHA_API_KEY}
+      WHATSAPP_HOOK_URL: http://backend:4000/webhooks/waha
+      WHATSAPP_HOOK_EVENTS: message,session.status
+      WHATSAPP_HOOK_HEADERS: "x-webhook-token: ${WEBHOOK_TOKEN}"
+      WHATSAPP_HOOK_HMAC: ${WEBHOOK_HMAC_SECRET}
+      WHATSAPP_RESTART_ALL_SESSIONS: "true"
+      WAHA_DASHBOARD_ENABLED: "true"
+      WAHA_DASHBOARD_USERNAME: ${WAHA_DASHBOARD_USERNAME}
+      WAHA_DASHBOARD_PASSWORD: ${WAHA_DASHBOARD_PASSWORD}
+      WHATSAPP_SWAGGER_USERNAME: ${WHATSAPP_SWAGGER_USERNAME}
+      WHATSAPP_SWAGGER_PASSWORD: ${WHATSAPP_SWAGGER_PASSWORD}
+    volumes:
+      - waha-data:/app/.sessions
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging: *default-logging
+
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    restart: always
+    expose:
+      - "4000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      waha:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379
+      WAHA_BASE_URL: http://waha:3000
+      WAHA_API_KEY: ${WAHA_API_KEY}
+      WEBHOOK_TOKEN: ${WEBHOOK_TOKEN}
+      WEBHOOK_HMAC_SECRET: ${WEBHOOK_HMAC_SECRET}
+      JWT_SECRET: ${JWT_SECRET}
+      TRUST_PROXY: "true"
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      BOT_LLM_PROVIDER: ${BOT_LLM_PROVIDER:-deepseek}
+      BOT_LLM_FALLBACK: ${BOT_LLM_FALLBACK:-gemini}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_PRETTY: "false"
+      AXIOM_ENABLED: ${AXIOM_ENABLED:-true}
+      AXIOM_DATASET_LOGS: ${AXIOM_DATASET_LOGS:-showly-prod}
+      AXIOM_TOKEN: ${AXIOM_TOKEN}
+      AXIOM_ORG_ID: ${AXIOM_ORG_ID}
+      SENTRY_ENABLED: "true"
+      SENTRY_DSN: ${SENTRY_DSN}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.1}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:4000/api/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    logging: *default-logging
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      # SENTRY_AUTH_TOKEN es secret build-time: requiere que la app en Coolify
+      # tenga `use_build_secrets: true` + `inject_build_args_to_dockerfile: true`.
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        SENTRY_ORG: ${SENTRY_ORG:-}
+        SENTRY_PROJECT: ${SENTRY_PROJECT:-}
+        SENTRY_AUTH_TOKEN: ${SENTRY_AUTH_TOKEN:-}
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+        NEXT_PUBLIC_SENTRY_ENABLED: ${NEXT_PUBLIC_SENTRY_ENABLED:-true}
+        NEXT_PUBLIC_SENTRY_ENVIRONMENT: ${NEXT_PUBLIC_SENTRY_ENVIRONMENT:-production}
+        NEXT_PUBLIC_SENTRY_RELEASE: ${NEXT_PUBLIC_SENTRY_RELEASE:-}
+        NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE:-0.1}
+    restart: always
+    expose:
+      - "3002"
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "3002"
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      SENTRY_ENABLED: "true"
+      NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN}
+      NEXT_PUBLIC_SENTRY_ENABLED: "true"
+      NEXT_PUBLIC_SENTRY_ENVIRONMENT: ${NEXT_PUBLIC_SENTRY_ENVIRONMENT:-production}
+      NEXT_PUBLIC_SENTRY_RELEASE: ${NEXT_PUBLIC_SENTRY_RELEASE:-}
+      NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE:-0.1}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3002/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging: *default-logging
+
+volumes:
+  db-data:
+  redis-data:
+  waha-data:
