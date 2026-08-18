@@ -6,4 +6,4 @@ context: guria
 project: vlwz46jmjzcrg9ftqpqnjqen        # showly project
 server: pgk0ows8kw0kcs8c44ss8ogs          # localhost server
 environment: production
-# app: <set after first deploy via `coolify-ctx marker set app <uuid>`>
+app: ikvqihmuo38obfcs1nfww5vw            # showly app (docker compose)
