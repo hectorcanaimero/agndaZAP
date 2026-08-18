@@ -1,15 +1,16 @@
 import {
   Body,
   Controller,
-  ForbiddenException,
   Headers,
   HttpCode,
   Logger,
   Post,
+  Req,
 } from '@nestjs/common';
 import { Public } from '../auth/decorators/public.decorator';
 import { BotService } from '../bot/bot.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { verifyWebhookAuthFromEnv } from './webhook-auth.util';
 
 /**
  * Shape del cuerpo del webhook. NO usamos DTO con class-validator porque el
@@ -72,29 +73,17 @@ export class WebhookController {
   @HttpCode(200)
   async handleWaha(
     @Body() body: WahaWebhookBody,
+    @Req() req: { rawBody?: Buffer },
     @Headers('x-webhook-token') token?: string,
+    @Headers('x-webhook-hmac') hmac?: string,
   ) {
-    // Validación del webhook (evita inyección externa).
-    // WAHA (build noweb-arm/community) NO envía WHATSAPP_HOOK_HEADERS custom
-    // — es feature de WAHA Plus. Para prod, usar WEBHOOK_HMAC de WAHA con
-    // verificación por firma, o exponer el backend detrás de un reverse-proxy
-    // que valide auth antes de llegar al endpoint.
-    const requiredToken = process.env.WEBHOOK_TOKEN;
-    const isProd = process.env.NODE_ENV === 'production';
-    if (isProd && !requiredToken) {
-      // En prod, sin token configurado el webhook queda expuesto — fail-closed.
-      throw new ForbiddenException('WEBHOOK_TOKEN no configurado en producción');
-    }
-    if (requiredToken && token !== requiredToken) {
-      // En dev, si el header simplemente no llegó (WAHA community no lo manda),
-      // permitir con warning. Si vino con valor incorrecto, sigue rechazando.
-      if (!isProd && !token) {
-        this.logger.warn(
-          'webhook sin x-webhook-token en dev — permitiendo (fail-open dev only). Configurar WEBHOOK_HMAC en prod.',
-        );
-      } else {
-        throw new ForbiddenException('token de webhook inválido');
-      }
+    // Auth del webhook. Preferencia: HMAC > shared token > skip (opt-in explícito).
+    // Ver `verifyWebhookAuth` en `webhook-auth.util.ts` para el detalle.
+    const authResult = verifyWebhookAuthFromEnv(req.rawBody, token, hmac);
+    if (authResult === 'skip-explicit') {
+      this.logger.warn(
+        'webhook sin auth — ALLOW_WEBHOOK_WITHOUT_TOKEN=true activo (dev only)',
+      );
     }
 
     const { event, session, payload } = body;

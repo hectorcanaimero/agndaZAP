@@ -74,6 +74,10 @@ services:
       WHATSAPP_HOOK_URL: http://backend:4000/webhooks/waha
       WHATSAPP_HOOK_EVENTS: message,session.status
       WHATSAPP_HOOK_HEADERS: "x-webhook-token: ${WEBHOOK_TOKEN}"
+      # HMAC-SHA256 sobre el body raw. Si WAHA Plus está disponible, esto es
+      # el mecanismo primario de auth del webhook. En community WAHA no lo
+      # firma — el backend cae al fallback WEBHOOK_TOKEN.
+      WHATSAPP_HOOK_HMAC: ${WEBHOOK_HMAC_SECRET}
       WHATSAPP_RESTART_ALL_SESSIONS: "true"
       # Dashboard admin (protegido por auth básica).
       WAHA_DASHBOARD_ENABLED: "true"
@@ -113,6 +117,12 @@ services:
       WAHA_BASE_URL: http://waha:3000
       WAHA_API_KEY: ${WAHA_API_KEY}
       WEBHOOK_TOKEN: ${WEBHOOK_TOKEN}
+      # HMAC secret (WAHA Plus) — mecanismo primario de auth del webhook.
+      WEBHOOK_HMAC_SECRET: ${WEBHOOK_HMAC_SECRET}
+      # Explícito: en prod SIEMPRE false. Aquí NO se setea (default vacío = false).
+      # Si algún operador lo pone en true en el .env.production, el código igual
+      # lo ignora por el guard `isProd` en verifyWebhookAuth.
+      # ALLOW_WEBHOOK_WITHOUT_TOKEN: intencionalmente omitido
       JWT_SECRET: ${JWT_SECRET}
       TRUST_PROXY: "true"
       CORS_ORIGINS: ${CORS_ORIGINS}
@@ -121,8 +131,27 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # Observability: logs (Pino → Axiom)
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_PRETTY: "false"
+      AXIOM_ENABLED: ${AXIOM_ENABLED:-true}
+      AXIOM_DATASET_LOGS: ${AXIOM_DATASET_LOGS:-showly-prod}
+      AXIOM_TOKEN: ${AXIOM_TOKEN}
+      AXIOM_ORG_ID: ${AXIOM_ORG_ID}
+      # Observability: errors (Sentry). SENTRY_DSN es OBLIGATORIA en prod
+      # (fail-fast en main.ts si falta).
+      SENTRY_ENABLED: "true"
+      SENTRY_DSN: ${SENTRY_DSN}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.1}
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:4000/api/health"]
+      # Usa /live (liveness puro, sin dependencias) en vez de /health completo.
+      # Un blip de WAHA no debe matar el container del backend — /health
+      # puede devolver waha:false por eso, pero /live siempre confirma que
+      # el proceso está vivo. BetterStack tiene monitors separados para /health
+      # completo con umbrales más tolerantes (2 fails consecutivos).
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:4000/api/health/live"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -136,6 +165,19 @@ services:
       dockerfile: apps/web/Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        # Sentry build-time (upload sourcemaps). Estas 3 vars van a build.args
+        # a propósito — no queremos SENTRY_AUTH_TOKEN en el runtime env del
+        # container por seguridad.
+        SENTRY_ORG: ${SENTRY_ORG:-}
+        SENTRY_PROJECT: ${SENTRY_PROJECT:-}
+        SENTRY_AUTH_TOKEN: ${SENTRY_AUTH_TOKEN:-}
+        # NEXT_PUBLIC_* deben estar disponibles en build-time para que Next
+        # las inyecte en el bundle del cliente.
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+        NEXT_PUBLIC_SENTRY_ENABLED: ${NEXT_PUBLIC_SENTRY_ENABLED:-true}
+        NEXT_PUBLIC_SENTRY_ENVIRONMENT: ${NEXT_PUBLIC_SENTRY_ENVIRONMENT:-production}
+        NEXT_PUBLIC_SENTRY_RELEASE: ${NEXT_PUBLIC_SENTRY_RELEASE:-}
+        NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE:-0.1}
     restart: unless-stopped
     depends_on:
       backend:
@@ -144,8 +186,17 @@ services:
       NODE_ENV: production
       PORT: "3002"
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      # Sentry runtime vars — el server-side (RSC, API routes) las lee acá.
+      SENTRY_ENABLED: "true"
+      NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN}
+      NEXT_PUBLIC_SENTRY_ENABLED: "true"
+      NEXT_PUBLIC_SENTRY_ENVIRONMENT: ${NEXT_PUBLIC_SENTRY_ENVIRONMENT:-production}
+      NEXT_PUBLIC_SENTRY_RELEASE: ${NEXT_PUBLIC_SENTRY_RELEASE:-}
+      NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE:-0.1}
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3002/"]
+      # Usar /api/health en vez de "/" — más explícito y con Cache-Control
+      # no-store (evita que el healthcheck se pegue por un cache raro).
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3002/api/health"]
       interval: 15s
       timeout: 5s
       retries: 3

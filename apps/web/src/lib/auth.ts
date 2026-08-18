@@ -129,8 +129,13 @@ export function readTokenFromDocument(): string | null {
 }
 
 /**
- * Client-side: escribe el cookie con el token. `sameSite=Lax`, `path=/`, y
+ * Client-side: escribe el cookie con el token. `SameSite=Strict`, `path=/`, y
  * `Secure` en https.
+ *
+ * DEUDA POST-PILOTO (ADR 0017): migrar a `HttpOnly` con refresh flow —
+ * hoy el JWT queda expuesto a XSS. `SameSite=Strict` reduce CSRF pero
+ * NO mitiga XSS. Ver `docs/notas/2026-08-19-observabilidad-implementada.md`
+ * §deuda-post-piloto para el plan de migración (2-3 días dedicados).
  */
 export function writeTokenToDocument(token: string): void {
   if (typeof document === 'undefined') return;
@@ -140,7 +145,7 @@ export function writeTokenToDocument(token: string): void {
       : '';
   document.cookie = `${AUTH_COOKIE_NAME}=${encodeURIComponent(
     token,
-  )}; path=/; max-age=${COOKIE_MAX_AGE_SECONDS}; SameSite=Lax${secure}`;
+  )}; path=/; max-age=${COOKIE_MAX_AGE_SECONDS}; SameSite=Strict${secure}`;
 }
 
 /**
@@ -148,7 +153,7 @@ export function writeTokenToDocument(token: string): void {
  */
 export function clearTokenFromDocument(): void {
   if (typeof document === 'undefined') return;
-  document.cookie = `${AUTH_COOKIE_NAME}=; path=/; max-age=0; SameSite=Lax`;
+  document.cookie = `${AUTH_COOKIE_NAME}=; path=/; max-age=0; SameSite=Strict`;
 }
 
 /**
@@ -175,13 +180,13 @@ export function writeAdminBackupToDocument(token: string): void {
       : '';
   document.cookie = `${AUTH_ADMIN_BACKUP_COOKIE_NAME}=${encodeURIComponent(
     token,
-  )}; path=/; max-age=${COOKIE_MAX_AGE_SECONDS}; SameSite=Lax${secure}`;
+  )}; path=/; max-age=${COOKIE_MAX_AGE_SECONDS}; SameSite=Strict${secure}`;
 }
 
 /** Client-side: borra el backup del token de SUPERADMIN. */
 export function clearAdminBackupFromDocument(): void {
   if (typeof document === 'undefined') return;
-  document.cookie = `${AUTH_ADMIN_BACKUP_COOKIE_NAME}=; path=/; max-age=0; SameSite=Lax`;
+  document.cookie = `${AUTH_ADMIN_BACKUP_COOKIE_NAME}=; path=/; max-age=0; SameSite=Strict`;
 }
 
 /**
