@@ -1,8 +1,10 @@
 # ADR 0005 — Auth MVP: alcance, decisiones y deuda para post-piloto
 
 - Fecha: 2026-08-08
-- Estado: aceptado (piloto)
+- Estado: aceptado (piloto) — parcialmente cerrado (ver nota abajo)
 - Relacionados: [[0004-pii-y-compliance]], [[../notas/2026-08-08-bloque-auth]]
+
+> **Nota (2026-08-14)**: §7 (`TenantContext` como precondición del panel) queda resuelto y ampliado por [[0014-superadmin-como-operador-saas]]. El SUPERADMIN pasa de escape-hatch con `?clinicId=xxx` a operador SaaS con impersonation auditada, panel propio y ciclo de vida de cuentas de clínica. El override está deprecado y eliminado de todos los controllers del panel.
 
 ## Contexto
 
@@ -71,10 +73,8 @@ sin justificación.
 
 ### 7. `TenantContext` + `assertClinicScope` + `isSuperadmin` = precondición del Bloque Panel
 
-- **Estado**: **NO implementado todavía**. Todavía no lo necesitamos porque
-  ningún endpoint scoped por clínica existe (los endpoints públicos usan
-  slug del path, no el JWT).
-- **Regla**: antes de tocar el primer CRUD scoped del panel, hay que
+- **Estado (2026-08-14)**: **Cerrado** — implementado y ampliado por [[0014-superadmin-como-operador-saas]]. El SUPERADMIN ya no puede usar `?clinicId=xxx` para cruzar tenants: opera exclusivamente vía impersonation con JWT temporal auditado. `assertClinicScope` ahora tira 400 con "SUPERADMIN debe impersonar una clínica primero" si no hay `clinicId` en el JWT.
+- **Regla original**: antes de tocar el primer CRUD scoped del panel, hay que
   introducir estos helpers. Sin ellos, un `SUPERADMIN` sin `clinicId`
   puede colar queries a cualquier tenant si el código no lo blindea
   explícitamente.
@@ -156,7 +156,7 @@ sin justificación.
 
 ## Roadmap de cierre (orden sugerido)
 
-1. `TenantContext` + `assertClinicScope` + `isSuperadmin` (precondición del panel).
+1. ~~`TenantContext` + `assertClinicScope` + `isSuperadmin` (precondición del panel).~~ **Cerrado 2026-08-14 — ver [[0014-superadmin-como-operador-saas]].**
 2. Refresh tokens + denylist en Redis.
 3. Password reset flow (email + `PasswordResetToken`).
 4. bcrypt(12) + re-hash on-login.

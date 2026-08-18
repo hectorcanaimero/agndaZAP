@@ -19,6 +19,14 @@ describe('DashboardController', () => {
     clinicId: null,
     role: 'SUPERADMIN',
   };
+  // Post-ADR 0014: SUPERADMIN debe impersonar antes de operar sobre datos de
+  // clínica. El JWT impersonado trae clinicId + impersonatedBy.
+  const superadminImpersonatingZ: AuthUser = {
+    userId: 'u-s',
+    clinicId: 'clinic-Z',
+    role: 'SUPERADMIN',
+    impersonatedBy: 'u-s',
+  };
 
   beforeEach(() => {
     const tz = 'America/Caracas';
@@ -80,14 +88,26 @@ describe('DashboardController', () => {
     expect(m.noShowRate).toBe(0);
   });
 
-  it('SUPERADMIN sin override → 400', async () => {
+  it('SUPERADMIN sin impersonation activa → 400', async () => {
+    // Post-ADR 0014: sin JWT impersonado, no hay acceso a metrics de una
+    // clínica. El escape hatch (`?clinicId=`) ya no habilita.
     await expect(controller.metrics(superadmin)).rejects.toMatchObject({
       status: 400,
+      message: expect.stringContaining('impersonar'),
     });
   });
 
-  it('SUPERADMIN con override → usa ese clinicId para lookup', async () => {
-    await controller.metrics(superadmin, 'clinic-Z');
+  it('SUPERADMIN sin impersonation + intent override → sigue siendo 400', async () => {
+    // Fase 6: el parámetro ?clinicId= fue removido. Sin JWT impersonado,
+    // no hay forma de escapar — el SUPERADMIN está forzado a impersonar.
+    await expect(
+      controller.metrics(superadmin),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(prisma.clinic.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('SUPERADMIN impersonando (JWT con clinicId) → usa el clinicId del JWT para lookup', async () => {
+    await controller.metrics(superadminImpersonatingZ);
     const call = prisma.clinic.findUnique.mock.calls[0][0];
     expect(call.where.id).toBe('clinic-Z');
   });

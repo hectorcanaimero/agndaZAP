@@ -43,6 +43,60 @@ export class WahaService {
   }
 
   /**
+   * Muestra el indicador "escribiendo…" del bot en el chat del paciente.
+   *
+   * A diferencia de `sendText`, esto NUNCA lanza — un error de typing no
+   * debe abortar la respuesta real que viene después. Sólo loguea a `warn`.
+   * El caller típicamente hace `.catch()` inline igual como defensa extra.
+   *
+   * Endpoint: `POST /api/startTyping` con `{ session, chatId }`.
+   * WAHA mantiene el estado hasta que llegue un `stopTyping` o pasen ~10s.
+   */
+  async startTyping(session: string, chatId: string): Promise<void> {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/startTyping`, {
+        method: 'POST',
+        headers: this.headers(),
+        body: JSON.stringify({ session, chatId }),
+      });
+      if (!res.ok) {
+        this.logger.warn(
+          `WAHA startTyping falló (${res.status}) session=${session}`,
+        );
+      }
+    } catch (e) {
+      this.logger.warn(`WAHA startTyping threw: ${(e as Error).message}`);
+    }
+  }
+
+  /**
+   * Detiene el indicador "escribiendo…". Se llama justo antes de `sendText`
+   * para que el paciente vea la transición "typing → mensaje llegando".
+   *
+   * Igual que `startTyping`: nunca lanza. Si WAHA no responde OK, el
+   * cliente WhatsApp del paciente igual va a limpiar el "escribiendo…"
+   * al recibir el mensaje real ~inmediatamente después.
+   *
+   * Endpoint: `POST /api/stopTyping` con `{ session, chatId }`.
+   */
+  async stopTyping(session: string, chatId: string): Promise<void> {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/stopTyping`, {
+        method: 'POST',
+        headers: this.headers(),
+        body: JSON.stringify({ session, chatId }),
+      });
+      if (!res.ok) {
+        this.logger.warn(
+          `WAHA stopTyping falló (${res.status}) session=${session}`,
+        );
+      }
+    } catch (e) {
+      this.logger.warn(`WAHA stopTyping threw: ${(e as Error).message}`);
+    }
+  }
+
+  /**
    * Crea/inicia una sesion para una clinica.
    *
    * Estrategia (WAHA API):

@@ -1,4 +1,8 @@
-import { HttpException, UnauthorizedException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  HttpException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService, hashEmailForKey } from './auth.service';
@@ -112,6 +116,7 @@ describe('AuthService', () => {
         password: hash,
         name: 'Admin',
         role: 'CLINIC_ADMIN',
+        clinic: { id: 'clinic-A', status: 'ACTIVE' },
       });
 
       const result = await service.login('admin@demo.dev', 'correcto1234');
@@ -146,6 +151,7 @@ describe('AuthService', () => {
         password: hash,
         name: 'Admin',
         role: 'CLINIC_ADMIN',
+        clinic: { id: 'clinic-A', status: 'ACTIVE' },
       });
       await expect(
         service.login('admin@demo.dev', 'password-mala'),
@@ -175,6 +181,7 @@ describe('AuthService', () => {
         password: hash,
         name: 'A',
         role: 'CLINIC_ADMIN',
+        clinic: { id: 'clinic-A', status: 'ACTIVE' },
       });
       await service.login('a@demo.dev', 'correcto1234');
 
@@ -186,6 +193,7 @@ describe('AuthService', () => {
         password: hash,
         name: 'B',
         role: 'CLINIC_ADMIN',
+        clinic: { id: 'clinic-B', status: 'ACTIVE' },
       });
       await service.login('b@demo.dev', 'correcto1234');
 
@@ -207,11 +215,107 @@ describe('AuthService', () => {
         password: hash,
         name: 'Super',
         role: 'SUPERADMIN',
+        clinic: null,
       });
       await service.login('super@showly.dev', 'correcto1234');
       const payload = jwt.signAsync.mock.calls[0][0];
       expect(payload.clinicId).toBeNull();
       expect(payload.role).toBe('SUPERADMIN');
+    });
+  });
+
+  describe('login — gate de status de clínica (Área SaaS Admin)', () => {
+    it('[1] CLINIC_ADMIN con clinic.status=ACTIVE → devuelve JWT', async () => {
+      const hash = await validHash();
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        clinicId: 'clinic-A',
+        email: 'admin@demo.dev',
+        password: hash,
+        name: 'Admin',
+        role: 'CLINIC_ADMIN',
+        clinic: { id: 'clinic-A', status: 'ACTIVE' },
+      });
+      const result = await service.login('admin@demo.dev', 'correcto1234');
+      expect(result).toHaveProperty('accessToken');
+      expect(jwt.signAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ sub: 'user-1', role: 'CLINIC_ADMIN' }),
+      );
+    });
+
+    it('[2] CLINIC_ADMIN con clinic.status=SUSPENDED → 403 con "suspendida"', async () => {
+      const hash = await validHash();
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        clinicId: 'clinic-A',
+        email: 'admin@demo.dev',
+        password: hash,
+        name: 'Admin',
+        role: 'CLINIC_ADMIN',
+        clinic: { id: 'clinic-A', status: 'SUSPENDED' },
+      });
+      await expect(
+        service.login('admin@demo.dev', 'correcto1234'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(
+        service.login('admin@demo.dev', 'correcto1234'),
+      ).rejects.toThrow('suspendida');
+    });
+
+    it('[3] CLINIC_ADMIN con clinic.status=ARCHIVED → 403 con "no está disponible"', async () => {
+      const hash = await validHash();
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        clinicId: 'clinic-A',
+        email: 'admin@demo.dev',
+        password: hash,
+        name: 'Admin',
+        role: 'CLINIC_ADMIN',
+        clinic: { id: 'clinic-A', status: 'ARCHIVED' },
+      });
+      await expect(
+        service.login('admin@demo.dev', 'correcto1234'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(
+        service.login('admin@demo.dev', 'correcto1234'),
+      ).rejects.toThrow('no está disponible');
+    });
+
+    it('[4] SUPERADMIN sin clínica con password correcta → devuelve JWT (excluido del gate)', async () => {
+      const hash = await validHash();
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-super',
+        clinicId: null,
+        email: 'super@showly.dev',
+        password: hash,
+        name: 'Super',
+        role: 'SUPERADMIN',
+        clinic: null,
+      });
+      const result = await service.login('super@showly.dev', 'correcto1234');
+      expect(result).toHaveProperty('accessToken');
+      expect(jwt.signAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ role: 'SUPERADMIN', clinicId: null }),
+      );
+    });
+
+    it('[5] CLINIC_ADMIN sin clínica (clinic=null) → 403 con "sin clínica asignada"', async () => {
+      const hash = await validHash();
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-orphan',
+        clinicId: null,
+        email: 'orphan@demo.dev',
+        password: hash,
+        name: 'Orphan',
+        role: 'CLINIC_ADMIN',
+        clinic: null,
+      });
+      await expect(
+        service.login('orphan@demo.dev', 'correcto1234'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(
+        service.login('orphan@demo.dev', 'correcto1234'),
+      ).rejects.toThrow('sin clínica asignada');
     });
   });
 
@@ -246,6 +350,7 @@ describe('AuthService', () => {
         password: hash,
         name: 'Admin',
         role: 'CLINIC_ADMIN',
+        clinic: { id: 'clinic-A', status: 'ACTIVE' },
       });
       await service.login('victima@demo.dev', 'correcto1234');
       // Después del ok, el counter debe estar borrado.

@@ -77,6 +77,33 @@ async function main() {
   });
   console.log(`clinic ready: id=${clinic.id} slug=${clinic.slug}`);
 
+  // 1b) Clínica de prueba en estado SUSPENDED — sirve para testear el gate de login
+  // del ADR 0014 (Área SaaS Admin).
+  const suspendedClinic = await prisma.clinic.upsert({
+    where: { slug: 'demo-2' },
+    create: {
+      slug: 'demo-2',
+      name: 'Clínica Demo Suspendida',
+      timezone: 'America/Caracas',
+      locale: 'es',
+      wahaSession: 'demo-2-session',
+      address: 'Av. Principal 456, Caracas',
+      status: 'SUSPENDED',
+      suspendedAt: new Date(),
+      suspendedReason:
+        'clínica de prueba — bloqueada intencionalmente para testear el gate de login',
+    },
+    update: {
+      status: 'SUSPENDED',
+      suspendedAt: new Date(),
+      suspendedReason:
+        'clínica de prueba — bloqueada intencionalmente para testear el gate de login',
+    },
+  });
+  console.log(
+    `suspended clinic ready: id=${suspendedClinic.id} slug=${suspendedClinic.slug}`,
+  );
+
   // 2) Servicios activos.
   const serviceSpecs = [
     { name: 'Consulta general', durationMin: 30, bufferMin: 0 },
@@ -197,6 +224,13 @@ async function main() {
       role: 'CLINIC_ADMIN',
       clinicId: clinic.id,
     },
+    {
+      email: 'admin@demo-2.dev',
+      plain: 'demo1234',
+      name: 'Admin Clínica Suspendida',
+      role: 'CLINIC_ADMIN',
+      clinicId: suspendedClinic.id,
+    },
   ];
   for (const u of users) {
     const hash = await hashPassword(u.plain);
@@ -220,7 +254,9 @@ async function main() {
   }
 
   // 6) FAQs — idempotente por (clinicId, content).
-  const knowledge = new KnowledgeService(prisma as unknown as any);
+  // `llm` solo se usa en answer() (RAG); el seed solo llama ingest(), que a lo
+  // sumo toca embedText y ya tolera OPENAI_API_KEY ausente vía KnowledgeUnavailableError.
+  const knowledge = new KnowledgeService(prisma as unknown as any, null as any);
   const faqSamples = [
     'Horarios de atención: L-V de 9:00 a 18:00. Sin atención sábados y domingos.',
     'Dirección: Av. Principal 123, Caracas. A 2 cuadras del metro Chacaíto.',
@@ -279,7 +315,10 @@ async function main() {
 
   console.log('\nseed v1 aplicado:');
   console.log(`  clínica: ${clinic.slug} (${clinic.id})`);
-  console.log('  users:   super@showly.dev · admin@demo.dev');
+  console.log(
+    `  suspended: ${suspendedClinic.slug} (${suspendedClinic.id}, admin=admin@demo-2.dev)`,
+  );
+  console.log('  users:   super@showly.dev · admin@demo.dev · admin@demo-2.dev');
   console.log(
     `  data:    ${services.length} services · ${professionals.length} professionals · ${patientsCount} patients · ${appointmentsCount} appointments · ${remindersCount} reminders · ${conversationsCount} conversations · ${faqSamples.length} FAQs`,
   );

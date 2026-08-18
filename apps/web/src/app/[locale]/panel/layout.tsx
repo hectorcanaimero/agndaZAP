@@ -30,13 +30,17 @@ export default async function PanelLayout({
   const meRes = await fetcher<AuthMe>('/api/auth/me', { token });
 
   if (!meRes.ok) {
-    // Backend rechazó el token (revocado, secret rotado, etc.) → login.
+    // Backend rechazó el token (revocado, secret rotado, etc.) → limpiar
+    // cookies server-side antes de ir al login. Sin el force-logout el
+    // middleware — que valida solo `exp`, no la firma — devolvería al
+    // panel y generaría ERR_TOO_MANY_REDIRECTS. Ver
+    // apps/web/src/app/api/auth/force-logout/route.ts.
     if (meRes.status === 401) {
-      redirect(`/${locale}/login`);
+      redirect(`/api/auth/force-logout?next=/${locale}/login`);
     }
-    // Otros errores: mostramos un shell mínimo con lo que sabemos del JWT
-    // decodificado — no ideal, pero evita romper el flujo si `/auth/me` está
-    // caído momentáneamente.
+    // Otros errores (0 = backend caído, 500 = interno): degradamos con el
+    // shell mínimo derivado del JWT decodificado. No ideal, pero evita
+    // tumbar el panel si `/auth/me` está caído momentáneamente.
   }
 
   const me: AuthMe =
@@ -50,8 +54,13 @@ export default async function PanelLayout({
           clinic: null,
         };
 
+  // `impersonatedBy` viene del claim del JWT decodificado en el middleware/
+  // layout. Es la señal para mostrar el ImpersonationBanner. Lo derivamos de
+  // la sesión (no de /auth/me) porque es un dato del token, no del usuario.
+  const isImpersonating = Boolean(session.impersonatedBy);
+
   return (
-    <PanelShell locale={locale} me={me}>
+    <PanelShell locale={locale} me={me} isImpersonating={isImpersonating}>
       {children}
     </PanelShell>
   );

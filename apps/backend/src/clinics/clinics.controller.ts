@@ -35,9 +35,8 @@ export class ClinicsController {
   @Roles('CLINIC_ADMIN', 'SUPERADMIN', 'PROFESSIONAL')
   async me(
     @CurrentUser() user: AuthUser,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     const clinic = await this.prisma.clinic.findUnique({
       where: { id: scope.clinicId },
       select: {
@@ -71,9 +70,8 @@ export class ClinicsController {
   async update(
     @CurrentUser() user: AuthUser,
     @Body() dto: UpdateClinicDto,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     const before = await this.prisma.clinic.findUnique({
       where: { id: scope.clinicId },
       select: { timezone: true },

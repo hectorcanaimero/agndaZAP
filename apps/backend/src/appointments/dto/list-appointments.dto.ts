@@ -39,8 +39,4 @@ export class ListAppointmentsQueryDto {
   @IsInt()
   @Min(0)
   offset?: number;
-
-  @IsOptional()
-  @IsString()
-  clinicId?: string;
 }

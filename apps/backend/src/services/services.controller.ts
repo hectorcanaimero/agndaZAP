@@ -24,9 +24,8 @@ import { UpdateServiceDto } from './dto/update-service.dto';
  * CRUD de `Service` para el Panel.
  *
  * Reglas duras:
- * - Multi-tenant: TODAS las queries pasan por `tenantWhere(user, clinicId?)`.
- *   El param `?clinicId=` sólo se respeta si el user es SUPERADMIN (lo maneja
- *   `assertClinicScope` internamente).
+ * - Multi-tenant: TODAS las queries pasan por `tenantWhere(user)`.
+ *   (Fase 6: clinicId override removido — el scope siempre viene del JWT)
  * - Soft-delete: `DELETE` marca `active = false`. Nunca borra fila para no
  *   romper citas históricas (Appointment.serviceId FK).
  */
@@ -61,9 +60,8 @@ export class ServicesController {
   async create(
     @CurrentUser() user: AuthUser,
     @Body() dto: CreateServiceDto,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     if (dto.professionalIds && dto.professionalIds.length > 0) {
       await this.assertProfessionalsInScope(
         dto.professionalIds,
@@ -93,10 +91,9 @@ export class ServicesController {
   @Get()
   async list(
     @CurrentUser() user: AuthUser,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
     return this.prisma.service.findMany({
-      where: { ...tenantWhere(user, clinicIdOverride), active: true },
+      where: { ...tenantWhere(user), active: true },
       orderBy: { name: 'asc' },
       include: {
         professionals: { select: { id: true, name: true } },
@@ -108,10 +105,9 @@ export class ServicesController {
   async findOne(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
     const svc = await this.prisma.service.findFirst({
-      where: { id, ...tenantWhere(user, clinicIdOverride) },
+      where: { id, ...tenantWhere(user) },
       include: {
         professionals: { select: { id: true, name: true } },
       },
@@ -125,11 +121,10 @@ export class ServicesController {
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Body() dto: UpdateServiceDto,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
     // Verificamos primero que el servicio pertenece al tenant. Sin este check,
     // `update` con only-by-id filtraría entre clínicas.
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     const existing = await this.prisma.service.findFirst({
       where: { id, clinicId: scope.clinicId },
       select: { id: true },
@@ -172,11 +167,10 @@ export class ServicesController {
   async remove(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Query('clinicId') clinicIdOverride?: string,
   ): Promise<void> {
     // Soft-delete: marca `active = false`. NO hard delete para no romper
     // Appointment.serviceId (FK). El listado default filtra `active: true`.
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     const existing = await this.prisma.service.findFirst({
       where: { id, clinicId: scope.clinicId },
       select: { id: true },

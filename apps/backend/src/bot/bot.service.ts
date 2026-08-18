@@ -117,17 +117,40 @@ export class BotService {
   }
 
   /**
-   * Mensajes default cuando `clinic.bot*` es NULL. Se elige el fallback
-   * hardcodeado para no romper clínicas existentes que aún no tocaron
-   * `/panel/ajustes`. Personalizable por tenant vía `/api/clinics/me`.
-   * Placeholders soportados: `{clinicName}`, `{patientName}`.
+   * Pools de mensajes default cuando `clinic.bot*` es NULL. Cada `key`
+   * mapea a un ARRAY de variantes; `pickVariant()` elige una al azar en
+   * cada respuesta.
+   *
+   * WHY pool: WhatsApp/Meta detecta bots no oficiales por patrones como
+   * "mismo string palabra por palabra en N chats distintos". Rotar
+   * variantes reduce esa huella. El costo es mínimo (~4 strings por key)
+   * y sin migración — los overrides tenant (`clinic.botGreeting`, etc.)
+   * siguen siendo single-line y ganan sobre el pool.
+   *
+   * Placeholders soportados: `{clinicName}`, `{patientName}`. Para
+   * `confirmAppointment` además: `{status}`, `{when}`, `{address}`.
    */
   private static readonly DEFAULT_BOT_MESSAGES = {
-    greeting:
+    greeting: [
       '¡Hola! Soy el asistente de {clinicName}. Puedo ayudarte a *agendar*, *reagendar* o *cancelar* una cita, o responder dudas. ¿Qué necesitás?',
-    fallback:
+      'Hola 👋 Estoy acá para ayudarte con tus citas en {clinicName}. Podés *agendar*, *reagendar*, *cancelar* o preguntarme algo. ¿Cómo te ayudo?',
+      '¡Hola! Bienvenida a {clinicName}. Escribime *agendar* para reservar una cita, *reagendar* para moverla o *cancelar*. También respondo dudas 🙂',
+      '¡Hola! Gracias por escribir a {clinicName}. ¿Querés *agendar*, *reagendar* o *cancelar* una cita? También podés preguntarme lo que necesites.',
+    ],
+    fallback: [
       'Puedo ayudarte a *agendar*, *reagendar* o *cancelar* una cita, o responder dudas. ¿Qué necesitás?',
-    handoff: 'Enseguida te atiende una persona del equipo. 🙏',
+      'Contame qué necesitás: puedo *agendar*, *reagendar* o *cancelar* una cita, o responder dudas.',
+      'Estoy para ayudarte con tu cita. Podés escribir *agendar*, *reagendar*, *cancelar*, o preguntarme algo.',
+    ],
+    handoff: [
+      'Enseguida te atiende una persona del equipo. 🙏',
+      'Te derivo con alguien del equipo, enseguida te responden. 🙏',
+    ],
+    confirmAppointment: [
+      '¡Listo! Tu cita quedó {status} para el {when} en {clinicName}.{address}\n\nSi necesitás cambiarla, escribime *reagendar* o *cancelar*.',
+      '¡Perfecto! Reservé tu cita para el {when} en {clinicName}.{address}\n\nCualquier cambio, escribime *reagendar* o *cancelar*.',
+      '✅ Tu cita quedó {status} — {when} en {clinicName}.{address}\n\nSi necesitás moverla, escribime *reagendar*; si no vas a poder, *cancelar*.',
+    ],
   } as const;
 
   /** Regex para detectar saludos → dispara `greeting` en vez de fallback. */
@@ -135,8 +158,24 @@ export class BotService {
     /^(hola|holis|holaa+|buenas|buenos d[ií]as|buenas tardes|buenas noches|hey|hi|hello)\b/i;
 
   /**
-   * Resuelve el mensaje del bot para una clínica, aplicando el custom si existe
-   * o el default. Reemplaza placeholders `{clinicName}` y `{patientName}`.
+   * Elige una variante al azar de un array. `Math.random` es suficiente:
+   * el objetivo es "no siempre el mismo string", no criptografía. Un
+   * PRNG sesgado no tiene impacto de seguridad acá.
+   */
+  private pickVariant<T>(variants: readonly T[]): T {
+    return variants[Math.floor(Math.random() * variants.length)]!;
+  }
+
+  /**
+   * Resuelve el mensaje del bot para una clínica, aplicando el custom si
+   * existe o eligiendo una variante random del pool default. Reemplaza
+   * placeholders `{clinicName}` y `{patientName}`.
+   *
+   * Contrato del override: si `clinic.botGreeting` (u otro) está seteado,
+   * se usa TAL CUAL — es una única cadena, no rota. Motivo: mantener la
+   * migración fuera de scope y respetar el mental model del owner
+   * (setea un mensaje, ve ese mensaje). Si en el futuro se quiere pool
+   * custom, el campo pasa a `Json` con una migración.
    */
   private resolveBotMessage(
     clinic: Pick<
@@ -152,10 +191,37 @@ export class BotService {
       handoff: clinic.botHandoffMsg,
     } as const;
     const template =
-      customMap[key] || BotService.DEFAULT_BOT_MESSAGES[key];
+      customMap[key] || this.pickVariant(BotService.DEFAULT_BOT_MESSAGES[key]);
     return template
       .replace(/\{clinicName\}/g, clinic.name)
       .replace(/\{patientName\}/g, ctx?.patientName ?? '');
+  }
+
+  /**
+   * Arma el mensaje de confirmación post-agendamiento eligiendo una
+   * variante random del pool `confirmAppointment`. Placeholders:
+   *  - `{status}`      → "confirmada" | "agendada"
+   *  - `{when}`        → fecha formateada (Luxon)
+   *  - `{clinicName}`  → nombre de la clínica
+   *  - `{address}`     → línea "\nDirección: X" (o string vacío)
+   *
+   * Sin custom-per-clinic todavía: si aparece la necesidad se agrega un
+   * campo `Clinic.botConfirm` en una migración aparte. Ver deuda técnica.
+   */
+  private resolveConfirmMessage(input: {
+    status: string;
+    when: string;
+    clinicName: string;
+    address: string;
+  }): string {
+    const template = this.pickVariant(
+      BotService.DEFAULT_BOT_MESSAGES.confirmAppointment,
+    );
+    return template
+      .replace(/\{status\}/g, input.status)
+      .replace(/\{when\}/g, input.when)
+      .replace(/\{clinicName\}/g, input.clinicName)
+      .replace(/\{address\}/g, input.address);
   }
 
   async handleIncoming(input: {
@@ -908,7 +974,12 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        `¡Listo! Tu cita quedó ${status} para el ${when} en ${clinic.name}.${address}\n\nSi necesitás cambiarla, escribime *reagendar* o *cancelar*.`,
+        this.resolveConfirmMessage({
+          status,
+          when,
+          clinicName: clinic.name,
+          address,
+        }),
       );
     } catch (e) {
       if (e instanceof ConflictException) {
@@ -1272,15 +1343,55 @@ export class BotService {
     });
   }
 
+  /**
+   * Envía la respuesta del bot al paciente. Antes del `sendText`:
+   *  1) Muestra "escribiendo…" (WAHA presence).
+   *  2) Duerme `typingDelayFor(text)` ms — sensación de tipeo humano.
+   *  3) Detiene "escribiendo…" justo antes de mandar el texto.
+   *
+   * Todos los pasos de typing son best-effort: fallan silenciosos (el
+   * `WahaService.startTyping/stopTyping` ya loguea a warn y no lanza).
+   * El `sendText` final sí puede tirar — es lo único crítico.
+   *
+   * Opt-out con `BOT_TYPING_ENABLED=false`: útil en tests (evita segundos
+   * de sleep por cada assert de bot) y en dev cuando querés iterar rápido.
+   *
+   * Después del `sendText` persistimos el `Message` con dirección OUT
+   * (siempre; incluso si el typing falló) para no perder trazabilidad.
+   */
   private async reply(
     session: string,
     chatId: string,
     convoId: string,
     text: string,
   ) {
+    if (process.env.BOT_TYPING_ENABLED !== 'false') {
+      await this.waha.startTyping(session, chatId);
+      await BotService.sleep(this.typingDelayFor(text));
+      await this.waha.stopTyping(session, chatId);
+    }
     await this.waha.sendText(session, chatId, text);
     await this.prisma.message.create({
       data: { conversationId: convoId, direction: 'OUT', body: text },
     });
+  }
+
+  /**
+   * Delay antes de mandar el mensaje, en ms. Modela una velocidad de
+   * tipeo humana promedio (~40 chars/seg ≈ 30 wpm). Cap superior 4s
+   * para no dejar al paciente esperando en respuestas largas del LLM;
+   * mínimo 700 ms para no responder instantáneo ni siquiera al "hola".
+   * Jitter ±20% para que el mismo texto no dé siempre la misma latencia
+   * (los detectores buscan patrones repetidos incluso en timings).
+   */
+  private typingDelayFor(text: string): number {
+    const base = Math.min(4000, Math.max(700, text.length * 25));
+    const jitter = 1 + (Math.random() * 0.4 - 0.2);
+    return Math.round(base * jitter);
+  }
+
+  /** Sleep utilitario. Static para poder ser mockeado si algún test lo pide. */
+  private static sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

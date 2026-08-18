@@ -77,9 +77,8 @@ export class TimeOffController {
   async create(
     @CurrentUser() user: AuthUser,
     @Body() dto: CreateTimeOffDto,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     const tz = await this.getClinicTimezone(scope.clinicId);
     const { start, end } = this.parseRange(tz, dto.startAt, dto.endAt);
     await this.assertProfessionalInClinic(scope.clinicId, dto.professionalId);
@@ -97,12 +96,11 @@ export class TimeOffController {
   @Get()
   async list(
     @CurrentUser() user: AuthUser,
-    @Query('clinicId') clinicIdOverride?: string,
     @Query('professionalId') professionalId?: string,
   ) {
     return this.prisma.timeOff.findMany({
       where: {
-        ...tenantWhere(user, clinicIdOverride),
+        ...tenantWhere(user),
         ...(professionalId ? { professionalId } : {}),
       },
       orderBy: { startAt: 'asc' },
@@ -114,9 +112,8 @@ export class TimeOffController {
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Body() dto: UpdateTimeOffDto,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     const existing = await this.prisma.timeOff.findFirst({
       where: { id, clinicId: scope.clinicId },
     });
@@ -154,9 +151,8 @@ export class TimeOffController {
   async remove(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Query('clinicId') clinicIdOverride?: string,
   ): Promise<void> {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     const existing = await this.prisma.timeOff.findFirst({
       where: { id, clinicId: scope.clinicId },
       select: { id: true },

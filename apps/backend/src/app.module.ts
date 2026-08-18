@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AdminModule } from './admin/admin.module';
 import { LlmRouterModule } from './common/llm/llm-router.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
@@ -21,6 +22,8 @@ import { FaqModule } from './faq/faq.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { HealthModule } from './health/health.module';
 import { LeadsModule } from './leads/leads.module';
+import { InvitationsModule } from './invitations/invitations.module';
+import { MailModule } from './mail/mail.module';
 
 /**
  * Raíz de la app. La validación global (ValidationPipe) se aplica en main.ts.
@@ -56,6 +59,9 @@ import { LeadsModule } from './leads/leads.module';
     FeedbackModule,
     HealthModule,
     LeadsModule,
+    MailModule,
+    InvitationsModule,
+    AdminModule,
   ],
 })
 export class AppModule {}

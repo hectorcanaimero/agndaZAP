@@ -51,11 +51,10 @@ export class FeedbackController {
   @Get()
   async list(
     @CurrentUser() user: AuthUser,
-    @Query('clinicId') clinicIdOverride?: string,
     @Query('professionalId') professionalId?: string,
     @Query('limit') limitRaw?: string,
   ): Promise<FeedbackListItem[]> {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     // Cap defensivo: si el frontend pide 10k, devolvemos 200. UI actual muestra
     // paginado local; no vale la pena drenar la DB por un scroll infinito.
     const limit = Math.min(200, Math.max(1, Number.parseInt(limitRaw ?? '50', 10) || 50));
@@ -97,9 +96,8 @@ export class FeedbackController {
   @Get('summary')
   async summary(
     @CurrentUser() user: AuthUser,
-    @Query('clinicId') clinicIdOverride?: string,
   ): Promise<FeedbackSummary> {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
 
     // Cargamos todo en memoria: N pequeño (respuestas de satisfacción, no eventos
     // de tracking). Si algún tenant explota en cardinalidad se migra a groupBy

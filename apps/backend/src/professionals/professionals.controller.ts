@@ -100,9 +100,8 @@ export class ProfessionalsController {
   async create(
     @CurrentUser() user: AuthUser,
     @Body() dto: CreateProfessionalDto,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     if (dto.serviceIds && dto.serviceIds.length > 0) {
       await this.assertServicesInScope(dto.serviceIds, scope.clinicId);
     }
@@ -131,10 +130,9 @@ export class ProfessionalsController {
   @Get()
   async list(
     @CurrentUser() user: AuthUser,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
     return this.prisma.professional.findMany({
-      where: { ...tenantWhere(user, clinicIdOverride), active: true },
+      where: { ...tenantWhere(user), active: true },
       orderBy: { name: 'asc' },
       include: {
         services: { where: { active: true }, select: { id: true, name: true } },
@@ -146,10 +144,9 @@ export class ProfessionalsController {
   async findOne(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
     const prof = await this.prisma.professional.findFirst({
-      where: { id, ...tenantWhere(user, clinicIdOverride) },
+      where: { id, ...tenantWhere(user) },
       include: {
         services: { select: { id: true, name: true } },
       },
@@ -168,9 +165,8 @@ export class ProfessionalsController {
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Body() dto: UpdateProfessionalDto,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     const existing = await this.prisma.professional.findFirst({
       where: { id, clinicId: scope.clinicId },
       select: { id: true },
@@ -214,9 +210,8 @@ export class ProfessionalsController {
   async remove(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Query('clinicId') clinicIdOverride?: string,
   ): Promise<void> {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     const existing = await this.prisma.professional.findFirst({
       where: { id, clinicId: scope.clinicId },
       select: { id: true },

@@ -43,8 +43,9 @@ import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
  *
  * NO exponemos `DELETE`. El "borrar" es `PATCH status = CANCELADA`.
  *
- * Multi-tenant: TODAS las queries pasan por `tenantWhere(user, ?)`. El PROFESSIONAL
- * tiene su propia rama con filtro adicional por `professionalId`.
+ * Multi-tenant: TODAS las queries pasan por `tenantWhere(user)`.
+ * (Fase 6: clinicId override removido — el scope siempre viene del JWT)
+ * El PROFESSIONAL tiene su propia rama con filtro adicional por `professionalId`.
  *
  * PII: Reducimos la exposición en `list()` — sólo devolvemos el `name` del
  * paciente y `phone` (necesario para contactar). NO devolvemos `notes` en la
@@ -69,7 +70,7 @@ export class AppointmentsController {
     @CurrentUser() user: AuthUser,
     @Query() q: ListAppointmentsQueryDto,
   ) {
-    const scope = tenantWhere(user, q.clinicId);
+    const scope = tenantWhere(user);
     // Si viene `?professionalId=`, validamos que el profesional pertenece a
     // la clínica del scope. Sin esto, un filtro cross-tenant devolvería lista
     // vacía sin señalizar el error → 400 explícito (audit M6).
@@ -199,14 +200,13 @@ export class AppointmentsController {
     @Query('from') fromISO?: string,
     @Query('days') daysRaw?: string,
     @Query('excludeAppointmentId') excludeAppointmentId?: string,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
     if (!serviceId || !professionalId || !fromISO) {
       throw new BadRequestException(
         'serviceId, professionalId y from son requeridos',
       );
     }
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     // Clamp para evitar queries pesadas si el frontend pide 365 días.
     const days = Math.min(30, Math.max(1, Number(daysRaw ?? '7')));
     return this.availability.getSlots({
@@ -225,10 +225,9 @@ export class AppointmentsController {
   async findOne(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
     // PROFESSIONAL sólo puede ver sus propias citas.
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     const whereClause: Prisma.AppointmentWhereInput = { id, ...scope };
     if (user.role === 'PROFESSIONAL') {
       const dbUser = await this.prisma.user.findUnique({
@@ -270,9 +269,8 @@ export class AppointmentsController {
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Body() dto: PatchStatusDto,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     const existing = await this.prisma.appointment.findFirst({
       where: { id, ...scope },
     });
@@ -347,9 +345,8 @@ export class AppointmentsController {
   async create(
     @CurrentUser() user: AuthUser,
     @Body() dto: CreatePanelAppointmentDto,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     // Normalizamos phone: agregamos `+` si no lo trae (E.164 estricto).
     const normalizedPhone = dto.phone.startsWith('+')
       ? dto.phone
@@ -403,9 +400,8 @@ export class AppointmentsController {
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Body() dto: RescheduleAppointmentDto,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     // Cargar mínima: solo para chequear status + tenant. La lógica real vive
     // en `SchedulingService.rescheduleAppointment`.
     const existing = await this.prisma.appointment.findFirst({

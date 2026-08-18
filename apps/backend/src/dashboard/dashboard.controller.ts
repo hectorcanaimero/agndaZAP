@@ -35,12 +35,11 @@ export class DashboardController {
   @Get('metrics')
   async metrics(
     @CurrentUser() user: AuthUser,
-    @Query('clinicId') clinicIdOverride?: string,
   ): Promise<DashboardMetrics> {
     // Multi-tenant estricto: TODAS las queries pasan por `scope` (spread).
     // NO usamos `clinicId:` suelto — cualquier query nueva DEBE derivarse de
     // este `scope` para no romper el patrón (ripgrep del CI).
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     const clinic = await this.prisma.clinic.findUnique({
       where: { id: scope.clinicId },
       select: { timezone: true },

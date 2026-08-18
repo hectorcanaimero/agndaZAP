@@ -46,7 +46,6 @@ export class ConversationsController {
   async list(
     @CurrentUser() user: AuthUser,
     @Query('state') state?: string,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
     let stateFilter: ConversationState | undefined;
     if (state) {
@@ -60,7 +59,7 @@ export class ConversationsController {
       stateFilter = state as ConversationState;
     }
     const where: Prisma.ConversationWhereInput = {
-      ...tenantWhere(user, clinicIdOverride),
+      ...tenantWhere(user),
       ...(stateFilter ? { state: stateFilter } : {}),
     };
     const convos = await this.prisma.conversation.findMany({
@@ -110,11 +109,10 @@ export class ConversationsController {
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Query('limit') limitRaw?: string,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
     const limit = Math.min(200, Math.max(1, Number(limitRaw ?? '50')));
     const convo = await this.prisma.conversation.findFirst({
-      where: { id, ...tenantWhere(user, clinicIdOverride) },
+      where: { id, ...tenantWhere(user) },
       include: {
         messages: {
           orderBy: { createdAt: 'desc' },
@@ -141,9 +139,8 @@ export class ConversationsController {
   async takeover(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     const existing = await this.prisma.conversation.findFirst({
       where: { id, clinicId: scope.clinicId },
       select: { id: true },
@@ -165,9 +162,8 @@ export class ConversationsController {
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Body() dto: ReplyDto,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     const convo = await this.prisma.conversation.findFirst({
       where: { id, clinicId: scope.clinicId },
       include: { clinic: { select: { wahaSession: true } } },
@@ -218,9 +214,8 @@ export class ConversationsController {
   async release(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     const existing = await this.prisma.conversation.findFirst({
       where: { id, clinicId: scope.clinicId },
       select: { id: true },

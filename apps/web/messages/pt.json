@@ -132,6 +132,8 @@
       "logout": "Sair",
       "openMenu": "Abrir menu",
       "closeMenu": "Fechar menu",
+      "collapseSidebar": "Recolher barra lateral",
+      "expandSidebar": "Expandir barra lateral",
       "sections": {
         "operation": "Operação",
         "configuration": "Configuração"
@@ -1276,6 +1278,261 @@
       },
       "language": "Idioma",
       "copyright": "© {year} Showly. Feito com carinho para clínicas na LATAM e no Brasil."
+    }
+  },
+  "admin": {
+    "nav": {
+      "dashboard": "Dashboard",
+      "clinics": "Clínicas",
+      "leads": "Leads",
+      "audit": "Auditoria",
+      "logout": "Sair do Admin",
+      "userMenu": "Menu do usuário"
+    },
+    "header": {
+      "title": "Área SaaS Admin"
+    },
+    "dashboard": {
+      "title": "Dashboard SaaS",
+      "subtitle": "Em breve — métricas cross-tenant."
+    },
+    "clinics": {
+      "title": "Clínicas",
+      "subtitle": "Administração de clínicas do SaaS.",
+      "createDialog": {
+        "trigger": "Nova clínica",
+        "title": "Criar clínica",
+        "description": "Criamos a clínica e enviamos por email um link de ativação ao admin. O usuário escolhe a própria senha.",
+        "sections": {
+          "clinic": "Dados da clínica",
+          "admin": "Primeiro usuário admin"
+        },
+        "labels": {
+          "name": "Nome",
+          "slug": "Slug (URL pública)",
+          "slugHint": "Apenas minúsculas, números e hífens. Ex: consultorio-lopez",
+          "timezone": "Fuso horário",
+          "locale": "Idioma",
+          "wahaSession": "Sessão WhatsApp",
+          "wahaSessionHint": "Nome único para a sessão WAHA. Ex: clinica-demo",
+          "address": "Endereço (opcional)",
+          "adminName": "Nome do admin",
+          "adminEmail": "Email do admin"
+        },
+        "errors": {
+          "required": "Este campo é obrigatório.",
+          "slugFormat": "Apenas minúsculas, números e hífens.",
+          "emailInvalid": "Email inválido.",
+          "slugTaken": "Esse slug já está em uso.",
+          "wahaSessionTaken": "Essa sessão WhatsApp já está em uso.",
+          "generic": "Não foi possível criar a clínica. Tente novamente."
+        },
+        "submit": "Criar clínica",
+        "cancel": "Cancelar",
+        "success": "Clínica criada. Convite enviado para {email}.",
+        "successMailFail": "Clínica criada, mas o email não pôde ser enviado. Copie o link e envie por outro canal.",
+        "linkDialog": {
+          "title": "Link de ativação",
+          "description": "O email para {email} não pôde ser enviado. Este link permite ativar a conta e escolher a senha. Expira em 7 dias.",
+          "copy": "Copiar link",
+          "copied": "Link copiado",
+          "close": "Fechar"
+        }
+      },
+      "filters": {
+        "search": "Buscar por nome ou slug",
+        "status": "Status",
+        "all": "Todos"
+      },
+      "status": {
+        "ACTIVE": "Ativa",
+        "SUSPENDED": "Suspensa",
+        "ARCHIVED": "Arquivada"
+      },
+      "table": {
+        "name": "Clínica",
+        "slug": "Slug",
+        "status": "Status",
+        "professionals": "Profissionais",
+        "appointments": "Consultas",
+        "actions": "Ações",
+        "viewDetail": "Ver detalhes"
+      },
+      "actions": {
+        "impersonate": "Personificar",
+        "suspend": "Suspender",
+        "reactivate": "Reativar",
+        "edit": "Editar",
+        "save": "Salvar alterações"
+      },
+      "empty": "Nenhuma clínica encontrada.",
+      "loading": "Carregando…",
+      "loadError": "Não foi possível carregar as clínicas.",
+      "retry": "Tentar novamente",
+      "count": "{n, plural, =0 {Sem clínicas} =1 {1 clínica} other {# clínicas}}",
+      "pagination": {
+        "page": "Página {page} de {total}"
+      },
+      "detail": {
+        "title": "Detalhes da clínica",
+        "back": "Voltar à lista",
+        "metrics": {
+          "professionals": "Profissionais",
+          "servicesActive": "Serviços ativos",
+          "appointmentsLast30d": "Consultas (últimos 30 dias)",
+          "noShowRateLast30d": "Taxa de no-show (30 dias)",
+          "patients": "Pacientes"
+        },
+        "info": {
+          "slug": "Slug",
+          "timezone": "Fuso horário",
+          "locale": "Idioma",
+          "wahaSession": "Sessão WhatsApp",
+          "address": "Endereço",
+          "status": "Status",
+          "suspendedAt": "Suspensa em",
+          "suspendedReason": "Motivo da suspensão"
+        },
+        "suspendedNotice": "Esta clínica está suspensa desde {date}. Motivo: {reason}",
+        "notFound": "Clínica não encontrada."
+      },
+      "suspendDialog": {
+        "title": "Suspender clínica",
+        "description": "A clínica {name} deixará de operar. Seus usuários não poderão entrar no painel até que você reative. Explique o motivo — ficará na auditoria.",
+        "reasonLabel": "Motivo",
+        "reasonPlaceholder": "Ex: falta de pagamento, descumprimento de termos, pedido do cliente…",
+        "reasonError": "Digite ao menos 3 caracteres.",
+        "submit": "Suspender clínica",
+        "cancel": "Cancelar"
+      },
+      "reactivateDialog": {
+        "title": "Reativar clínica",
+        "description": "A clínica {name} voltará a operar normalmente. Seus usuários poderão entrar no painel.",
+        "submit": "Reativar",
+        "cancel": "Cancelar"
+      },
+      "toasts": {
+        "suspended": "Clínica suspensa.",
+        "reactivated": "Clínica reativada.",
+        "updated": "Alterações salvas.",
+        "suspendError": "Não foi possível suspender a clínica.",
+        "reactivateError": "Não foi possível reativar a clínica.",
+        "updateError": "Não foi possível salvar as alterações."
+      }
+    },
+    "audit": {
+      "title": "Auditoria",
+      "subtitle": "Todas as ações administrativas do SaaS.",
+      "filters": {
+        "action": "Ação",
+        "targetType": "Tipo de recurso",
+        "targetId": "ID do recurso",
+        "actorUserId": "Usuário",
+        "all": "Todas",
+        "reset": "Limpar filtros"
+      },
+      "action": {
+        "CREATE_CLINIC": "Criar clínica",
+        "UPDATE_CLINIC": "Atualizar clínica",
+        "SUSPEND_CLINIC": "Suspender clínica",
+        "REACTIVATE_CLINIC": "Reativar clínica",
+        "ARCHIVE_CLINIC": "Arquivar clínica",
+        "START_IMPERSONATION": "Personificar clínica"
+      },
+      "table": {
+        "when": "Data",
+        "actor": "Ator",
+        "action": "Ação",
+        "target": "Recurso",
+        "ip": "IP",
+        "userAgent": "User-Agent",
+        "metadata": "Metadata"
+      },
+      "empty": "Sem eventos para mostrar.",
+      "loading": "Carregando…",
+      "loadError": "Não foi possível carregar a auditoria.",
+      "retry": "Tentar novamente",
+      "showMetadata": "Ver metadata",
+      "pagination": {
+        "page": "Página {page} de {total}"
+      }
+    },
+    "overview": {
+      "title": "Dashboard SaaS",
+      "subtitle": "Métricas globais da plataforma.",
+      "cards": {
+        "totalClinics": "Clínicas totais",
+        "activeClinics": "Ativas",
+        "suspendedClinics": "Suspensas",
+        "archivedClinics": "Arquivadas",
+        "appointmentsLast30d": "Consultas (30 dias)",
+        "noShowRate": "Taxa de no-show (30 dias)"
+      },
+      "topClinics": {
+        "title": "Top clínicas por volume",
+        "subtitle": "Últimos 30 dias.",
+        "count": "{n, plural, =1 {1 consulta} other {# consultas}}",
+        "empty": "Sem dados dos últimos 30 dias."
+      },
+      "loadError": "Não foi possível carregar as métricas.",
+      "retry": "Tentar novamente"
+    }
+  },
+  "invite": {
+    "title": "Ative sua conta",
+    "subtitle": "Escolha uma senha para entrar no Showly.",
+    "greeting": "Olá {name},",
+    "context": "Você foi convidado para administrar {clinic}. Escolha sua senha para ativar a conta.",
+    "expires": "Este link expira em {date}.",
+    "labels": {
+      "email": "Email",
+      "password": "Nova senha",
+      "passwordConfirm": "Repetir senha"
+    },
+    "hints": {
+      "passwordMin": "Mínimo de 8 caracteres."
+    },
+    "errors": {
+      "passwordMin": "A senha deve ter pelo menos 8 caracteres.",
+      "passwordMismatch": "As senhas não coincidem.",
+      "generic": "Não foi possível ativar a conta. Tente novamente."
+    },
+    "submit": "Ativar conta",
+    "submitting": "Ativando…",
+    "success": "Conta ativada. Você já pode entrar com seu email e senha.",
+    "goToLogin": "Ir para o login",
+    "invalid": {
+      "title": "Link inválido",
+      "description": "O link de convite não é válido. Peça ao administrador para enviar um novo.",
+      "cta": "Ir para o login"
+    },
+    "expired": {
+      "title": "Link expirado ou já usado",
+      "description": "Este link não está mais disponível. Pode ter expirado (vence em 7 dias) ou já foi usado. Peça ao administrador para enviar um novo.",
+      "cta": "Ir para o login"
+    }
+  },
+  "impersonation": {
+    "banner": {
+      "title": "Você está personificando uma clínica",
+      "currentClinic": "Atuando como: {name}",
+      "backToAdmin": "Voltar ao Admin"
+    },
+    "actions": {
+      "start": "Entrar como esta clínica",
+      "confirmTitle": "Personificar clínica",
+      "confirmDescription": "Você vai operar o painel de {name} por 30 minutos. Toda ação fica registrada na auditoria sob sua conta.",
+      "confirmCta": "Sim, personificar",
+      "cancel": "Cancelar"
+    },
+    "toasts": {
+      "started": "Personificando {name}. Toda ação fica auditada.",
+      "restored": "Sua sessão de personificação expirou. Você voltou ao Admin.",
+      "sessionRestored": "Sessão de administrador restaurada."
+    },
+    "errors": {
+      "cannotImpersonateNonActive": "Não é possível personificar uma clínica que não está ativa.",
+      "startFailed": "Não foi possível iniciar a personificação. Tente novamente."
     }
   }
 }

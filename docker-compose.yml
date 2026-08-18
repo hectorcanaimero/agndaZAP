@@ -55,7 +55,8 @@ services:
 
   backend:
     build: ./apps/backend
-    command: sh -c "npx prisma migrate deploy && node dist/main.js"
+    # command: sh -c "npx prisma migrate deploy && node dist/main.js"
+    command: sh -c "npx prisma migrate deploy && npm run start:dev"
     depends_on:
       db:
         condition: service_healthy

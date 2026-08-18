@@ -124,9 +124,8 @@ export class FaqController {
     @CurrentUser() user: AuthUser,
     @Body() dto: CreateFaqDto,
     @Res({ passthrough: true }) res: ResponseLike,
-    @Query('clinicId') clinicIdOverride?: string,
   ): Promise<FaqChunkResponse> {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     // Normalizamos `title`: vacío/whitespace → null. Evita filas con `""` que
     // ensucian la UI y el embedding (el toEmbeddingText también lo maneja,
     // pero mejor consistente desde el borde).
@@ -176,9 +175,8 @@ export class FaqController {
   @Get()
   async list(
     @CurrentUser() user: AuthUser,
-    @Query('clinicId') clinicIdOverride?: string,
   ): Promise<FaqChunkResponse[]> {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     return this.selectFaqChunks(scope.clinicId);
   }
 
@@ -186,9 +184,8 @@ export class FaqController {
   async findOne(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Query('clinicId') clinicIdOverride?: string,
   ): Promise<FaqChunkResponse> {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     return this.selectFaqChunkById(scope.clinicId, id);
   }
 
@@ -198,9 +195,8 @@ export class FaqController {
     @Param('id') id: string,
     @Body() dto: UpdateFaqDto,
     @Res({ passthrough: true }) res: ResponseLike,
-    @Query('clinicId') clinicIdOverride?: string,
   ): Promise<FaqChunkResponse> {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     // Normalización de title: sólo si el caller lo mandó (undefined = no tocar).
     // "" o whitespace → null (limpia el título en DB).
     const normalizedTitle =
@@ -272,9 +268,8 @@ export class FaqController {
   async remove(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Query('clinicId') clinicIdOverride?: string,
   ): Promise<void> {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     // Idem al update: `deleteMany` con filtro por tenant evita race
     // condiciones y garantiza el 404 sin dos queries.
     const result = await this.prisma.faqChunk.deleteMany({

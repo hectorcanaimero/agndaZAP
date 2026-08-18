@@ -30,7 +30,8 @@ import { UpdatePatientDto } from './dto/update-patient.dto';
  * (phone, merge de duplicados, revoke consent) son follow-ups aparte con
  * flujos de auditoría (ver ADR 0004 §PII).
  *
- * Multi-tenant: todas las queries pasan por `tenantWhere(user, ?)`.
+ * Multi-tenant: todas las queries pasan por `tenantWhere(user)`.
+ * (Fase 6: clinicId override removido — el scope siempre viene del JWT)
  * Nunca fugamos pacientes entre clínicas.
  */
 @Controller('patients')
@@ -53,9 +54,8 @@ export class PatientsController {
   async list(
     @CurrentUser() user: AuthUser,
     @Query() q: ListPatientsDto,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     const search = q.q?.trim();
 
     const where: Prisma.PatientWhereInput = {
@@ -115,9 +115,8 @@ export class PatientsController {
   async findOne(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     const patient = await this.prisma.patient.findFirst({
       where: { id, ...scope },
       select: {
@@ -158,9 +157,8 @@ export class PatientsController {
   async history(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     const patient = await this.prisma.patient.findFirst({
       where: { id, ...scope },
       select: { id: true },
@@ -225,9 +223,8 @@ export class PatientsController {
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Body() dto: UpdatePatientDto,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     const existing = await this.prisma.patient.findFirst({
       where: { id, ...scope },
       select: { id: true, consent: true },
@@ -242,7 +239,7 @@ export class PatientsController {
 
     if (Object.keys(data).length === 0) {
       // No-op — evita un UPDATE innecesario y su updatedAt bump.
-      return this.findOne(user, id, clinicIdOverride);
+      return this.findOne(user, id);
     }
 
     const updated = await this.prisma.patient.update({

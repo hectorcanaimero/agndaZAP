@@ -23,7 +23,7 @@ Las clínicas y consultorios pequeños/medianos en LATAM pierden entre **20% y 3
 - **Paciente (usuario final):** agenda, reprograma, cancela y confirma su cita por WhatsApp. No instala nada.
 - **Recepción / secretaria (usuario admin):** gestiona la agenda, servicios, profesionales y horarios desde el panel web. Ve y responde conversaciones.
 - **Profesional / dueño (usuario móvil):** ve su agenda del día, confirma o bloquea horarios desde la app Flutter.
-- **Super-admin (tú/Condor-Martech):** gestiona clínicas (tenants), instancias de WhatsApp, y monitorea el sistema.
+- **SUPERADMIN (operador de la plataforma Showly):** rol de operador SaaS con panel propio en `/admin/*`. Puede crear, suspender, reactivar y archivar cuentas de clínica (tenants); ver métricas cross-tenant; acceder al log de auditoría; e impersonar cualquier clínica activa con un JWT temporal de 30 minutos para operar en su contexto. NO opera directamente sobre endpoints de clínica — toda acción transversal pasa por impersonation auditada. Ver [[adr/0014-superadmin-como-operador-saas]].
 
 ---
 

@@ -87,4 +87,21 @@ export const queryKeys = {
    */
   leads: (filters?: { status?: string; page?: number; pageSize?: number }) =>
     ['leads', filters ?? {}] as const,
+  /**
+   * Namespace del área SaaS Admin. Todas las keys prefijan con `'admin'` así
+   * `invalidateQueries(['admin'])` vacía todo el área — útil tras acciones
+   * cross-tenant como crear o suspender una clínica.
+   */
+  admin: {
+    // `unknown` en vez de `Record<string, unknown>`: los filtros son tipos
+    // concretos (`AdminClinicsFilters`, `AdminAuditFilters`) que no tienen
+    // index signature; usar `unknown` evita pedir un cast en cada caller.
+    // TanStack Query serializa la key igual — solo importa que sea estable.
+    clinics: (filters?: unknown) =>
+      ['admin', 'clinics', filters ?? {}] as const,
+    clinic: (id: string) => ['admin', 'clinics', 'detail', id] as const,
+    audit: (filters?: unknown) =>
+      ['admin', 'audit', filters ?? {}] as const,
+    metricsOverview: ['admin', 'metrics', 'overview'] as const,
+  },
 } as const;

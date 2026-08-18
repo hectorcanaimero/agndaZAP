@@ -70,6 +70,17 @@ describe('BotService — FSM de agendamiento', () => {
   let convoState: any;
 
   beforeEach(() => {
+    // Bot typing indicator: OFF en tests para no meter sleeps reales de 700ms+
+    // en cada `reply()`. La lógica del typing la testeamos aparte (unit del
+    // wrapper `reply` con jest.useFakeTimers) — acá el foco es la FSM.
+    process.env.BOT_TYPING_ENABLED = 'false';
+
+    // Pool de variantes en `DEFAULT_BOT_MESSAGES`: fijamos `Math.random`
+    // en 0 para que `pickVariant` siempre devuelva la PRIMERA variante.
+    // Así los asserts históricos que buscan tokens ("persona del equipo",
+    // etc.) siguen matcheando sin tener que enumerar todas las variantes.
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+
     convoState = {
       id: 'convo-1',
       clinicId: 'clinic-A',
@@ -114,6 +125,10 @@ describe('BotService — FSM de agendamiento', () => {
       // Avatar refresh corre en background en cada handleIncoming — mockeamos
       // para no ensuciar los logs con warns de "getContactAvatar is not a function".
       getContactAvatar: jest.fn().mockResolvedValue(null),
+      // Typing indicator (`BotService.reply` los invoca antes del sendText,
+      // salvo que BOT_TYPING_ENABLED=false). Mockeados para no explotar.
+      startTyping: jest.fn().mockResolvedValue(undefined),
+      stopTyping: jest.fn().mockResolvedValue(undefined),
     };
     reminders = {
       scheduleForAppointment: jest.fn(),

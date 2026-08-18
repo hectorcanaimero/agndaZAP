@@ -53,16 +53,10 @@ export function Hero() {
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-              {/*
-                CTA primary: override a navy (brand principal). El variant
-                default de shadcn usa `bg-primary` que apunta a verde brand-600
-                (globals.css) — verde queda reservado para representar el
-                CANAL WhatsApp, no el brand Showly.
-              */}
               <Button
                 asChild
                 size="lg"
-                className="h-12 px-6 text-base bg-brand-navy text-white hover:bg-brand-navy/90"
+                className="h-12 px-6 text-base"
               >
                 <a href="#cta">
                   {t('primaryCta')}

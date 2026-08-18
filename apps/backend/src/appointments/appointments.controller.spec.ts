@@ -275,25 +275,27 @@ describe('AppointmentsController', () => {
       expect(call.patient.phone).toBe('+584141234567');
     });
 
-    it('SUPERADMIN con consent=false → 400 (rol interno NO otorga consent)', async () => {
-      // Ver ADR 0006. Antes había un bypass `!isSuperadmin(user)` — no más.
-      const superadmin: AuthUser = {
+    it('SUPERADMIN impersonando con consent=false → 400 (rol interno NO otorga consent)', async () => {
+      // Ver ADR 0006 (consent obligatorio) + ADR 0014 (impersonation).
+      // Antes había un bypass `!isSuperadmin(user)` — no más.
+      // Post-ADR 0014: el SUPERADMIN llega a este path a través de un JWT
+      // impersonado (clinicId + impersonatedBy). Aunque tenga scope resuelto,
+      // no puede otorgar consent en nombre del paciente — es requisito legal
+      // (LGPD/GDPR datos de salud) que se materializa por acto del paciente.
+      const superadminImpersonating: AuthUser = {
         userId: 'u-super',
-        clinicId: null,
+        clinicId: 'clinic-A',
         role: 'SUPERADMIN',
+        impersonatedBy: 'u-super',
       };
       await expect(
-        controller.create(
-          superadmin,
-          {
-            phone: '+584141234567',
-            consent: false as unknown as true, // simulamos bypass del ValidationPipe
-            serviceId: 'svc-1',
-            professionalId: 'prof-1',
-            startAtISO: '2030-06-01T10:00:00-04:00',
-          },
-          'clinic-A',
-        ),
+        controller.create(superadminImpersonating, {
+          phone: '+584141234567',
+          consent: false as unknown as true, // simulamos bypass del ValidationPipe
+          serviceId: 'svc-1',
+          professionalId: 'prof-1',
+          startAtISO: '2030-06-01T10:00:00-04:00',
+        }),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(scheduling.createAppointment).not.toHaveBeenCalled();
     });

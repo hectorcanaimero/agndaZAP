@@ -10,7 +10,9 @@ type Deep<T> = { [K in keyof T]?: any } & Record<string, any>;
  *
  * Cubre: happy path CRUD, leak multi-tenant (user de A intentando id de B),
  * RBAC (implícito — el @Roles decorator lo cubren tests del guard).
- * SUPERADMIN sin clinicId → 400 (del TenantContext).
+ * SUPERADMIN sin impersonation activa → 400 (post-ADR 0014, del TenantContext).
+ * SUPERADMIN impersonando (JWT con clinicId + impersonatedBy) → opera sobre
+ * el clinicId del JWT, no del query string.
  */
 describe('ServicesController', () => {
   let prisma: Deep<PrismaService>;
@@ -25,6 +27,14 @@ describe('ServicesController', () => {
     userId: 'u-super',
     clinicId: null,
     role: 'SUPERADMIN',
+  };
+  // Post-ADR 0014: la única forma válida de que un SUPERADMIN opere sobre una
+  // clínica es un JWT impersonado, emitido por /admin/clinics/:id/impersonate.
+  const superadminImpersonatingZ: AuthUser = {
+    userId: 'u-super',
+    clinicId: 'clinic-Z',
+    role: 'SUPERADMIN',
+    impersonatedBy: 'u-super',
   };
 
   beforeEach(() => {
@@ -101,14 +111,30 @@ describe('ServicesController', () => {
     expect(call.where.id).toBe('svc-1');
   });
 
-  it('SUPERADMIN sin clinicId override → 400', async () => {
+  it('SUPERADMIN sin impersonation activa → 400', async () => {
+    // Post-ADR 0014: el escape hatch (`?clinicId=` para SUPERADMIN sin
+    // impersonation) fue eliminado. Sin JWT impersonado, cualquier acceso a
+    // data de clínica se corta con 400.
     await expect(controller.list(superadmin)).rejects.toMatchObject({
       status: 400,
+      message: expect.stringContaining('impersonar'),
     });
   });
 
-  it('SUPERADMIN con clinicId override → filtra por ese clinicId', async () => {
-    await controller.list(superadmin, 'clinic-Z');
+  it('SUPERADMIN sin impersonation + intent override → sigue siendo 400 (el override ya NO habilita)', async () => {
+    // Fase 6: el parámetro ?clinicId= fue removido. Sin JWT impersonado,
+    // no hay forma de escapar — el SUPERADMIN está forzado a impersonar.
+    await expect(controller.list(superadmin)).rejects.toMatchObject({
+      status: 400,
+    });
+    expect(prisma.service.findMany).not.toHaveBeenCalled();
+  });
+
+  it('SUPERADMIN impersonando (JWT con clinicId) → filtra por el clinicId del JWT', async () => {
+    // El SUPERADMIN pasó por /admin/clinics/:id/impersonate y ahora tiene un
+    // JWT temporal con `clinicId: 'clinic-Z'`. El controller resuelve el
+    // scope desde el user, no desde query string.
+    await controller.list(superadminImpersonatingZ);
     const call = prisma.service.findMany.mock.calls[0][0];
     expect(call.where.clinicId).toBe('clinic-Z');
   });
