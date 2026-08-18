@@ -68,10 +68,11 @@ export function pinoConfig(): Params {
         env,
       },
       redact: PII_REDACT_OPTIONS,
-      // Nivel numérico (Pino default) → string legible en Axiom.
-      formatters: {
-        level: (label) => ({ level: label }),
-      },
+      // Nota: Pino 10 NO permite `formatters.level` cuando hay
+      // `transport.targets` (los targets corren en un worker separado y no
+      // heredan formatters custom del main thread). Aceptamos level numérico
+      // (30=info, 40=warn, 50=error) — Axiom UI y pino-pretty lo mapean
+      // automáticamente a string legible. Sin trade-off funcional real.
       // Mixin — se ejecuta en CADA log entry, inyecta el contexto del
       // AsyncLocalStorage si hay un request activo. Permite que un
       // `logger.info(...)` desde cualquier service herede automáticamente
