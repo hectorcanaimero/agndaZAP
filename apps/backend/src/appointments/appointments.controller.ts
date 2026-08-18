@@ -60,9 +60,11 @@ export class AppointmentsController {
     private readonly followUps: FollowUpsService,
     private readonly scheduling: SchedulingService,
     private readonly availability: AvailabilityService,
-    @InjectPinoLogger(AppointmentsController.name)
-    private readonly logger: PinoLogger,
-  ) {}
+    @InjectPinoLogger() private readonly logger: PinoLogger,
+  ) {
+    // Ver AuthController: setContext en ctor reemplaza a LoggerModule.forFeature.
+    this.logger.setContext(AppointmentsController.name);
+  }
 
   @Get()
   @Roles('CLINIC_ADMIN', 'SUPERADMIN')

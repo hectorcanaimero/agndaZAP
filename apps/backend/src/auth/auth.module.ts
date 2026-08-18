@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { LoggerModule } from 'nestjs-pino';
 import { PublicModule } from '../public/public.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -35,8 +34,6 @@ import { JwtStrategy } from './strategies/jwt.strategy';
       // default de la lib. Cambiar acá y en JwtStrategy.algorithms si migramos.
       signOptions: { expiresIn: '24h', algorithm: 'HS256' },
     }),
-    // Ver PatientsModule para la justificación de LoggerModule.forFeature.
-    LoggerModule.forFeature([{ name: AuthController.name }]),
   ],
   controllers: [AuthController],
   providers: [

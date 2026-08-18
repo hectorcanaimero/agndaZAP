@@ -40,9 +40,11 @@ import { UpdatePatientDto } from './dto/update-patient.dto';
 export class PatientsController {
   constructor(
     private readonly prisma: PrismaService,
-    @InjectPinoLogger(PatientsController.name)
-    private readonly logger: PinoLogger,
-  ) {}
+    @InjectPinoLogger() private readonly logger: PinoLogger,
+  ) {
+    // Ver AuthController: setContext en ctor reemplaza a LoggerModule.forFeature.
+    this.logger.setContext(PatientsController.name);
+  }
 
   /**
    * `GET /api/patients?q=&limit=&offset=`

@@ -33,9 +33,13 @@ export class AuthController {
 
   constructor(
     private readonly auth: AuthService,
-    @InjectPinoLogger(AuthController.name)
-    private readonly logger: PinoLogger,
-  ) {}
+    @InjectPinoLogger() private readonly logger: PinoLogger,
+  ) {
+    // `setContext` en el ctor evita la necesidad de `LoggerModule.forFeature`
+    // (removido en nestjs-pino v4). El context queda como base field en cada
+    // log entry emitido desde este controller.
+    this.logger.setContext(AuthController.name);
+  }
 
   /**
    * Login. Mismo mensaje de error para "email inexistente" y "password mala"
