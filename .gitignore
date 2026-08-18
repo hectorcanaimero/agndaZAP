@@ -76,3 +76,6 @@ skills-lock.json
 # Los assets finales viven en apps/web/public/ (curados a mano).
 apps/*/assets/generated/
 /assets/
+
+# Credenciales de producción — NUNCA commitear (viven local + engram memory).
+docs/deploy/accesos-*.md
