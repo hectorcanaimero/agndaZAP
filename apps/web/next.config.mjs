@@ -25,10 +25,15 @@ export default withSentryConfig(withNextIntl(nextConfig), {
   // Solo si SENTRY_AUTH_TOKEN está seteado (build time, en CI/prod).
   authToken: process.env.SENTRY_AUTH_TOKEN,
   widenClientFileUpload: true,
-  reactComponentAnnotation: { enabled: true },
   // Tunneling: proxy los eventos de Sentry por nuestra api route para evitar
   // ad-blockers. Opt-in via env — en prod probablemente sí, en dev no.
   tunnelRoute: process.env.SENTRY_TUNNEL_ROUTE || undefined,
-  disableLogger: true,
-  automaticVercelMonitors: false,
+  webpack: {
+    reactComponentAnnotation: { enabled: true },
+    automaticVercelMonitors: false,
+    treeshake: {
+      // Reemplaza al viejo `disableLogger`: elimina console.log del bundle.
+      removeDebugLogging: true,
+    },
+  },
 });
