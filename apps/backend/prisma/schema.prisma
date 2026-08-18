@@ -20,6 +20,10 @@ model Clinic {
   slug          String       @unique
   timezone      String       @default("America/Caracas")
   locale        String       @default("es") // es | pt
+  /// ISO 4217 currency code (3 chars uppercase). Default USD porque el foco
+  /// LATAM incluye países que ya usan dólar (Venezuela, Ecuador, Panamá) y da
+  /// el fallback más neutral. Se configura por clínica en /panel/ajustes.
+  currency      String       @default("USD")
   wahaSession   String       @unique          // nombre de instancia WAHA
   wahaConnected Boolean      @default(false)
   address       String?

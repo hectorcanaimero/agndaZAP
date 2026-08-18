@@ -146,9 +146,107 @@
       }
     },
     "dashboard": {
-      "title": "Dashboard",
-      "subtitle": "Métricas de los últimos 30 días.",
+      "title": "Panel de operación",
+      "eyebrow": "En vivo",
+      "subtitle": "Cómo va la operación de tu clínica — hoy y en los últimos 30 días.",
       "errorLoading": "No se pudieron cargar las métricas.",
+      "sections": {
+        "kpiSection": "Indicadores clave"
+      },
+      "deltas": {
+        "vsPrevious30d": "vs. 30 días anteriores"
+      },
+      "kpi": {
+        "totalAppointments": {
+          "label": "Citas · 30 días",
+          "hint": "Total de citas creadas en la ventana."
+        },
+        "noShow": {
+          "label": "No-show",
+          "hint": "% de citas cerradas que no asistieron. Menos es mejor."
+        },
+        "confirmation": {
+          "label": "Confirmación",
+          "hint": "% de recordatorios que el paciente confirmó."
+        },
+        "revenue": {
+          "label": "Facturación",
+          "hint": "Suma estimada de citas atendidas."
+        }
+      },
+      "trend": {
+        "title": "Tendencia",
+        "subtitle": "Creadas, confirmadas y no-show en los últimos 14 días.",
+        "rangeLabel": "Últimos 14 días",
+        "ariaLabel": "Tendencia de citas de los últimos 14 días. Área navy: creadas · Área teal: confirmadas · Barras rojas: no-show.",
+        "detailToggle": "Ver datos detallados",
+        "tableCaption": "Datos de tendencia de los últimos 14 días",
+        "legend": {
+          "created": "Creadas",
+          "confirmed": "Confirmadas",
+          "noShow": "No-show"
+        },
+        "tableHeaders": {
+          "date": "Fecha",
+          "created": "Creadas",
+          "confirmed": "Confirmadas",
+          "noShow": "No-show"
+        }
+      },
+      "today": {
+        "eyebrow": "Hoy",
+        "description": "Tus próximas citas y cómo va el día.",
+        "empty": "Sin citas para hoy",
+        "emptyHint": "Cuando alguien reserve, aparece acá.",
+        "viewAgendaCta": "Ir a la agenda completa",
+        "progress": "Completadas",
+        "remaining": "Faltan",
+        "statusFilled": "Cumplidas",
+        "statusPending": "Por atender",
+        "with": "con"
+      },
+      "pending": {
+        "eyebrow": "Por confirmar",
+        "description": "Citas PENDIENTE que arrancan en las próximas 72 h.",
+        "empty": "Todo confirmado ✓",
+        "inHours": "en {h}h",
+        "inHoursTomorrow": "mañana {time}",
+        "countAction": "Ver todas",
+        "now": "ahora"
+      },
+      "heatmap": {
+        "eyebrow": "Actividad por hora",
+        "description": "Distribución de citas de los últimos 30 días.",
+        "tooltip": "{count} citas a las {hour}",
+        "tooltipOne": "1 cita a las {hour}",
+        "tooltipZero": "Sin citas a las {hour}",
+        "peak": "Pico",
+        "quiet": "Silencio"
+      },
+      "statusDist": {
+        "eyebrow": "Por estado",
+        "description": "Distribución de las citas de los últimos 30 días.",
+        "total": "Total"
+      },
+      "topServices": {
+        "eyebrow": "Top servicios",
+        "description": "Los más atendidos en los últimos 30 días.",
+        "empty": "Sin datos de servicios todavía.",
+        "countLabel": "citas atendidas",
+        "activePatients": "Pacientes activos"
+      },
+      "topProfessionals": {
+        "eyebrow": "Top profesionales",
+        "description": "Ranking por citas atendidas — con señal de no-show.",
+        "empty": "Sin datos de profesionales todavía.",
+        "attendedShort": "at.",
+        "noShowShort": "N/S",
+        "noShowRateLabel": "no-show",
+        "occupancy": "Ocupación semana"
+      },
+      "footer": {
+        "window": "Datos calculados en la zona horaria de tu clínica. Ventana: últimos 30 días · Tendencia: 14 días · Hoy: día en curso."
+      },
       "noShow": {
         "title": "No-show rate",
         "hint": "% de citas cerradas que fueron no-show.",
@@ -163,22 +261,6 @@
         "sent": "Recordatorios enviados",
         "confirmed": "Citas confirmadas",
         "sample": "{confirmed} de {sent} recordatorios respondidos"
-      },
-      "trend": {
-        "title": "Tendencia 14 días",
-        "hint": "Verde: creadas · Rojo: no-show",
-        "ariaLabel": "Tendencia de citas de los últimos 14 días — barras verdes: citas creadas, barras rojas: no-show.",
-        "legend": {
-          "created": "Creadas",
-          "noShow": "No-show"
-        },
-        "detailToggle": "Ver datos detallados",
-        "tableCaption": "Datos de tendencia de los últimos 14 días",
-        "tableHeaders": {
-          "date": "Fecha",
-          "created": "Creadas",
-          "noShow": "No-show"
-        }
       },
       "status": {
         "PENDIENTE": "Pendiente",
@@ -893,6 +975,7 @@
         "address": "Dirección",
         "timezone": "Zona horaria",
         "locale": "Idioma",
+        "currency": "Moneda de cobro",
         "autoConfirm": "Confirmación automática de citas",
         "offsets": "Recordatorios antes de la cita",
         "threshold": "Umbral \"en riesgo\"",
@@ -904,6 +987,7 @@
       "hints": {
         "address": "Se muestra a los pacientes en la página pública de agendamiento.",
         "timezone": "Todas las horas del panel se muestran en esta TZ. Formato IANA.",
+        "currency": "Se usa en los precios de tus servicios y en las métricas del dashboard (facturación, top servicios).",
         "autoConfirm": "Si está activo, las citas nacen confirmadas — no se pide confirmación explícita al paciente.",
         "offsets": "Podés configurar hasta 5 recordatorios. Ej: 24 (un día antes) y 3 (tres horas antes).",
         "threshold": "Horas antes de la cita sin confirmar tras las cuales la cita pasa a EN_RIESGO.",
@@ -912,6 +996,28 @@
         "botFallback": "Cuando el bot no entiende la intención del mensaje. Placeholders: {clinicName}, {patientName}.",
         "botHandoffMsg": "Cuando la conversación pasa a una persona del equipo. Placeholders: {clinicName}, {patientName}."
       },
+      "currencies": {
+        "ARS": "Peso argentino",
+        "BOB": "Boliviano",
+        "BRL": "Real brasileño",
+        "CLP": "Peso chileno",
+        "COP": "Peso colombiano",
+        "CRC": "Colón costarricense",
+        "DOP": "Peso dominicano",
+        "EUR": "Euro",
+        "GTQ": "Quetzal guatemalteco",
+        "HNL": "Lempira hondureño",
+        "MXN": "Peso mexicano",
+        "NIO": "Córdoba nicaragüense",
+        "PAB": "Balboa panameño",
+        "PEN": "Sol peruano",
+        "PYG": "Guaraní paraguayo",
+        "USD": "Dólar estadounidense",
+        "UYU": "Peso uruguayo",
+        "VES": "Bolívar venezolano"
+      },
+      "currencyPreviewLabel": "Se ve así",
+      "currencyPreviewAria": "Ejemplo de formato: {formatted}",
       "errors": {
         "required": "Requerido.",
         "offsetRange": "El recordatorio debe estar entre 1h y 168h (7 días).",

@@ -1,26 +1,65 @@
 import {
-  TrendingDown,
+  ArrowDownRight,
+  ArrowUpRight,
+  CalendarClock,
+  CalendarDays,
   CheckCircle2,
-  PieChart,
+  Clock3,
+  DollarSign,
   LineChart,
+  Minus,
+  PieChart,
+  Sparkles,
+  Stethoscope,
+  TrendingDown,
+  TrendingUp,
+  Users,
+  Wallet,
   type LucideProps,
 } from 'lucide-react';
 
 /**
- * Wrapper server-safe para los iconos del dashboard.
+ * Wrapper server-safe para los íconos del dashboard.
  *
- * Motivo: `lucide-react` re-exports arrastran side-effects mínimos pero
- * consumir un ícono directo desde el server-component es correcto (no requiere
- * "use client"). Este componente centraliza el mapping name → icon y evita
- * tener múltiples imports en el page.tsx.
+ * Motivo: consumir un ícono directo desde un server component es correcto
+ * (no requiere "use client"). Este componente centraliza el mapping name → icon
+ * para evitar múltiples imports scattered por el page.tsx y sub-componentes.
  */
-type IconName = 'TrendingDown' | 'CheckCircle2' | 'PieChart' | 'LineChart';
+type IconName =
+  | 'ArrowDownRight'
+  | 'ArrowUpRight'
+  | 'CalendarClock'
+  | 'CalendarDays'
+  | 'CheckCircle2'
+  | 'Clock3'
+  | 'DollarSign'
+  | 'LineChart'
+  | 'Minus'
+  | 'PieChart'
+  | 'Sparkles'
+  | 'Stethoscope'
+  | 'TrendingDown'
+  | 'TrendingUp'
+  | 'Users'
+  | 'Wallet';
 
 const MAP: Record<IconName, React.ComponentType<LucideProps>> = {
-  TrendingDown,
+  ArrowDownRight,
+  ArrowUpRight,
+  CalendarClock,
+  CalendarDays,
   CheckCircle2,
-  PieChart,
+  Clock3,
+  DollarSign,
   LineChart,
+  Minus,
+  PieChart,
+  Sparkles,
+  Stethoscope,
+  TrendingDown,
+  TrendingUp,
+  Users,
+  Wallet,
 };
 
 export function LucideIcon({
@@ -30,3 +69,5 @@ export function LucideIcon({
   const Cmp = MAP[name];
   return <Cmp {...rest} />;
 }
+
+export type { IconName };

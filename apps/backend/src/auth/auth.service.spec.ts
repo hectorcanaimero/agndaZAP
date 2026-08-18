@@ -389,6 +389,7 @@ describe('AuthService', () => {
           slug: 'clinica-a',
           timezone: 'America/Caracas',
           locale: 'es',
+          currency: 'USD',
         },
       });
       const me = await service.me('user-1');
@@ -396,7 +397,34 @@ describe('AuthService', () => {
       expect(me.clinic).toMatchObject({
         id: 'clinic-A',
         slug: 'clinica-a',
+        currency: 'USD',
       });
+    });
+
+    it('expone `currency` de la clínica (ej. VES para Venezuela)', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        clinicId: 'clinic-VE',
+        email: 'admin@demo.dev',
+        password: '<hash-secreto>',
+        name: 'Admin',
+        role: 'CLINIC_ADMIN',
+        clinic: {
+          id: 'clinic-VE',
+          name: 'Clínica VE',
+          slug: 'clinica-ve',
+          timezone: 'America/Caracas',
+          locale: 'es',
+          currency: 'VES',
+        },
+      });
+      const me = await service.me('user-1');
+      expect(me.clinic?.currency).toBe('VES');
+      // Verificamos que Prisma reciba el select explícito con `currency`
+      // — así prevenimos regresiones donde alguien lo saque del select y
+      // el response quede sin la moneda.
+      const call = (prisma.user.findUnique as jest.Mock).mock.calls[0][0];
+      expect(call.include.clinic.select.currency).toBe(true);
     });
 
     it('SUPERADMIN sin clínica: clinic es null', async () => {

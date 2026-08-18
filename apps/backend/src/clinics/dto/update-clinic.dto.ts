@@ -11,8 +11,41 @@ import {
   MaxLength,
   MinLength,
   IsIn,
+  Matches,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
+
+/**
+ * Whitelist de códigos ISO 4217 aceptados como `currency` para una clínica.
+ * Cubre las monedas de LATAM + majors (USD, EUR) — el foco del producto es
+ * LATAM, así que preferimos rechazar tipos como "BTC" o typos ("USDT") a
+ * dejar entrar cualquier string de 3 letras.
+ *
+ * Nota: se exporta como const readonly para que el frontend eventualmente
+ * pueda mirrorearla. NO se importa cross-package — es duplicación consciente.
+ */
+export const ALLOWED_CURRENCIES = [
+  'ARS', // Argentina
+  'BOB', // Bolivia
+  'BRL', // Brasil
+  'CLP', // Chile
+  'COP', // Colombia
+  'CRC', // Costa Rica
+  'DOP', // República Dominicana
+  'EUR', // Eurozona (fallback internacional)
+  'GTQ', // Guatemala
+  'HNL', // Honduras
+  'MXN', // México
+  'NIO', // Nicaragua
+  'PAB', // Panamá (aunque usa USD de facto)
+  'PEN', // Perú
+  'PYG', // Paraguay
+  'USD', // Estados Unidos + Ecuador + El Salvador + Venezuela (informal)
+  'UYU', // Uruguay
+  'VES', // Venezuela (bolívar)
+] as const;
+
+export type AllowedCurrency = (typeof ALLOWED_CURRENCIES)[number];
 
 /**
  * DTO para `PATCH /api/clinics/me`.
@@ -64,6 +97,22 @@ export class UpdateClinicDto {
   @IsOptional()
   @IsIn(['es', 'pt'], { message: 'locale debe ser "es" o "pt"' })
   locale?: string;
+
+  /**
+   * Código ISO 4217 (3 letras mayúsculas). Se valida contra
+   * `ALLOWED_CURRENCIES` — LATAM + majors. El regex es defensa en profundidad:
+   * si alguien mete "usd" (minúsculas) el `@Matches` corta ANTES del `@IsIn`
+   * y devolvemos un error específico y accionable.
+   */
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Z]{3}$/, {
+    message: 'currency debe ser 3 letras mayúsculas (ej. USD, ARS, BRL)',
+  })
+  @IsIn(ALLOWED_CURRENCIES, {
+    message: `currency debe ser uno de: ${ALLOWED_CURRENCIES.join(', ')}`,
+  })
+  currency?: AllowedCurrency;
 
   @IsOptional()
   @IsBoolean()

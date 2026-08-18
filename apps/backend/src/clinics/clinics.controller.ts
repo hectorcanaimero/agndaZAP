@@ -45,6 +45,7 @@ export class ClinicsController {
         slug: true,
         timezone: true,
         locale: true,
+        currency: true,
         address: true,
         autoConfirm: true,
         reminderOffsetsH: true,
@@ -85,6 +86,7 @@ export class ClinicsController {
         ...(dto.address !== undefined ? { address: dto.address } : {}),
         ...(dto.timezone !== undefined ? { timezone: dto.timezone } : {}),
         ...(dto.locale !== undefined ? { locale: dto.locale } : {}),
+        ...(dto.currency !== undefined ? { currency: dto.currency } : {}),
         ...(dto.autoConfirm !== undefined
           ? { autoConfirm: dto.autoConfirm }
           : {}),
@@ -113,6 +115,7 @@ export class ClinicsController {
         slug: true,
         timezone: true,
         locale: true,
+        currency: true,
         address: true,
         autoConfirm: true,
         reminderOffsetsH: true,

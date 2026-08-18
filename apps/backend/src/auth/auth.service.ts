@@ -38,6 +38,7 @@ export interface AuthMe {
     slug: string;
     timezone: string;
     locale: string;
+    currency: string;
   } | null;
 }
 
@@ -168,6 +169,7 @@ export class AuthService {
             slug: true,
             timezone: true,
             locale: true,
+            currency: true,
           },
         },
       },

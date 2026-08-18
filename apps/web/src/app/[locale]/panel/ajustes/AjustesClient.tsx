@@ -8,6 +8,7 @@ import {
   Bot,
   Building2,
   Check,
+  Coins,
   MessageCircle,
   MessageSquareText,
   Plus,
@@ -47,6 +48,8 @@ export interface ClinicSettings {
   slug: string;
   timezone: string;
   locale: string;
+  /** ISO 4217 (3 letras uppercase) — moneda de cobro de la clínica. */
+  currency: string;
   address: string | null;
   autoConfirm: boolean;
   reminderOffsetsH: number[];
@@ -106,6 +109,36 @@ const COMMON_TIMEZONES = [
   'America/Lima',
   'America/La_Paz',
 ] as const;
+
+/**
+ * Whitelist de monedas ISO 4217 aceptadas. Sincronizada 1:1 con
+ * `ALLOWED_CURRENCIES` del backend (`apps/backend/src/clinics/dto/`).
+ * Cubre LATAM completo + majors (USD, EUR). El nombre humano se resuelve
+ * en render vía i18n `panel.settings.currencies.<CODE>` — así una app pt-BR
+ * puede mostrar "Peso argentino" o "Peso argentino" según corresponda.
+ */
+const ALLOWED_CURRENCIES = [
+  'ARS',
+  'BOB',
+  'BRL',
+  'CLP',
+  'COP',
+  'CRC',
+  'DOP',
+  'EUR',
+  'GTQ',
+  'HNL',
+  'MXN',
+  'NIO',
+  'PAB',
+  'PEN',
+  'PYG',
+  'USD',
+  'UYU',
+  'VES',
+] as const;
+
+type CurrencyCode = (typeof ALLOWED_CURRENCIES)[number];
 
 /* ═══════════════════════════════════════════════════════════════════
  *                         AJUSTES CLIENT
@@ -250,6 +283,7 @@ const generalSchema = z.object({
   address: z.string().max(300).optional(),
   timezone: z.string().min(1),
   locale: z.enum(['es', 'pt']),
+  currency: z.enum(ALLOWED_CURRENCIES),
   autoConfirm: z.boolean(),
 });
 
@@ -272,12 +306,21 @@ function GeneralForm({ clinic }: { clinic: ClinicSettings }) {
       address: clinic.address ?? '',
       timezone: clinic.timezone,
       locale: (clinic.locale as 'es' | 'pt') ?? 'es',
+      // Si el backend responde una moneda fuera del whitelist (edge case por
+      // manipulación directa en DB), caemos a USD para que Zod no rompa el
+      // form entero — el operador puede corregirlo al guardar.
+      currency: (ALLOWED_CURRENCIES as readonly string[]).includes(
+        clinic.currency,
+      )
+        ? (clinic.currency as CurrencyCode)
+        : 'USD',
       autoConfirm: clinic.autoConfirm,
     },
   });
 
   const tzValue = watch('timezone');
   const localeValue = watch('locale');
+  const currencyValue = watch('currency');
   const autoConfirmValue = watch('autoConfirm');
   const tzChanged = tzValue !== clinic.timezone;
 
@@ -304,6 +347,7 @@ function GeneralForm({ clinic }: { clinic: ClinicSettings }) {
         address: values.address || undefined,
         timezone: values.timezone,
         locale: values.locale,
+        currency: values.currency,
         autoConfirm: values.autoConfirm,
       })
       .catch(() => undefined);
@@ -413,6 +457,42 @@ function GeneralForm({ clinic }: { clinic: ClinicSettings }) {
           </Select>
         </Field>
       </div>
+
+      <Field
+        label={t('fields.currency')}
+        htmlFor="gen-currency"
+        hint={t('hints.currency')}
+      >
+        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+          <Select
+            value={currencyValue}
+            onValueChange={(v) =>
+              setValue('currency', v as CurrencyCode, { shouldDirty: true })
+            }
+            disabled={busy}
+          >
+            <SelectTrigger id="gen-currency">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="max-h-72">
+              {ALLOWED_CURRENCIES.map((code) => (
+                <SelectItem key={code} value={code}>
+                  <span className="inline-flex items-center gap-2">
+                    <span className="font-mono text-[11px] font-semibold tabular-nums text-muted-foreground">
+                      {code}
+                    </span>
+                    <span>{t(`currencies.${code}`)}</span>
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <CurrencyPreview
+            code={currencyValue}
+            locale={localeValue}
+          />
+        </div>
+      </Field>
 
       <ToggleField
         checked={autoConfirmValue}
@@ -935,6 +1015,44 @@ function PlaceholdersHint() {
           ),
         })}
       </p>
+    </div>
+  );
+}
+
+/**
+ * Preview visual del formato de moneda seleccionado. Le da al operador
+ * feedback inmediato de cómo se va a ver un precio (ej. "US$ 1.500" vs.
+ * "Bs. 1.500,00") sin tener que ir al dashboard a chequearlo.
+ *
+ * Usa `Intl.NumberFormat` — el mismo motor que renderiza los montos reales
+ * en TopServicesBar y KpiCard, así que lo que se ve acá es EXACTAMENTE lo
+ * que va a verse en la operación. Fallback silencioso si el runtime no
+ * soporta la moneda (raro pero posible en Node viejo).
+ */
+function CurrencyPreview({ code, locale }: { code: string; locale: string }) {
+  const t = useTranslations('panel.settings');
+  let formatted = '—';
+  try {
+    formatted = new Intl.NumberFormat(locale === 'pt' ? 'pt-BR' : 'es', {
+      style: 'currency',
+      currency: code,
+      maximumFractionDigits: 0,
+    }).format(1500);
+  } catch {
+    formatted = `${code} 1.500`;
+  }
+  return (
+    <div
+      className="inline-flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2"
+      aria-label={t('currencyPreviewAria', { formatted })}
+    >
+      <Coins className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        {t('currencyPreviewLabel')}
+      </span>
+      <span className="text-sm font-semibold tabular-nums text-foreground">
+        {formatted}
+      </span>
     </div>
   );
 }

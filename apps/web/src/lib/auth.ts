@@ -60,6 +60,14 @@ export interface AuthMe {
     slug: string;
     timezone: string;
     locale: string;
+    /**
+     * Código ISO 4217 (3 letras uppercase) — moneda de cobro de la clínica.
+     * Se muestra en el dashboard (KPI de facturación, top servicios) y en la
+     * página pública. Editable desde `/panel/ajustes`. Default backend "USD".
+     * Fallback frontend "USD" cuando el campo llega undefined (compat con
+     * responses previos a la migración).
+     */
+    currency: string;
   } | null;
   /**
    * Solo presente cuando la sesión activa es un JWT impersonado emitido por

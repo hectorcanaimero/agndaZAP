@@ -146,9 +146,107 @@
       }
     },
     "dashboard": {
-      "title": "Dashboard",
-      "subtitle": "Métricas dos últimos 30 dias.",
+      "title": "Painel de operação",
+      "eyebrow": "Ao vivo",
+      "subtitle": "Como está a operação da sua clínica — hoje e nos últimos 30 dias.",
       "errorLoading": "Não foi possível carregar as métricas.",
+      "sections": {
+        "kpiSection": "Indicadores-chave"
+      },
+      "deltas": {
+        "vsPrevious30d": "vs. 30 dias anteriores"
+      },
+      "kpi": {
+        "totalAppointments": {
+          "label": "Consultas · 30 dias",
+          "hint": "Total de consultas criadas na janela."
+        },
+        "noShow": {
+          "label": "No-show",
+          "hint": "% de consultas encerradas que não compareceram. Menos é melhor."
+        },
+        "confirmation": {
+          "label": "Confirmação",
+          "hint": "% de lembretes que o paciente confirmou."
+        },
+        "revenue": {
+          "label": "Faturamento",
+          "hint": "Soma estimada de consultas atendidas."
+        }
+      },
+      "trend": {
+        "title": "Tendência",
+        "subtitle": "Criadas, confirmadas e no-show nos últimos 14 dias.",
+        "rangeLabel": "Últimos 14 dias",
+        "ariaLabel": "Tendência de consultas dos últimos 14 dias. Área navy: criadas · Área teal: confirmadas · Barras vermelhas: no-show.",
+        "detailToggle": "Ver dados detalhados",
+        "tableCaption": "Dados de tendência dos últimos 14 dias",
+        "legend": {
+          "created": "Criadas",
+          "confirmed": "Confirmadas",
+          "noShow": "No-show"
+        },
+        "tableHeaders": {
+          "date": "Data",
+          "created": "Criadas",
+          "confirmed": "Confirmadas",
+          "noShow": "No-show"
+        }
+      },
+      "today": {
+        "eyebrow": "Hoje",
+        "description": "Suas próximas consultas e como está o dia.",
+        "empty": "Sem consultas hoje",
+        "emptyHint": "Quando alguém reservar, aparece aqui.",
+        "viewAgendaCta": "Ir para a agenda completa",
+        "progress": "Concluídas",
+        "remaining": "Faltam",
+        "statusFilled": "Concluídas",
+        "statusPending": "A atender",
+        "with": "com"
+      },
+      "pending": {
+        "eyebrow": "A confirmar",
+        "description": "Consultas PENDENTE que começam nas próximas 72 h.",
+        "empty": "Tudo confirmado ✓",
+        "inHours": "em {h}h",
+        "inHoursTomorrow": "amanhã {time}",
+        "countAction": "Ver todas",
+        "now": "agora"
+      },
+      "heatmap": {
+        "eyebrow": "Atividade por hora",
+        "description": "Distribuição de consultas dos últimos 30 dias.",
+        "tooltip": "{count} consultas às {hour}",
+        "tooltipOne": "1 consulta às {hour}",
+        "tooltipZero": "Sem consultas às {hour}",
+        "peak": "Pico",
+        "quiet": "Silêncio"
+      },
+      "statusDist": {
+        "eyebrow": "Por status",
+        "description": "Distribuição das consultas dos últimos 30 dias.",
+        "total": "Total"
+      },
+      "topServices": {
+        "eyebrow": "Top serviços",
+        "description": "Os mais atendidos nos últimos 30 dias.",
+        "empty": "Sem dados de serviços ainda.",
+        "countLabel": "consultas atendidas",
+        "activePatients": "Pacientes ativos"
+      },
+      "topProfessionals": {
+        "eyebrow": "Top profissionais",
+        "description": "Ranking por consultas atendidas — com sinal de no-show.",
+        "empty": "Sem dados de profissionais ainda.",
+        "attendedShort": "at.",
+        "noShowShort": "N/S",
+        "noShowRateLabel": "no-show",
+        "occupancy": "Ocupação semana"
+      },
+      "footer": {
+        "window": "Dados calculados no fuso horário da sua clínica. Janela: últimos 30 dias · Tendência: 14 dias · Hoje: dia em curso."
+      },
       "noShow": {
         "title": "No-show rate",
         "hint": "% de consultas fechadas que foram no-show.",
@@ -163,22 +261,6 @@
         "sent": "Lembretes enviados",
         "confirmed": "Consultas confirmadas",
         "sample": "{confirmed} de {sent} lembretes respondidos"
-      },
-      "trend": {
-        "title": "Tendência de 14 dias",
-        "hint": "Verde: criadas · Vermelho: no-show",
-        "ariaLabel": "Tendência de consultas dos últimos 14 dias — barras verdes: consultas criadas, barras vermelhas: no-show.",
-        "legend": {
-          "created": "Criadas",
-          "noShow": "No-show"
-        },
-        "detailToggle": "Ver dados detalhados",
-        "tableCaption": "Dados de tendência dos últimos 14 dias",
-        "tableHeaders": {
-          "date": "Data",
-          "created": "Criadas",
-          "noShow": "No-show"
-        }
       },
       "status": {
         "PENDIENTE": "Pendente",
@@ -893,6 +975,7 @@
         "address": "Endereço",
         "timezone": "Fuso horário",
         "locale": "Idioma",
+        "currency": "Moeda de cobrança",
         "autoConfirm": "Confirmação automática de consultas",
         "offsets": "Lembretes antes da consulta",
         "threshold": "Limite \"em risco\"",
@@ -904,6 +987,7 @@
       "hints": {
         "address": "Exibido aos pacientes na página pública de agendamento.",
         "timezone": "Todas as horas do painel são exibidas neste fuso. Formato IANA.",
+        "currency": "Usada nos preços dos seus serviços e nas métricas do dashboard (faturamento, top serviços).",
         "autoConfirm": "Se ativo, as consultas nascem confirmadas — não pede confirmação explícita ao paciente.",
         "offsets": "Você pode configurar até 5 lembretes. Ex: 24 (um dia antes) e 3 (três horas antes).",
         "threshold": "Horas antes da consulta sem confirmação após as quais a consulta passa para EM_RISCO.",
@@ -912,6 +996,28 @@
         "botFallback": "Quando o bot não entende a intenção da mensagem. Placeholders: {clinicName}, {patientName}.",
         "botHandoffMsg": "Quando a conversa passa para uma pessoa da equipe. Placeholders: {clinicName}, {patientName}."
       },
+      "currencies": {
+        "ARS": "Peso argentino",
+        "BOB": "Boliviano",
+        "BRL": "Real brasileiro",
+        "CLP": "Peso chileno",
+        "COP": "Peso colombiano",
+        "CRC": "Colón costa-riquenho",
+        "DOP": "Peso dominicano",
+        "EUR": "Euro",
+        "GTQ": "Quetzal guatemalteco",
+        "HNL": "Lempira hondurenho",
+        "MXN": "Peso mexicano",
+        "NIO": "Córdoba nicaraguense",
+        "PAB": "Balboa panamenho",
+        "PEN": "Sol peruano",
+        "PYG": "Guarani paraguaio",
+        "USD": "Dólar americano",
+        "UYU": "Peso uruguaio",
+        "VES": "Bolívar venezuelano"
+      },
+      "currencyPreviewLabel": "Fica assim",
+      "currencyPreviewAria": "Exemplo de formato: {formatted}",
       "errors": {
         "required": "Obrigatório.",
         "offsetRange": "O lembrete deve estar entre 1h e 168h (7 dias).",

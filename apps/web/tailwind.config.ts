@@ -111,10 +111,23 @@ const config: Config = {
           from: { height: 'var(--radix-accordion-content-height)' },
           to: { height: '0' },
         },
+        // Usada por las cards del dashboard para entrar escalonadamente.
+        // Solo opacity + transform → 60fps garantizado.
+        'fade-up': {
+          '0%': { opacity: '0', transform: 'translateY(6px)' },
+          '100%': { opacity: '1', transform: 'none' },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
+        'fade-up': 'fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both',
+      },
+      boxShadow: {
+        // Sombra sutil para cards del dashboard — evita la sombra shadcn default
+        // que se ve demasiado marcada sobre bg-gray-50.
+        'card-flat': '0 1px 2px rgba(15, 23, 42, 0.04), 0 0 0 1px rgba(15, 23, 42, 0.03)',
+        'card-lift': '0 8px 24px -8px rgba(15, 42, 74, 0.12), 0 2px 6px rgba(15, 42, 74, 0.06)',
       },
     },
   },
