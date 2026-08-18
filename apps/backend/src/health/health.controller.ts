@@ -138,15 +138,13 @@ export class HealthController {
   private async checkWaha(): Promise<CheckResult> {
     const start = Date.now();
     try {
-      // WAHA community expone `/api/health` — versiones distintas pueden
-      // devolver payloads diferentes. Solo miramos el status HTTP.
+      // WAHA expone /health y /ping como endpoints publicos. /api/health
+      // requiere X-Api-Key (verificado en logs — devuelve 401 sin key).
+      // Usamos /health que solo mira el status HTTP.
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
-      const res = await fetch(`${this.wahaBaseUrl}/api/health`, {
+      const res = await fetch(`${this.wahaBaseUrl}/health`, {
         signal: controller.signal,
-        // No mandamos api-key — el endpoint de health de WAHA es público
-        // (mismo motivo que el nuestro). Y no queremos filtrar la key
-        // en un service compartido.
       }).finally(() => clearTimeout(timer));
       return {
         ok: res.ok,

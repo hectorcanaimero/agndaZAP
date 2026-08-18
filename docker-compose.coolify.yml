@@ -81,7 +81,9 @@ services:
     volumes:
       - waha-data:/app/.sessions
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      # /health es publico. /api/health requiere X-Api-Key y devuelve 401
+      # con wget (que no manda headers), rompiendo el healthcheck.
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/health"]
       interval: 30s
       timeout: 5s
       retries: 3
