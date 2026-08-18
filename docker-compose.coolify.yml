@@ -81,9 +81,10 @@ services:
     volumes:
       - waha-data:/app/.sessions
     healthcheck:
-      # /health es publico. /api/health requiere X-Api-Key y devuelve 401
-      # con wget (que no manda headers), rompiendo el healthcheck.
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/health"]
+      # WAHA 2026.8.1 requiere X-Api-Key en TODOS los endpoints incluidos
+      # /health y /ping (verificado en logs — devuelve 401 sin key). Usamos
+      # CMD-SHELL para poder pasar el header con variable interpolada.
+      test: ["CMD-SHELL", "wget --spider -q --header=\"X-Api-Key: $$WAHA_API_KEY\" http://localhost:3000/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

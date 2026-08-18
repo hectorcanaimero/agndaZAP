@@ -60,6 +60,7 @@ type LivenessResponse = { ok: true; timestamp: string };
 export class HealthController {
   private readonly logger = new Logger(HealthController.name);
   private readonly wahaBaseUrl = process.env.WAHA_BASE_URL ?? 'http://localhost:3000';
+  private readonly wahaApiKey = process.env.WAHA_API_KEY ?? '';
 
   constructor(
     private readonly prisma: PrismaService,
@@ -138,13 +139,14 @@ export class HealthController {
   private async checkWaha(): Promise<CheckResult> {
     const start = Date.now();
     try {
-      // WAHA expone /health y /ping como endpoints publicos. /api/health
-      // requiere X-Api-Key (verificado en logs — devuelve 401 sin key).
-      // Usamos /health que solo mira el status HTTP.
+      // WAHA 2026.8.1 requiere X-Api-Key en TODOS los endpoints incluidos
+      // /health (verificado en logs — 401 sin key). Mandamos la key con
+      // header X-Api-Key (misma que usa la app en runtime).
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
       const res = await fetch(`${this.wahaBaseUrl}/health`, {
         signal: controller.signal,
+        headers: this.wahaApiKey ? { 'X-Api-Key': this.wahaApiKey } : {},
       }).finally(() => clearTimeout(timer));
       return {
         ok: res.ok,
