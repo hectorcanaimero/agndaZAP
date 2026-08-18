@@ -67,6 +67,12 @@ services:
     expose:
       - "3000"
     environment:
+      # NOWEB (Baileys) en vez de WEBJS (Chromium): menos RAM, arranque
+      # mas rapido, feature parity ~90% (mensajes texto/media/reactions
+      # OK; algunos business advanced no). Ver docs/adr si se cambia.
+      # ATENCION: sessions de WEBJS no son compatibles con NOWEB — al
+      # cambiar, WhatsApp pide re-escanear QR en el primer arranque.
+      WHATSAPP_DEFAULT_ENGINE: NOWEB
       WAHA_API_KEY: ${WAHA_API_KEY}
       WHATSAPP_HOOK_URL: http://backend:4000/webhooks/waha
       WHATSAPP_HOOK_EVENTS: message,session.status
