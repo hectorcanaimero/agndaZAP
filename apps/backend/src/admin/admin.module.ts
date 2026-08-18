@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AuthModule } from '../auth/auth.module';
 import { InvitationsModule } from '../invitations/invitations.module';
 import { AdminAuditController } from './admin-audit.controller';
@@ -20,9 +21,13 @@ import { ImpersonationService } from './impersonation.service';
  * Reusar el signer garantiza que rotar `JWT_SECRET` invalide TODOS los
  * tokens (login e impersonation) de una vez.
  *
- * `AdminAuditInterceptor` se aplica a nivel de controller vía
- * `@UseInterceptors(...)` — no lo registramos como `APP_INTERCEPTOR` global
- * para no auditar rutas que no son del área admin.
+ * `AdminAuditInterceptor` se registra como APP_INTERCEPTOR GLOBAL (ADR 0016)
+ * para cubrir TODA mutation ejecutada bajo impersonation, no solo las de
+ * `/admin/*`. La lógica interna filtra qué persistir:
+ *  - user.impersonatedBy presente + mutation → siempre audita
+ *  - decorador @AdminAudit + mutation → audita (backward compat)
+ *  - resto → skip
+ * Ver `admin-audit.interceptor.ts` para los detalles.
  */
 @Module({
   imports: [AuthModule, InvitationsModule],
@@ -35,6 +40,7 @@ import { ImpersonationService } from './impersonation.service';
   providers: [
     AdminAuditService,
     AdminAuditInterceptor,
+    { provide: APP_INTERCEPTOR, useClass: AdminAuditInterceptor },
     AdminClinicsService,
     AdminMetricsService,
     ImpersonationService,

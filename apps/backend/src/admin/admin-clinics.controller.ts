@@ -7,7 +7,6 @@ import {
   Post,
   Query,
   UseGuards,
-  UseInterceptors,
 } from '@nestjs/common';
 import { AdminAction } from '@prisma/client';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -15,7 +14,6 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthUser } from '../auth/tenant-context.util';
 import { AdminAudit } from './admin-audit.decorator';
-import { AdminAuditInterceptor } from './admin-audit.interceptor';
 import {
   AdminClinicsService,
   type CreateClinicResult,
@@ -36,13 +34,14 @@ import { UpdateClinicDto } from './dto/update-clinic.dto';
  * `JwtAuthGuard` corre global (APP_GUARD en AuthModule). Acá sólo
  * necesitamos RolesGuard para verificar el rol por encima de la autenticación.
  *
- * El interceptor de auditoría se aplica a nivel controller pero los GETs
- * son ignorados por el propio interceptor (ver `MUTABLE_METHODS`).
+ * El `AdminAuditInterceptor` ya está registrado como APP_INTERCEPTOR
+ * global (ver AdminModule + ADR 0016), por eso NO se aplica `@UseInterceptors`
+ * acá — sería doble ejecución sobre el mismo request. Los `@AdminAudit()`
+ * en cada handler siguen indicando qué debe auditarse.
  */
 @Controller('admin/clinics')
 @UseGuards(RolesGuard)
 @Roles('SUPERADMIN')
-@UseInterceptors(AdminAuditInterceptor)
 export class AdminClinicsController {
   constructor(private readonly clinics: AdminClinicsService) {}
 

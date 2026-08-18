@@ -18,6 +18,7 @@ const fakeItem = {
   metadata: null,
   ip: null,
   userAgent: null,
+  impersonatedBy: null,
   createdAt: new Date('2026-08-14T12:00:00Z'),
   actor: fakeActor,
 };

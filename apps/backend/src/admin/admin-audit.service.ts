@@ -11,6 +11,9 @@ export interface LogActionInput {
   metadata?: Record<string, unknown>;
   ip?: string;
   userAgent?: string;
+  // Presente solo cuando la acción se ejecuta bajo impersonation (ver ADR 0016).
+  // El interceptor lo popula desde `req.user.impersonatedBy`.
+  impersonatedBy?: string;
 }
 
 export interface ListAuditInput {
@@ -64,12 +67,19 @@ export class AdminAuditService {
         metadata: (input.metadata as Prisma.InputJsonValue) ?? undefined,
         ip: input.ip ?? null,
         userAgent: input.userAgent ?? null,
+        impersonatedBy: input.impersonatedBy ?? null,
       },
     });
 
+    // Log en stdout (Axiom) con impersonatedBy visible para correlación —
+    // permite grep tipo "audit impersonatedBy=super-1" incluso si la DB
+    // se atrasa o el row se pierde por un bug futuro.
+    const impersonationTag = record.impersonatedBy
+      ? ` impersonatedBy=${record.impersonatedBy}`
+      : '';
     this.logger.log(
-      `audit id=${record.id} action=${record.action} actor=${record.actorUserId} ` +
-        `target=${record.targetType}:${record.targetId}`,
+      `audit id=${record.id} action=${record.action} actor=${record.actorUserId}` +
+        `${impersonationTag} target=${record.targetType}:${record.targetId}`,
     );
 
     return record;

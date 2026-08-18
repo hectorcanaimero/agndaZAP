@@ -403,23 +403,33 @@ enum AdminAction {
   REACTIVATE_CLINIC
   ARCHIVE_CLINIC
   START_IMPERSONATION
+  // Captura toda mutation POST/PATCH/DELETE ejecutada bajo impersonation.
+  // targetType/targetId se infieren del path por AdminAuditInterceptor.
+  // Ver ADR 0016.
+  IMPERSONATED_WRITE
 }
 
 model AdminAudit {
-  id           String       @id @default(cuid())
-  actorUserId  String
-  actor        User         @relation(fields: [actorUserId], references: [id])
-  action       AdminAction
-  targetType   String       // "Clinic", "User", etc.
-  targetId     String
-  metadata     Json?        // payload variable según acción (ej. reason en SUSPEND_CLINIC)
-  ip           String?
-  userAgent    String?
-  createdAt    DateTime     @default(now())
+  id             String       @id @default(cuid())
+  actorUserId    String
+  actor          User         @relation(fields: [actorUserId], references: [id])
+  action         AdminAction
+  targetType     String       // "Clinic", "User", "Patient", "Appointment", etc.
+  targetId       String
+  metadata       Json?        // payload variable según acción (ej. reason en SUSPEND_CLINIC, method+path+clinicId en IMPERSONATED_WRITE)
+  ip             String?
+  userAgent      String?
+  // Presente solo cuando la acción se ejecutó bajo impersonation (JWT con
+  // impersonatedBy claim). Igual al actorUserId cuando el super se impersona
+  // a sí mismo — pero el campo separado permite filtrar y responder queries
+  // tipo "todas las acciones que el super X hizo impersonando la clínica Y".
+  impersonatedBy String?
+  createdAt      DateTime     @default(now())
 
   @@index([actorUserId, createdAt])
   @@index([targetType, targetId, createdAt])
   @@index([action, createdAt])
+  @@index([impersonatedBy, createdAt])
 }
 
 // ─────────────────────────── Invitaciones (activación de cuenta) ───────────────────────────

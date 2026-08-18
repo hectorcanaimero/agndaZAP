@@ -52,6 +52,7 @@ describe('AdminAuditService.logAction', () => {
         metadata: undefined,
         ip: null,
         userAgent: null,
+        impersonatedBy: null,
       },
     });
     expect(result.id).toBe('audit-1');
