@@ -9,5 +9,6 @@ export async function register() {
   }
 }
 
-// Re-export requerido por @sentry/nextjs para instrumentar errores de RSC.
-export { onRequestError } from '@sentry/nextjs';
+// Re-export requerido por Next.js 15 (instrumentation hook `onRequestError`).
+// @sentry/nextjs v10 lo exporta como `captureRequestError`; lo aliaseamos.
+export { captureRequestError as onRequestError } from '@sentry/nextjs';
