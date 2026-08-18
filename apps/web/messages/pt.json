@@ -119,31 +119,134 @@
       "dashboard": "Dashboard",
       "agenda": "Agenda",
       "conversations": "Conversas",
+      "patients": "Pacientes",
+      "leads": "Leads",
+      "feedback": "Satisfação",
       "services": "Serviços",
       "professionals": "Profissionais",
       "businessHours": "Horários",
       "timeOff": "Bloqueios",
       "faq": "Base de conhecimento",
       "whatsapp": "WhatsApp",
+      "settings": "Ajustes",
       "logout": "Sair",
       "openMenu": "Abrir menu",
       "closeMenu": "Fechar menu",
+      "collapseSidebar": "Recolher barra lateral",
+      "expandSidebar": "Expandir barra lateral",
       "sections": {
         "operation": "Operação",
         "configuration": "Configuração"
       },
       "userMenu": "Menu do usuário",
       "roles": {
-        "OWNER": "Proprietária/o",
-        "ADMIN": "Administrador",
-        "STAFF": "Staff",
+        "SUPERADMIN": "Superadministrador",
+        "CLINIC_ADMIN": "Administrador da clínica",
         "PROFESSIONAL": "Profissional"
       }
     },
     "dashboard": {
-      "title": "Dashboard",
-      "subtitle": "Métricas dos últimos 30 dias.",
+      "title": "Painel de operação",
+      "eyebrow": "Ao vivo",
+      "subtitle": "Como está a operação da sua clínica — hoje e nos últimos 30 dias.",
       "errorLoading": "Não foi possível carregar as métricas.",
+      "sections": {
+        "kpiSection": "Indicadores-chave"
+      },
+      "deltas": {
+        "vsPrevious30d": "vs. 30 dias anteriores"
+      },
+      "kpi": {
+        "totalAppointments": {
+          "label": "Consultas · 30 dias",
+          "hint": "Total de consultas criadas na janela."
+        },
+        "noShow": {
+          "label": "No-show",
+          "hint": "% de consultas encerradas que não compareceram. Menos é melhor."
+        },
+        "confirmation": {
+          "label": "Confirmação",
+          "hint": "% de lembretes que o paciente confirmou."
+        },
+        "revenue": {
+          "label": "Faturamento",
+          "hint": "Soma estimada de consultas atendidas."
+        }
+      },
+      "trend": {
+        "title": "Tendência",
+        "subtitle": "Criadas, confirmadas e no-show nos últimos 14 dias.",
+        "rangeLabel": "Últimos 14 dias",
+        "ariaLabel": "Tendência de consultas dos últimos 14 dias. Área navy: criadas · Área teal: confirmadas · Barras vermelhas: no-show.",
+        "detailToggle": "Ver dados detalhados",
+        "tableCaption": "Dados de tendência dos últimos 14 dias",
+        "legend": {
+          "created": "Criadas",
+          "confirmed": "Confirmadas",
+          "noShow": "No-show"
+        },
+        "tableHeaders": {
+          "date": "Data",
+          "created": "Criadas",
+          "confirmed": "Confirmadas",
+          "noShow": "No-show"
+        }
+      },
+      "today": {
+        "eyebrow": "Hoje",
+        "description": "Suas próximas consultas e como está o dia.",
+        "empty": "Sem consultas hoje",
+        "emptyHint": "Quando alguém reservar, aparece aqui.",
+        "viewAgendaCta": "Ir para a agenda completa",
+        "progress": "Concluídas",
+        "remaining": "Faltam",
+        "statusFilled": "Concluídas",
+        "statusPending": "A atender",
+        "with": "com"
+      },
+      "pending": {
+        "eyebrow": "A confirmar",
+        "description": "Consultas PENDENTE que começam nas próximas 72 h.",
+        "empty": "Tudo confirmado ✓",
+        "inHours": "em {h}h",
+        "inHoursTomorrow": "amanhã {time}",
+        "countAction": "Ver todas",
+        "now": "agora"
+      },
+      "heatmap": {
+        "eyebrow": "Atividade por hora",
+        "description": "Distribuição de consultas dos últimos 30 dias.",
+        "tooltip": "{count} consultas às {hour}",
+        "tooltipOne": "1 consulta às {hour}",
+        "tooltipZero": "Sem consultas às {hour}",
+        "peak": "Pico",
+        "quiet": "Silêncio"
+      },
+      "statusDist": {
+        "eyebrow": "Por status",
+        "description": "Distribuição das consultas dos últimos 30 dias.",
+        "total": "Total"
+      },
+      "topServices": {
+        "eyebrow": "Top serviços",
+        "description": "Os mais atendidos nos últimos 30 dias.",
+        "empty": "Sem dados de serviços ainda.",
+        "countLabel": "consultas atendidas",
+        "activePatients": "Pacientes ativos"
+      },
+      "topProfessionals": {
+        "eyebrow": "Top profissionais",
+        "description": "Ranking por consultas atendidas — com sinal de no-show.",
+        "empty": "Sem dados de profissionais ainda.",
+        "attendedShort": "at.",
+        "noShowShort": "N/S",
+        "noShowRateLabel": "no-show",
+        "occupancy": "Ocupação semana"
+      },
+      "footer": {
+        "window": "Dados calculados no fuso horário da sua clínica. Janela: últimos 30 dias · Tendência: 14 dias · Hoje: dia em curso."
+      },
       "noShow": {
         "title": "No-show rate",
         "hint": "% de consultas fechadas que foram no-show.",
@@ -158,22 +261,6 @@
         "sent": "Lembretes enviados",
         "confirmed": "Consultas confirmadas",
         "sample": "{confirmed} de {sent} lembretes respondidos"
-      },
-      "trend": {
-        "title": "Tendência de 14 dias",
-        "hint": "Verde: criadas · Vermelho: no-show",
-        "ariaLabel": "Tendência de consultas dos últimos 14 dias — barras verdes: consultas criadas, barras vermelhas: no-show.",
-        "legend": {
-          "created": "Criadas",
-          "noShow": "No-show"
-        },
-        "detailToggle": "Ver dados detalhados",
-        "tableCaption": "Dados de tendência dos últimos 14 dias",
-        "tableHeaders": {
-          "date": "Data",
-          "created": "Criadas",
-          "noShow": "No-show"
-        }
       },
       "status": {
         "PENDIENTE": "Pendente",
@@ -231,11 +318,215 @@
         "time": "Horário",
         "status": "Status",
         "transitions": "Alterar status",
-        "noTransitions": "Esta consulta já está em um status final."
+        "noTransitions": "Esta consulta já está em um status final.",
+        "reschedule": "Reagendar"
       },
+      "newAppointment": "Nova consulta",
       "statusChanged": "Status atualizado.",
       "statusChangeFailed": "Não foi possível atualizar o status.",
-      "statusRaceRefresh": "Esse status já foi alterado — atualizando."
+      "statusRaceRefresh": "Esse status já foi alterado — atualizando.",
+      "confirmCancel": {
+        "title": "Cancelar consulta?",
+        "description": "Você vai cancelar a consulta de {name}. Esta ação não pode ser desfeita.",
+        "confirm": "Sim, cancelar"
+      },
+      "confirmNoShow": {
+        "title": "Marcar como no-show?",
+        "description": "Você vai marcar a consulta de {name} como no-show. Isso cancela os lembretes e não pode ser desfeito.",
+        "confirm": "Sim, marcar no-show"
+      },
+      "dialog": {
+        "createTitle": "Nova consulta",
+        "rescheduleTitle": "Reagendar consulta",
+        "patientName": "Nome do paciente",
+        "patientPhone": "Telefone (WhatsApp)",
+        "service": "Serviço",
+        "servicePlaceholder": "Selecione um serviço",
+        "professional": "Profissional",
+        "professionalPlaceholder": "Selecione um profissional",
+        "notes": "Notas internas",
+        "optional": "opcional",
+        "slotPickerLabel": "Escolha um horário",
+        "slotsHint": "Selecione serviço e profissional para ver horários disponíveis.",
+        "slotsError": "Não foi possível carregar os horários. Tente novamente em instantes.",
+        "noSlots": "Sem horários disponíveis na semana. Tente a próxima.",
+        "prevWeek": "Semana anterior",
+        "nextWeek": "Próxima semana",
+        "consentLabel": "O paciente autorizou o uso dos seus dados para agendamento e envio de lembretes (LGPD/GDPR).",
+        "createSubmit": "Criar consulta",
+        "rescheduleSubmit": "Confirmar novo horário",
+        "submitting": "Salvando…",
+        "createOk": "Consulta criada.",
+        "createFailed": "Não foi possível criar a consulta.",
+        "rescheduleOk": "Consulta reagendada.",
+        "rescheduleFailed": "Não foi possível reagendar a consulta.",
+        "slotTakenReload": "Esse horário já foi ocupado. Escolha outro.",
+        "errName": "O nome é obrigatório (mínimo 2 caracteres).",
+        "errPhone": "Telefone inválido. Use formato internacional (ex: +55 11 95555-5555).",
+        "errServiceOrProfessional": "Selecione serviço e profissional.",
+        "errConsent": "O consentimento do paciente é obrigatório."
+      }
+    },
+    "patients": {
+      "title": "Pacientes",
+      "subtitle": "Todas as pessoas que agendaram ou escreveram para a clínica.",
+      "loadError": "Não foi possível carregar os pacientes ({status}).",
+      "emptyList": "Sem pacientes cadastrados ainda.",
+      "noSearchResults": "Sem resultados para sua busca.",
+      "searchPlaceholder": "Buscar por nome ou telefone…",
+      "close": "Fechar",
+      "cancel": "Cancelar",
+      "save": "Salvar alterações",
+      "saving": "Salvando…",
+      "saved": "Paciente atualizado.",
+      "saveFailed": "Não foi possível salvar o paciente.",
+      "loading": "Carregando…",
+      "unnamed": "Sem nome",
+      "detailLabel": "Paciente",
+      "openInWhatsApp": "Abrir no WhatsApp",
+      "countLabel": "{n, plural, one {# paciente} other {# pacientes}}",
+      "countMatch": "{n, plural, one {# corresponde} other {# correspondem}}",
+      "appointmentCount": "{n, plural, one {# consulta} other {# consultas}}",
+      "consentShort": "Consent OK",
+      "moreAppointments": "e mais {n}…",
+      "noAppointments": "Este paciente ainda não tem consultas.",
+      "noConversation": "Este paciente ainda não escreveu pelo WhatsApp.",
+      "noMessages": "Sem mensagens",
+      "empty": {
+        "title": "Selecione um paciente",
+        "description": "Você vai ver a ficha, histórico de consultas e a última conversa pelo WhatsApp."
+      },
+      "sections": {
+        "identity": "Identidade",
+        "appointments": "Histórico de consultas",
+        "conversation": "Conversa pelo WhatsApp"
+      },
+      "fields": {
+        "name": "Nome",
+        "phone": "Telefone",
+        "consent": "Consentimento para uso de dados (LGPD/GDPR)"
+      },
+      "placeholders": {
+        "name": "Ex: Ana Pérez"
+      },
+      "hints": {
+        "phone": "O telefone é o identificador do paciente. Para alterá-lo, a pessoa precisa criar uma ficha nova pelo bot.",
+        "consent": "Marque quando o paciente confirmar pelo WhatsApp ou presencialmente. Uma vez concedido não pode ser revogado por aqui.",
+        "consentGranted": "O paciente já concedeu consentimento. Para revogar, contate o suporte."
+      },
+      "convState": {
+        "BOT": "O bot está atendendo",
+        "NEEDS_HUMAN": "Precisa de atenção humana",
+        "HUMAN": "Um humano está respondendo"
+      }
+    },
+    "leads": {
+      "title": "Leads",
+      "subtitle": "Prospects vindos da landing.",
+      "loading": "Carregando…",
+      "loadError": "Não foi possível carregar os leads.",
+      "retry": "Tentar novamente",
+      "countLabel": "{n, plural, one {# lead} other {# leads}}",
+      "filters": {
+        "status": "Status",
+        "all": "Todos"
+      },
+      "table": {
+        "name": "Nome",
+        "phone": "WhatsApp",
+        "clinicType": "Tipo",
+        "locale": "Idioma",
+        "createdAt": "Data",
+        "status": "Status"
+      },
+      "status": {
+        "NEW": "Novo",
+        "CONTACTED": "Contatado",
+        "DEMO": "Demo",
+        "CONVERTED": "Convertido",
+        "LOST": "Perdido"
+      },
+      "empty": {
+        "title": "Ainda não há leads",
+        "description": "Quando alguém preencher o formulário da landing, aparecerá aqui."
+      },
+      "pagination": {
+        "prev": "Anterior",
+        "next": "Próximo",
+        "page": "Página {page} de {total}"
+      }
+    },
+    "feedback": {
+      "title": "Satisfação",
+      "subtitle": "Como os pacientes avaliaram sua experiência pós-atendimento.",
+      "loadError": "Não foi possível carregar os dados de satisfação ({status}).",
+      "close": "Fechar",
+      "searchPlaceholder": "Buscar paciente, profissional ou comentário…",
+      "countLabel": "{n, plural, one {# resposta} other {# respostas}}",
+      "countMatch": "{n, plural, one {# coincide} other {# coincidem}}",
+      "noSearchResults": "Nenhuma resposta corresponde à busca.",
+      "resetFilter": "Ver todas",
+      "filters": {
+        "all": "Todas",
+        "score": "{n}★"
+      },
+      "empty": {
+        "title": "Ainda não recebeu respostas de satisfação",
+        "description": "Ative o follow-up em algum profissional para começar a receber avaliações dos seus pacientes. Cada vez que marcar uma consulta como ATENDIDA envia uma mensagem pedindo 1-5 estrelas."
+      },
+      "detail": {
+        "backLabel": "Voltar à lista",
+        "sectionScore": "Nota",
+        "sectionAppointment": "Consulta atendida",
+        "sectionContext": "Contexto",
+        "sectionComment": "Comentário do paciente",
+        "noComment": "O paciente não deixou um comentário.",
+        "respondedAt": "Respondido em {date}",
+        "appointmentAt": "Atendido em {date}",
+        "professionalLabel": "Profissional",
+        "serviceLabel": "Serviço",
+        "patientLabel": "Paciente"
+      },
+      "panelEmpty": {
+        "title": "Escolha uma resposta",
+        "description": "Selecione uma resposta da lista para ver o detalhe. Abaixo você tem o resumo agregado de todas as avaliações recebidas."
+      },
+      "stats": {
+        "total": {
+          "title": "Respostas totais",
+          "hint": "Pacientes que responderam à pesquisa."
+        },
+        "average": {
+          "title": "Média geral"
+        },
+        "positive": {
+          "title": "Avaliações positivas",
+          "hint": "% de notas 4 e 5 estrelas."
+        },
+        "top": {
+          "title": "Profissional melhor avaliado",
+          "hint": "{avg}★ · {count, plural, one {# resposta} other {# respostas}}",
+          "empty": "Sem dados por profissional ainda."
+        }
+      },
+      "distribution": {
+        "title": "Distribuição de notas"
+      },
+      "byProfessional": {
+        "title": "Por profissional",
+        "empty": "Sem dados por profissional ainda.",
+        "headers": {
+          "name": "Profissional",
+          "count": "Respostas",
+          "average": "Média"
+        }
+      },
+      "recent": {
+        "title": "Últimas respostas",
+        "empty": "Sem respostas recentes.",
+        "unnamed": "Paciente sem nome",
+        "metaLine": "{professional} · {service}"
+      }
     },
     "conversations": {
       "title": "Caixa",
@@ -251,6 +542,7 @@
       "noResults": "Sem resultados",
       "noResultsHint": "Nada encontrado para \"{query}\".",
       "needsAttention": "Novo",
+      "live": "Ao vivo",
       "outbound": "Enviado por você",
       "backToList": "Voltar à caixa",
       "composerHint": "Enter para nova linha · ⌘↵ para enviar",
@@ -305,16 +597,18 @@
       "title": "Serviços",
       "subtitle": "Serviços oferecidos pela clínica.",
       "loadError": "Não foi possível carregar os serviços ({status}).",
-      "empty": "Nenhum serviço cadastrado.",
+      "emptyList": "Nenhum serviço cadastrado.",
       "searchPlaceholder": "Buscar serviço…",
-      "new": "Novo serviço",
+      "new": "Novo",
       "newTitle": "Novo serviço",
+      "newSubtitle": "Sem título",
       "editTitle": "Editar serviço",
       "edit": "Editar",
       "delete": "Excluir",
+      "close": "Fechar",
       "actions": "Ações",
       "save": "Salvar",
-      "saving": "Salvando...",
+      "saving": "Salvando…",
       "saved": "Serviço salvo.",
       "saveFailed": "Não foi possível salvar o serviço.",
       "deleted": "Serviço desativado.",
@@ -325,6 +619,18 @@
       },
       "cancel": "Cancelar",
       "noProfessionals": "Nenhum profissional cadastrado.",
+      "noProfessionalsRow": "Sem profissionais atribuídos",
+      "noSearchResults": "Sem resultados para sua busca.",
+      "createFirst": "Criar o primeiro",
+      "countLabel": "{n, plural, one {# serviço} other {# serviços}}",
+      "countMatch": "{n} correspondem",
+      "selectedCount": "{n} selecionados",
+      "professionalCount": "{n, plural, one {# profissional} other {# profissionais}}",
+      "empty": {
+        "title": "Selecione um serviço ou crie um novo",
+        "description": "Os serviços definem o que você oferece, quanto tempo dura cada consulta e quais profissionais atendem.",
+        "cta": "Criar serviço"
+      },
       "fields": {
         "name": "Nome",
         "duration": "Duração",
@@ -333,8 +639,12 @@
         "price": "Preço",
         "professionals": "Profissionais"
       },
+      "placeholders": {
+        "name": "Ex: Consulta geral"
+      },
       "hints": {
-        "priceCents": "Em centavos. Ex: 1500 = R$ 15,00."
+        "priceCents": "Em centavos. Ex: 1500 = R$ 15,00.",
+        "buffer": "Tempo entre consultas consecutivas."
       },
       "errors": {
         "required": "Obrigatório."
@@ -344,18 +654,23 @@
       "title": "Profissionais",
       "subtitle": "Profissionais que atendem na clínica.",
       "loadError": "Não foi possível carregar os profissionais ({status}).",
-      "empty": "Nenhum profissional cadastrado.",
+      "emptyList": "Nenhum profissional cadastrado.",
       "searchPlaceholder": "Buscar profissional…",
-      "new": "Novo profissional",
+      "new": "Novo",
       "newTitle": "Novo profissional",
+      "newSubtitle": "Sem nome",
       "editTitle": "Editar profissional",
       "edit": "Editar",
       "delete": "Excluir",
+      "close": "Fechar",
+      "clear": "Limpar",
+      "optional": "opcional",
       "actions": "Ações",
       "save": "Salvar",
-      "saving": "Salvando...",
+      "saving": "Salvando…",
       "saved": "Profissional salvo.",
       "saveFailed": "Não foi possível salvar o profissional.",
+      "emailTaken": "Esse email já está registrado para outro profissional desta clínica.",
       "deleted": "Profissional desativado.",
       "deleteFailed": "Não foi possível excluir o profissional.",
       "confirmDelete": {
@@ -364,27 +679,92 @@
       },
       "cancel": "Cancelar",
       "noServices": "Nenhum serviço cadastrado ainda.",
+      "noServicesRow": "Sem serviços atribuídos",
+      "noSearchResults": "Sem resultados para sua busca.",
+      "createFirst": "Cadastrar o primeiro",
+      "countLabel": "{n, plural, one {# profissional} other {# profissionais}}",
+      "countMatch": "{n} correspondem",
+      "servicesCount": "{n, plural, one {# serviço} other {# serviços}}",
+      "selectedCount": "{n} selecionados",
+      "empty": {
+        "title": "Selecione um profissional ou cadastre um novo",
+        "description": "Cada profissional pode ter email para acessar o app, foto, especialidade e registro profissional.",
+        "cta": "Cadastrar profissional"
+      },
+      "sections": {
+        "identity": "Identidade",
+        "profile": "Perfil profissional",
+        "services": "Serviços que atende",
+        "visual": "Visual",
+        "followUp": "Follow-up pós-atendimento",
+        "calendar": "Sincronização com calendário"
+      },
       "fields": {
-        "name": "Nome",
+        "name": "Nome completo",
+        "email": "Email",
+        "phone": "Telefone",
+        "specialty": "Especialidade",
+        "licenseNumber": "Registro profissional",
+        "bio": "Bio",
+        "avatarUrl": "URL da foto",
+        "color": "Cor",
         "services": "Serviços que atende"
       },
+      "placeholders": {
+        "name": "Ex: Dra. Maria Ríos",
+        "specialty": "Ex: Cardiologia",
+        "licenseNumber": "Ex: CRM 12345",
+        "bio": "Breve descrição visível na página pública."
+      },
+      "hints": {
+        "bio": "Máximo 1000 caracteres. Exibida aos pacientes ao escolher profissional.",
+        "avatarUrl": "URL pública de uma imagem (JPG/PNG/WebP).",
+        "color": "Hex (ex. #3b82f6). Usado para diferenciá-lo visualmente na agenda."
+      },
+      "calendarSync": {
+        "description": "O profissional pode assinar esta URL no iPhone, Android ou Google Calendar para ver seus atendimentos automaticamente. Atualiza a cada 15 minutos aproximadamente.",
+        "copy": "Copiar",
+        "copyFailed": "Não foi possível copiar a URL.",
+        "copied": "URL copiada para a área de transferência.",
+        "copiedShort": "Copiado",
+        "loading": "Gerando URL…",
+        "unavailable": "URL indisponível",
+        "instructions": "iOS: Ajustes → Calendário → Contas → Adicionar conta → Outra → Adicionar calendário assinado. Android: Google Calendar → Adicionar por URL."
+      },
+      "followUp": {
+        "toggleLabel": "Pedir feedback ao paciente após o atendimento",
+        "toggleHint": "Quando você marca uma consulta como ATENDIDA, envia automaticamente uma mensagem pedindo ao paciente que avalie a experiência de 1 a 5.",
+        "delayLabel": "Enviar mensagem N horas depois",
+        "delaySuffix": "horas depois",
+        "delayError": "O intervalo deve estar entre 0 e 168 horas (7 dias).",
+        "hint": "Deixe em 2h para o paciente ainda ter a experiência fresca. Máximo 168h (7 dias)."
+      },
       "errors": {
-        "required": "Obrigatório."
+        "required": "Obrigatório.",
+        "email": "Email inválido.",
+        "phone": "Telefone inválido. Use formato internacional (ex. +55 11 95555-5555).",
+        "avatarUrl": "URL inválida (deve começar com http ou https).",
+        "color": "Cor deve ser hex (ex. #3b82f6)."
       }
     },
     "businessHours": {
       "title": "Horários",
       "subtitle": "Horários de atendimento da clínica.",
       "loadError": "Não foi possível carregar os horários ({status}).",
-      "empty": "Nenhum horário cadastrado.",
-      "new": "Novo horário",
+      "emptyList": "Nenhum horário cadastrado.",
+      "noFilterResults": "Sem horários para este filtro.",
+      "new": "Novo",
       "newTitle": "Novo horário",
+      "newSubtitle": "Sem definir",
       "editTitle": "Editar horário",
       "edit": "Editar",
       "delete": "Excluir",
+      "close": "Fechar",
+      "createFirst": "Cadastrar o primeiro",
+      "filterProfessional": "Filtrar por profissional",
       "actions": "Ações",
       "save": "Salvar",
-      "saving": "Salvando...",
+      "saving": "Salvando…",
       "saved": "Horário salvo.",
       "saveFailed": "Não foi possível salvar o horário.",
       "deleted": "Horário excluído.",
@@ -395,6 +775,21 @@
       },
       "cancel": "Cancelar",
       "allProfessionals": "Toda a clínica",
+      "countLabel": "{n, plural, one {# horário} other {# horários}}",
+      "countMatch": "{n} correspondem",
+      "durationHint": "Duração: {hours}h {minutes}m",
+      "filters": {
+        "allRows": "Todos os horários",
+        "clinicOnly": "Somente horários da clínica"
+      },
+      "empty": {
+        "title": "Selecione um horário ou cadastre um novo",
+        "description": "Defina quando a clínica ou cada profissional atende. Os pacientes só verão horários dentro desses intervalos.",
+        "cta": "Cadastrar horário"
+      },
+      "hints": {
+        "professional": "Deixe em 'Toda a clínica' se o horário se aplica a todos os profissionais."
+      },
       "fields": {
         "weekday": "Dia",
         "range": "Intervalo",
@@ -419,16 +814,22 @@
       "title": "Bloqueios",
       "subtitle": "Férias e ausências.",
       "loadError": "Não foi possível carregar os bloqueios ({status}).",
-      "empty": "Nenhum bloqueio cadastrado.",
-      "searchPlaceholder": "Buscar por motivo…",
-      "new": "Novo bloqueio",
+      "emptyList": "Nenhum bloqueio cadastrado.",
+      "noSearchResults": "Sem resultados para sua busca.",
+      "searchPlaceholder": "Buscar por motivo, data ou profissional…",
+      "new": "Novo",
       "newTitle": "Novo bloqueio",
+      "newSubtitle": "Sem motivo",
       "editTitle": "Editar bloqueio",
       "edit": "Editar",
       "delete": "Excluir",
+      "close": "Fechar",
+      "optional": "opcional",
+      "createFirst": "Cadastrar o primeiro",
+      "untitled": "Sem motivo",
       "actions": "Ações",
       "save": "Salvar",
-      "saving": "Salvando...",
+      "saving": "Salvando…",
       "saved": "Bloqueio salvo.",
       "saveFailed": "Não foi possível salvar o bloqueio.",
       "deleted": "Bloqueio excluído.",
@@ -439,6 +840,20 @@
       },
       "cancel": "Cancelar",
       "allProfessionals": "Toda a clínica",
+      "countLabel": "{n, plural, one {# bloqueio} other {# bloqueios}}",
+      "countMatch": "{n} correspondem",
+      "groups": {
+        "upcoming": "Próximos e ativos",
+        "past": "Passados"
+      },
+      "empty": {
+        "title": "Selecione um bloqueio ou cadastre um novo",
+        "description": "Férias, feriados ou qualquer período em que a clínica ou um profissional não atende.",
+        "cta": "Cadastrar bloqueio"
+      },
+      "hints": {
+        "professional": "Deixe em 'Toda a clínica' se o bloqueio afeta todos os profissionais."
+      },
       "fields": {
         "range": "Intervalo",
         "start": "Início",
@@ -460,16 +875,25 @@
       "subtitle": "Perguntas frequentes para o bot.",
       "subtitleKb": "Artigos que o bot usa para responder aos seus pacientes.",
       "loadError": "Não foi possível carregar as FAQs ({status}).",
-      "empty": "Nenhum artigo cadastrado. Crie o primeiro para que o bot possa responder.",
-      "new": "Nova FAQ",
+      "emptyList": "Nenhum artigo cadastrado. Crie o primeiro para que o bot possa responder.",
+      "noSearchResults": "Sem resultados para sua busca.",
+      "searchPlaceholder": "Buscar no título ou conteúdo…",
+      "createFirst": "Criar o primeiro",
+      "listAriaLabel": "Lista de artigos",
+      "onlyPending": "Somente sem indexação ({count})",
+      "countLabel": "{n, plural, one {# artigo} other {# artigos}}",
+      "countMatch": "{n} correspondem",
+      "new": "Novo",
       "newArticle": "Novo artigo",
       "newTitle": "Novo artigo",
+      "newSubtitle": "Sem título",
       "editTitle": "Editar artigo",
       "edit": "Editar",
       "delete": "Excluir",
+      "close": "Fechar",
       "actions": "Ações",
       "save": "Salvar",
-      "saving": "Salvando...",
+      "saving": "Salvando…",
       "saved": "Artigo salvo.",
       "saveFailed": "Não foi possível salvar o artigo.",
       "deleted": "Artigo excluído.",
@@ -481,6 +905,11 @@
       "cancel": "Cancelar",
       "back": "Voltar",
       "untitled": "Sem título",
+      "empty": {
+        "title": "Selecione um artigo ou crie um novo",
+        "description": "Os artigos são a base de conhecimento do bot. Quando um paciente pergunta algo, o bot consulta aqui para responder.",
+        "cta": "Criar artigo"
+      },
       "selectOrCreate": "Selecione um artigo ou crie um novo.",
       "preview": "Pré-visualização",
       "indexed": "Indexada",
@@ -509,6 +938,108 @@
       "counters": {
         "chars": "{current}/{max} caracteres"
       }
+    },
+    "settings": {
+      "title": "Ajustes",
+      "subtitle": "Configuração geral da clínica, lembretes e bot.",
+      "loadError": "Não foi possível carregar os ajustes ({status}).",
+      "saved": "Ajustes salvos.",
+      "saveFailed": "Não foi possível salvar os ajustes.",
+      "save": "Salvar alterações",
+      "saving": "Salvando…",
+      "sidebarAriaLabel": "Seções de ajustes",
+      "tabs": {
+        "general": "Geral",
+        "reminders": "Lembretes",
+        "bot": "Bot / Chatbot",
+        "whatsapp": "WhatsApp"
+      },
+      "general": {
+        "title": "Geral",
+        "description": "Informações visíveis da clínica e preferências regionais."
+      },
+      "reminders": {
+        "title": "Lembretes",
+        "description": "Quando avisar o paciente antes da consulta e quando marcar em risco se não confirmar."
+      },
+      "bot": {
+        "title": "Bot",
+        "description": "Personalize as mensagens que o bot envia aos seus pacientes pelo WhatsApp."
+      },
+      "whatsapp": {
+        "title": "Conexão do WhatsApp",
+        "description": "Status da sessão do bot. Escaneie o QR do seu celular para conectar."
+      },
+      "fields": {
+        "name": "Nome da clínica",
+        "address": "Endereço",
+        "timezone": "Fuso horário",
+        "locale": "Idioma",
+        "currency": "Moeda de cobrança",
+        "autoConfirm": "Confirmação automática de consultas",
+        "offsets": "Lembretes antes da consulta",
+        "threshold": "Limite \"em risco\"",
+        "tone": "Tom do bot",
+        "botGreeting": "Mensagem de saudação",
+        "botFallback": "Resposta padrão (fallback)",
+        "botHandoffMsg": "Mensagem ao escalar para humano"
+      },
+      "hints": {
+        "address": "Exibido aos pacientes na página pública de agendamento.",
+        "timezone": "Todas as horas do painel são exibidas neste fuso. Formato IANA.",
+        "currency": "Usada nos preços dos seus serviços e nas métricas do dashboard (faturamento, top serviços).",
+        "autoConfirm": "Se ativo, as consultas nascem confirmadas — não pede confirmação explícita ao paciente.",
+        "offsets": "Você pode configurar até 5 lembretes. Ex: 24 (um dia antes) e 3 (três horas antes).",
+        "threshold": "Horas antes da consulta sem confirmação após as quais a consulta passa para EM_RISCO.",
+        "tone": "Modula o estilo das respostas do bot (só afeta o como, não o quê).",
+        "botGreeting": "Quando o paciente cumprimenta (\"olá\", \"oi\", \"boas\"). Placeholders: {clinicName}, {patientName}.",
+        "botFallback": "Quando o bot não entende a intenção da mensagem. Placeholders: {clinicName}, {patientName}.",
+        "botHandoffMsg": "Quando a conversa passa para uma pessoa da equipe. Placeholders: {clinicName}, {patientName}."
+      },
+      "currencies": {
+        "ARS": "Peso argentino",
+        "BOB": "Boliviano",
+        "BRL": "Real brasileiro",
+        "CLP": "Peso chileno",
+        "COP": "Peso colombiano",
+        "CRC": "Colón costa-riquenho",
+        "DOP": "Peso dominicano",
+        "EUR": "Euro",
+        "GTQ": "Quetzal guatemalteco",
+        "HNL": "Lempira hondurenho",
+        "MXN": "Peso mexicano",
+        "NIO": "Córdoba nicaraguense",
+        "PAB": "Balboa panamenho",
+        "PEN": "Sol peruano",
+        "PYG": "Guarani paraguaio",
+        "USD": "Dólar americano",
+        "UYU": "Peso uruguaio",
+        "VES": "Bolívar venezuelano"
+      },
+      "currencyPreviewLabel": "Fica assim",
+      "currencyPreviewAria": "Exemplo de formato: {formatted}",
+      "errors": {
+        "required": "Obrigatório.",
+        "offsetRange": "O lembrete deve estar entre 1h e 168h (7 dias).",
+        "offsetDuplicate": "Você já adicionou esse lembrete.",
+        "offsetMax": "Máximo 5 lembretes.",
+        "thresholdRange": "O limite deve estar entre 1h e 72h."
+      },
+      "warnings": {
+        "timezoneChange": "Alterar o fuso horário afeta como as consultas futuras são exibidas. Verifique antes de salvar."
+      },
+      "timezoneCustom": "Outro (personalizado)",
+      "offsetChip": "{h}h antes",
+      "removeOffset": "Remover lembrete de {h}h",
+      "addOffset": "Adicionar",
+      "offsetsEmpty": "Sem lembretes configurados — o bot não avisará antes das consultas.",
+      "hoursSuffix": "horas",
+      "toneDefault": "Padrão (próximo)",
+      "toneCercano": "Próximo",
+      "toneFormal": "Formal",
+      "toneTecnico": "Técnico",
+      "placeholdersTitle": "Placeholders disponíveis",
+      "placeholdersBody": "São substituídos ao enviar: <clinicName></clinicName> pelo nome da clínica, <patientName></patientName> pelo nome do paciente se conhecido."
     },
     "whatsapp": {
       "title": "Conexão do WhatsApp",
@@ -550,6 +1081,564 @@
         "rateLimited": "Muitas requisições seguidas. Tentando novamente em alguns segundos…",
         "statusFetchFailed": "Não foi possível consultar o status (tentando novamente…)"
       }
+    }
+  },
+  "landing": {
+    "meta": {
+      "title": "Showly | Agendamento pelo WhatsApp para clínicas",
+      "description": "O Showly agenda, confirma e lembra as consultas da sua clínica pelo WhatsApp. Menos faltas, mais pacientes atendidos."
+    },
+    "nav": {
+      "brand": "Showly",
+      "howItWorks": "Como funciona",
+      "features": "Recursos",
+      "pricing": "Preços",
+      "faq": "Perguntas",
+      "signIn": "Entrar",
+      "primaryCta": "Solicite sua demo",
+      "openMenu": "Abrir menu",
+      "closeMenu": "Fechar menu"
+    },
+    "hero": {
+      "eyebrow": "Agendamento pelo WhatsApp para clínicas",
+      "headline": "Pare de perder pacientes por faltas.",
+      "subheadline": "O paciente escreve para o WhatsApp de sempre. O Showly agenda, confirma e lembra. Ninguém baixa nada, sua equipe não aprende nada novo.",
+      "primaryCta": "Solicite sua demo",
+      "secondaryCta": "Veja como funciona",
+      "trust": "Em piloto com clínicas na LATAM e no Brasil.",
+      "trustStrip": {
+        "pilot": "Em piloto com clínicas na LATAM",
+        "whatsapp": "O WhatsApp que seus pacientes já usam",
+        "onboarding": "Onboarding em menos de 1 hora",
+        "multilang": "Português e español"
+      },
+      "mock": {
+        "clinicName": "Clínica Aurora",
+        "clinicStatus": "online",
+        "patient": "Olá, quero uma consulta com a Dra. Rios.",
+        "bot1": "Oi! Estes são os próximos horários com a Dra. Rios:",
+        "botOptions": "1. Ter 12 · 09:30\n2. Qua 13 · 15:00\n3. Qui 14 · 11:00",
+        "botHint": "Responda com o número ou escreva outra data.",
+        "patientReply": "1",
+        "botConfirm": "Pronto. Consulta confirmada para terça 12 às 9:30. ✅",
+        "reminderBadge": "Lembrete automático 24h antes",
+        "reminderText": "Oi Maria, esperamos você amanhã às 9:30. Responda SIM para confirmar, REMARCAR para trocar."
+      }
+    },
+    "problem": {
+      "eyebrow": "O problema",
+      "headline": "O WhatsApp da sua clínica virou um caos.",
+      "subheadline": "A falta é o imposto invisível da sua clínica. Ninguém mede, mas todo mundo paga: o buraco na agenda, o paciente que não volta e a equipe que já não confia nos lembretes manuais.",
+      "points": {
+        "one": {
+          "title": "A recepção vive respondendo.",
+          "body": "Cem mensagens por dia para agendar, remarcar e confirmar. O turno se perde no chat."
+        },
+        "two": {
+          "title": "Ninguém confirma sistematicamente.",
+          "body": "Os lembretes você manda na mão, quando dá. Metade dos pacientes não responde."
+        },
+        "three": {
+          "title": "O horário se perde.",
+          "body": "Quando alguém não aparece, aquele slot não volta. E você nem sabe quanto custou."
+        }
+      },
+      "callout": {
+        "headline": "3 faltas por semana.",
+        "body": "12 por mês. Um mês inteiro de agenda perdida no ano."
+      }
+    },
+    "howItWorks": {
+      "eyebrow": "Como funciona",
+      "headline": "Três passos. Sem apps para instalar.",
+      "steps": {
+        "one": {
+          "number": "01",
+          "title": "O paciente escreve pelo WhatsApp.",
+          "body": "No mesmo número de sempre. Não instala nada, não cria contas. Só pergunta."
+        },
+        "two": {
+          "number": "02",
+          "title": "O Showly agenda, confirma e lembra.",
+          "body": "Entende o pedido, oferece horários reais da sua agenda, cria a consulta e envia lembretes 24h e 3h antes."
+        },
+        "three": {
+          "number": "03",
+          "title": "Você vê tudo pelo painel.",
+          "body": "Agenda visual, caixa de conversas e faltas do dia num relance. Assume a conversa quando quiser."
+        }
+      },
+      "steps_alt": {
+        "one": "Ilustração de um chat de WhatsApp com um paciente pedindo horário",
+        "two": "Ilustração do Showly oferecendo horários e confirmando a consulta no WhatsApp",
+        "three": "Ilustração do painel web do Showly com a agenda do dia e as conversas"
+      }
+    },
+    "features": {
+      "eyebrow": "Recursos",
+      "headline": "O que sua clínica precisa todos os dias.",
+      "items": {
+        "reminders": {
+          "title": "Lembretes que confirmam",
+          "body": "24h e 3h antes de cada consulta, no automático. O paciente confirma com um SIM ou pede para remarcar. Você só é avisado quando algo muda."
+        },
+        "handoff": {
+          "title": "Sua equipe assume o chat quando quiser",
+          "body": "Quando o paciente pede uma pessoa ou você quer entrar, sua equipe assume a conversa e o Showly se cala."
+        },
+        "multiPro": {
+          "title": "Cada profissional com sua agenda",
+          "body": "Cada profissional com seus serviços, horários e bloqueios. Sincroniza com o Google Calendar ou iPhone sem instalar nada."
+        },
+        "faq": {
+          "title": "Responde suas dúvidas frequentes",
+          "body": "Preços, endereço, horários, formas de pagamento. O Showly responde com o que você cadastrou. Sem invenção."
+        },
+        "feedback": {
+          "title": "Avalie cada consulta",
+          "body": "O paciente avalia de 1 a 5 estrelas depois de cada visita. Sem formulários externos nem links estranhos."
+        },
+        "multiTenant": {
+          "title": "Português e español, cada clínica no seu fuso",
+          "body": "Português e español. Cada clínica configura seu fuso horário. Os lembretes respeitam feriados e bloqueios."
+        }
+      }
+    },
+    "testimonial": {
+      "badge": "Piloto em andamento",
+      "altPortrait": "Retrato de uma dona de clínica participante do piloto do Showly",
+      "quote": "Antes eu respondia WhatsApp entre um paciente e outro. Agora entro no painel de manhã e o dia já está montado.",
+      "author": "Dona de clínica",
+      "role": "Piloto Showly · LATAM"
+    },
+    "pricing": {
+      "eyebrow": "Preços",
+      "headline": "Grátis enquanto durar o piloto.",
+      "subheadline": "Sem cartão, sem compromisso. Te acompanhamos até a clínica agendar sozinha.",
+      "badge": "Piloto",
+      "price": "Grátis",
+      "priceNote": "enquanto durar o piloto",
+      "description": "Não pedimos cartão nem compromisso assinado. Te acompanhamos no início até a clínica agendar sozinha.",
+      "includesTitle": "Tudo incluído",
+      "features": {
+        "bot": "Bot de agendamento pelo WhatsApp",
+        "reminders": "Lembretes 24h e 3h antes",
+        "panel": "Painel web para sua equipe (agenda, caixa de entrada, dashboard)",
+        "multiLang": "Português e español",
+        "onboarding": "Onboarding acompanhado em menos de 1 hora",
+        "unlimited": "Sem limite de consultas ou pacientes"
+      },
+      "cta": "Quero entrar no piloto",
+      "afterPilot": "Quando sairmos do piloto avisamos 30 dias antes. Nem um centavo antes disso."
+    },
+    "securityStrip": {
+      "eyebrow": "Segurança e dados",
+      "headline": "Os dados dos seus pacientes ficam isolados por clínica.",
+      "chips": {
+        "isolation": { "label": "Isolamento por clínica" },
+        "dedicated": { "label": "WhatsApp dedicado" },
+        "noPii": { "label": "Sem dados pessoais nos logs" },
+        "accessControl": { "label": "Painel protegido por padrão" }
+      },
+      "ctaLabel": "Como protegemos seus dados",
+      "ariaMore": "Ver detalhes sobre segurança e proteção de dados"
+    },
+    "securityPage": {
+      "metaTitle": "Segurança e dados | Showly",
+      "metaDescription": "Como o Showly protege os dados dos seus pacientes: isolamento por clínica, WhatsApp dedicado, minimização de PII nos logs e painel protegido por padrão.",
+      "eyebrow": "Segurança e dados",
+      "headline": "O que fizemos no código. Não no marketing.",
+      "subheadline": "Os dados dos seus pacientes são sensíveis. Em vez de listar selos de compliance, te contamos como o sistema é por dentro.",
+      "pillars": {
+        "isolation": {
+          "title": "Isolamento por clínica",
+          "body": "Toda consulta ao banco filtra pela sua clínica. É um padrão obrigatório no código: nenhum dado de outro tenant pode aparecer no seu painel."
+        },
+        "dedicated": {
+          "title": "WhatsApp dedicado por clínica",
+          "body": "Cada clínica roda na sua própria sessão de WhatsApp, com seu número. Não compartilhamos canal entre tenants nem misturamos conversas."
+        },
+        "noPii": {
+          "title": "Sem dados pessoais nos logs",
+          "body": "Nomes, telefones e notas de pacientes não vão para os logs do servidor. Só registramos IP e status para depurar e barrar abuso."
+        },
+        "accessControl": {
+          "title": "Painel protegido por padrão",
+          "body": "Todo o painel exige sessão com JWT e valida o papel do usuário em cada ação. Os endpoints públicos (agendar, contato) são a exceção explícita, não a regra."
+        }
+      },
+      "footnote": "Estamos em piloto: ainda não temos certificações formais como LGPD auditada ou ISO 27001. O que temos são estas garantias escritas no código, e podemos mostrar quando quiser."
+    },
+    "forWhom": {
+      "eyebrow": "Para quem",
+      "headline": "Se sua clínica agenda pelo WhatsApp, o Showly é para você.",
+      "cards": {
+        "consultorios": {
+          "title": "Consultórios pequenos",
+          "body": "Um a três profissionais, agenda mista, recepção compartilhada."
+        },
+        "clinicas": {
+          "title": "Clínicas polivalentes",
+          "body": "Vários serviços, múltiplos profissionais, agenda com feriados e bloqueios."
+        },
+        "estetica": {
+          "title": "Centros de estética e bem-estar",
+          "body": "Turnos por sessão, tratamentos com intervalo entre consultas."
+        },
+        "especialistas": {
+          "title": "Especialistas",
+          "body": "Odontologia, fisioterapia, psicologia, nutrição. Cada um no seu ritmo."
+        }
+      }
+    },
+    "faq": {
+      "eyebrow": "Perguntas frequentes",
+      "headline": "O que costumam perguntar.",
+      "items": {
+        "phone": {
+          "question": "Preciso de um número de WhatsApp novo?",
+          "answer": "Sim. Recomendamos um número dedicado para a clínica, separado do pessoal. Pode ser pré-pago ou corporativo."
+        },
+        "install": {
+          "question": "O paciente precisa instalar algo?",
+          "answer": "Não. O paciente só escreve para o WhatsApp da clínica, como sempre. Nada de apps, contas ou downloads."
+        },
+        "business": {
+          "question": "Funciona com WhatsApp Business?",
+          "answer": "Sim. Usamos um número dedicado que pode ser Business. Na fase piloto usamos WAHA (integração não oficial) para reduzir custos."
+        },
+        "onboarding": {
+          "question": "Quanto tempo leva para cadastrar minha clínica?",
+          "answer": "Menos de uma hora. Carregamos serviços, profissionais e horários com você. Na mesma tarde já recebe consultas pelo WhatsApp."
+        },
+        "privacy": {
+          "question": "Os dados dos meus pacientes estão seguros?",
+          "answer": "Sim. Tudo criptografado em trânsito, dados isolados por clínica e o mínimo possível armazenado. As mensagens ficam na sua sessão do WhatsApp."
+        },
+        "price": {
+          "question": "Quanto custa?",
+          "answer": "Estamos em fase piloto. Solicite uma demo e montamos condições sob medida para sua clínica."
+        }
+      }
+    },
+    "cta": {
+      "headline": "Recupere as horas que sua equipe gasta no WhatsApp.",
+      "subheadline": "Em menos de uma hora sua clínica está agendando e confirmando pelo WhatsApp. Sem trocar de número.",
+      "trust": "Não pedimos cartão. Você não instala nada. Onboarding acompanhado pela equipe.",
+      "form": {
+        "labels": {
+          "name": "Seu nome",
+          "phone": "WhatsApp de contato",
+          "clinicType": "Tipo de negócio (opcional)",
+          "consent": "Autorizo o contato por WhatsApp ou email para agendar a demo."
+        },
+        "placeholders": {
+          "name": "Ex: Maria Silva",
+          "phone": "+55 11 91234 5678",
+          "clinicType": "Escolha uma opção"
+        },
+        "clinicTypes": {
+          "consultorio": "Consultório individual",
+          "clinica": "Clínica multiprofissional",
+          "estetica": "Estética ou wellness",
+          "especialista": "Especialista independente",
+          "otro": "Outro"
+        },
+        "submit": "Quero testar",
+        "submitting": "Enviando…",
+        "successToast": "Recebemos sua mensagem. Falamos com você em breve.",
+        "successTitle": "Pronto. Entramos em contato em menos de 24 horas.",
+        "successBody": "Vamos escrever pelo WhatsApp para agendar a demo e tirar suas dúvidas.",
+        "errors": {
+          "nameMin": "Digite pelo menos 2 caracteres.",
+          "phoneInvalid": "Formato inválido. Ex: +55 11 91234 5678.",
+          "consent": "Precisamos da sua autorização para entrar em contato.",
+          "rateLimit": "Recebemos muitas solicitações. Tente novamente em um minuto.",
+          "validation": "Confira os dados e tente novamente.",
+          "generic": "Não conseguimos enviar a mensagem. Tente novamente."
+        }
+      }
+    },
+    "footer": {
+      "brand": "Showly",
+      "statement": "Agendamento pelo WhatsApp para clínicas. Menos faltas, mais pacientes atendidos.",
+      "columns": {
+        "product": {
+          "title": "Produto",
+          "links": {
+            "howItWorks": "Como funciona",
+            "features": "Recursos",
+            "pricing": "Preços",
+            "faq": "Perguntas frequentes",
+            "security": "Segurança"
+          }
+        },
+        "company": {
+          "title": "Empresa",
+          "links": {
+            "contact": "Contato",
+            "privacy": "Privacidade",
+            "terms": "Termos"
+          }
+        }
+      },
+      "language": "Idioma",
+      "copyright": "© {year} Showly. Feito com carinho para clínicas na LATAM e no Brasil."
+    }
+  },
+  "admin": {
+    "nav": {
+      "dashboard": "Dashboard",
+      "clinics": "Clínicas",
+      "leads": "Leads",
+      "audit": "Auditoria",
+      "logout": "Sair do Admin",
+      "userMenu": "Menu do usuário"
+    },
+    "header": {
+      "title": "Área SaaS Admin"
+    },
+    "dashboard": {
+      "title": "Dashboard SaaS",
+      "subtitle": "Em breve — métricas cross-tenant."
+    },
+    "clinics": {
+      "title": "Clínicas",
+      "subtitle": "Administração de clínicas do SaaS.",
+      "createDialog": {
+        "trigger": "Nova clínica",
+        "title": "Criar clínica",
+        "description": "Criamos a clínica e enviamos por email um link de ativação ao admin. O usuário escolhe a própria senha.",
+        "sections": {
+          "clinic": "Dados da clínica",
+          "admin": "Primeiro usuário admin"
+        },
+        "labels": {
+          "name": "Nome",
+          "slug": "Slug (URL pública)",
+          "slugHint": "Apenas minúsculas, números e hífens. Ex: consultorio-lopez",
+          "timezone": "Fuso horário",
+          "locale": "Idioma",
+          "wahaSession": "Sessão WhatsApp",
+          "wahaSessionHint": "Nome único para a sessão WAHA. Ex: clinica-demo",
+          "address": "Endereço (opcional)",
+          "adminName": "Nome do admin",
+          "adminEmail": "Email do admin"
+        },
+        "errors": {
+          "required": "Este campo é obrigatório.",
+          "slugFormat": "Apenas minúsculas, números e hífens.",
+          "emailInvalid": "Email inválido.",
+          "slugTaken": "Esse slug já está em uso.",
+          "wahaSessionTaken": "Essa sessão WhatsApp já está em uso.",
+          "generic": "Não foi possível criar a clínica. Tente novamente."
+        },
+        "submit": "Criar clínica",
+        "cancel": "Cancelar",
+        "success": "Clínica criada. Convite enviado para {email}.",
+        "successMailFail": "Clínica criada, mas o email não pôde ser enviado. Copie o link e envie por outro canal.",
+        "linkDialog": {
+          "title": "Link de ativação",
+          "description": "O email para {email} não pôde ser enviado. Este link permite ativar a conta e escolher a senha. Expira em 7 dias.",
+          "copy": "Copiar link",
+          "copied": "Link copiado",
+          "close": "Fechar"
+        }
+      },
+      "filters": {
+        "search": "Buscar por nome ou slug",
+        "status": "Status",
+        "all": "Todos"
+      },
+      "status": {
+        "ACTIVE": "Ativa",
+        "SUSPENDED": "Suspensa",
+        "ARCHIVED": "Arquivada"
+      },
+      "table": {
+        "name": "Clínica",
+        "slug": "Slug",
+        "status": "Status",
+        "professionals": "Profissionais",
+        "appointments": "Consultas",
+        "actions": "Ações",
+        "viewDetail": "Ver detalhes"
+      },
+      "actions": {
+        "impersonate": "Personificar",
+        "suspend": "Suspender",
+        "reactivate": "Reativar",
+        "edit": "Editar",
+        "save": "Salvar alterações"
+      },
+      "empty": "Nenhuma clínica encontrada.",
+      "loading": "Carregando…",
+      "loadError": "Não foi possível carregar as clínicas.",
+      "retry": "Tentar novamente",
+      "count": "{n, plural, =0 {Sem clínicas} =1 {1 clínica} other {# clínicas}}",
+      "pagination": {
+        "page": "Página {page} de {total}"
+      },
+      "detail": {
+        "title": "Detalhes da clínica",
+        "back": "Voltar à lista",
+        "metrics": {
+          "professionals": "Profissionais",
+          "servicesActive": "Serviços ativos",
+          "appointmentsLast30d": "Consultas (últimos 30 dias)",
+          "noShowRateLast30d": "Taxa de no-show (30 dias)",
+          "patients": "Pacientes"
+        },
+        "info": {
+          "slug": "Slug",
+          "timezone": "Fuso horário",
+          "locale": "Idioma",
+          "wahaSession": "Sessão WhatsApp",
+          "address": "Endereço",
+          "status": "Status",
+          "suspendedAt": "Suspensa em",
+          "suspendedReason": "Motivo da suspensão"
+        },
+        "suspendedNotice": "Esta clínica está suspensa desde {date}. Motivo: {reason}",
+        "notFound": "Clínica não encontrada."
+      },
+      "suspendDialog": {
+        "title": "Suspender clínica",
+        "description": "A clínica {name} deixará de operar. Seus usuários não poderão entrar no painel até que você reative. Explique o motivo — ficará na auditoria.",
+        "reasonLabel": "Motivo",
+        "reasonPlaceholder": "Ex: falta de pagamento, descumprimento de termos, pedido do cliente…",
+        "reasonError": "Digite ao menos 3 caracteres.",
+        "submit": "Suspender clínica",
+        "cancel": "Cancelar"
+      },
+      "reactivateDialog": {
+        "title": "Reativar clínica",
+        "description": "A clínica {name} voltará a operar normalmente. Seus usuários poderão entrar no painel.",
+        "submit": "Reativar",
+        "cancel": "Cancelar"
+      },
+      "toasts": {
+        "suspended": "Clínica suspensa.",
+        "reactivated": "Clínica reativada.",
+        "updated": "Alterações salvas.",
+        "suspendError": "Não foi possível suspender a clínica.",
+        "reactivateError": "Não foi possível reativar a clínica.",
+        "updateError": "Não foi possível salvar as alterações."
+      }
+    },
+    "audit": {
+      "title": "Auditoria",
+      "subtitle": "Todas as ações administrativas do SaaS.",
+      "filters": {
+        "action": "Ação",
+        "targetType": "Tipo de recurso",
+        "targetId": "ID do recurso",
+        "actorUserId": "Usuário",
+        "all": "Todas",
+        "reset": "Limpar filtros"
+      },
+      "action": {
+        "CREATE_CLINIC": "Criar clínica",
+        "UPDATE_CLINIC": "Atualizar clínica",
+        "SUSPEND_CLINIC": "Suspender clínica",
+        "REACTIVATE_CLINIC": "Reativar clínica",
+        "ARCHIVE_CLINIC": "Arquivar clínica",
+        "START_IMPERSONATION": "Personificar clínica"
+      },
+      "table": {
+        "when": "Data",
+        "actor": "Ator",
+        "action": "Ação",
+        "target": "Recurso",
+        "ip": "IP",
+        "userAgent": "User-Agent",
+        "metadata": "Metadata"
+      },
+      "empty": "Sem eventos para mostrar.",
+      "loading": "Carregando…",
+      "loadError": "Não foi possível carregar a auditoria.",
+      "retry": "Tentar novamente",
+      "showMetadata": "Ver metadata",
+      "pagination": {
+        "page": "Página {page} de {total}"
+      }
+    },
+    "overview": {
+      "title": "Dashboard SaaS",
+      "subtitle": "Métricas globais da plataforma.",
+      "cards": {
+        "totalClinics": "Clínicas totais",
+        "activeClinics": "Ativas",
+        "suspendedClinics": "Suspensas",
+        "archivedClinics": "Arquivadas",
+        "appointmentsLast30d": "Consultas (30 dias)",
+        "noShowRate": "Taxa de no-show (30 dias)"
+      },
+      "topClinics": {
+        "title": "Top clínicas por volume",
+        "subtitle": "Últimos 30 dias.",
+        "count": "{n, plural, =1 {1 consulta} other {# consultas}}",
+        "empty": "Sem dados dos últimos 30 dias."
+      },
+      "loadError": "Não foi possível carregar as métricas.",
+      "retry": "Tentar novamente"
+    }
+  },
+  "invite": {
+    "title": "Ative sua conta",
+    "subtitle": "Escolha uma senha para entrar no Showly.",
+    "greeting": "Olá {name},",
+    "context": "Você foi convidado para administrar {clinic}. Escolha sua senha para ativar a conta.",
+    "expires": "Este link expira em {date}.",
+    "labels": {
+      "email": "Email",
+      "password": "Nova senha",
+      "passwordConfirm": "Repetir senha"
+    },
+    "hints": {
+      "passwordMin": "Mínimo de 8 caracteres."
+    },
+    "errors": {
+      "passwordMin": "A senha deve ter pelo menos 8 caracteres.",
+      "passwordMismatch": "As senhas não coincidem.",
+      "generic": "Não foi possível ativar a conta. Tente novamente."
+    },
+    "submit": "Ativar conta",
+    "submitting": "Ativando…",
+    "success": "Conta ativada. Você já pode entrar com seu email e senha.",
+    "goToLogin": "Ir para o login",
+    "invalid": {
+      "title": "Link inválido",
+      "description": "O link de convite não é válido. Peça ao administrador para enviar um novo.",
+      "cta": "Ir para o login"
+    },
+    "expired": {
+      "title": "Link expirado ou já usado",
+      "description": "Este link não está mais disponível. Pode ter expirado (vence em 7 dias) ou já foi usado. Peça ao administrador para enviar um novo.",
+      "cta": "Ir para o login"
+    }
+  },
+  "impersonation": {
+    "banner": {
+      "title": "Você está personificando uma clínica",
+      "currentClinic": "Atuando como: {name}",
+      "backToAdmin": "Voltar ao Admin"
+    },
+    "actions": {
+      "start": "Entrar como esta clínica",
+      "confirmTitle": "Personificar clínica",
+      "confirmDescription": "Você vai operar o painel de {name} por 30 minutos. Toda ação fica registrada na auditoria sob sua conta.",
+      "confirmCta": "Sim, personificar",
+      "cancel": "Cancelar"
+    },
+    "toasts": {
+      "started": "Personificando {name}. Toda ação fica auditada.",
+      "restored": "Sua sessão de personificação expirou. Você voltou ao Admin.",
+      "sessionRestored": "Sessão de administrador restaurada."
+    },
+    "errors": {
+      "cannotImpersonateNonActive": "Não é possível personificar uma clínica que não está ativa.",
+      "startFailed": "Não foi possível iniciar a personificação. Tente novamente."
     }
   }
 }

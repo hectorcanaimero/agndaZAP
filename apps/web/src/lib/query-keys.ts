@@ -55,4 +55,53 @@ export const queryKeys = {
     ['availability', slug, serviceId ?? '', professionalId ?? '', from ?? '', days ?? 7] as const,
   dashboardMetrics: ['dashboard', 'metrics'] as const,
   me: ['me'] as const,
+  /**
+   * Meta-info + settings de la clínica del usuario. Consumida por /panel/ajustes
+   * y por otros consumidores que necesitan `timezone`/`locale`/branding
+   * (ej. agenda para el slot picker).
+   */
+  clinicMe: ['clinicMe'] as const,
+  /**
+   * Pacientes: lista paginada con `q` (search). Cambiar la query key ante
+   * cada `q` distinto es intencional — permite cache por búsqueda y refetch
+   * si se vuelve al mismo query. Prefix `['patients']` sirve para invalidar
+   * todo al hacer un PATCH.
+   */
+  patients: (q?: string) => ['patients', q ?? ''] as const,
+  patient: (id: string) => ['patient', id] as const,
+  patientHistory: (id: string) => ['patient', id, 'history'] as const,
+  /**
+   * Feedback post-atención. Ambos endpoints (`/api/feedback` y
+   * `/api/feedback/summary`) se invalidan al PATCH-ear un profesional
+   * (por si tocaron follow-up) — el prefijo `['feedback']` cubre ambos.
+   */
+  feedback: (filters?: {
+    professionalId?: string;
+    limit?: number;
+  }) => ['feedback', filters ?? {}] as const,
+  feedbackSummary: ['feedback', 'summary'] as const,
+  /**
+   * Leads del panel admin. Prospects capturados desde la landing (form del
+   * FinalCta) — vive en el namespace propio para poder invalidar todo con
+   * `['leads']` cuando aparezca el PATCH de status en Fase 2.
+   */
+  leads: (filters?: { status?: string; page?: number; pageSize?: number }) =>
+    ['leads', filters ?? {}] as const,
+  /**
+   * Namespace del área SaaS Admin. Todas las keys prefijan con `'admin'` así
+   * `invalidateQueries(['admin'])` vacía todo el área — útil tras acciones
+   * cross-tenant como crear o suspender una clínica.
+   */
+  admin: {
+    // `unknown` en vez de `Record<string, unknown>`: los filtros son tipos
+    // concretos (`AdminClinicsFilters`, `AdminAuditFilters`) que no tienen
+    // index signature; usar `unknown` evita pedir un cast en cada caller.
+    // TanStack Query serializa la key igual — solo importa que sea estable.
+    clinics: (filters?: unknown) =>
+      ['admin', 'clinics', filters ?? {}] as const,
+    clinic: (id: string) => ['admin', 'clinics', 'detail', id] as const,
+    audit: (filters?: unknown) =>
+      ['admin', 'audit', filters ?? {}] as const,
+    metricsOverview: ['admin', 'metrics', 'overview'] as const,
+  },
 } as const;

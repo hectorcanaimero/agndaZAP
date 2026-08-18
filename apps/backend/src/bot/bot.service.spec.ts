@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { DateTime } from 'luxon';
+import { FollowUpsService } from '../follow-ups/follow-ups.service';
 import { KnowledgeService } from '../knowledge/knowledge.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RemindersService } from '../reminders/reminders.service';
@@ -29,6 +30,7 @@ describe('BotService — FSM de agendamiento', () => {
   let prisma: Deep<PrismaService>;
   let waha: Deep<WahaService>;
   let reminders: Deep<RemindersService>;
+  let followUps: Deep<FollowUpsService>;
   let intent: Deep<IntentService>;
   let availability: Deep<AvailabilityService>;
   let scheduling: Deep<SchedulingService>;
@@ -68,6 +70,17 @@ describe('BotService — FSM de agendamiento', () => {
   let convoState: any;
 
   beforeEach(() => {
+    // Bot typing indicator: OFF en tests para no meter sleeps reales de 700ms+
+    // en cada `reply()`. La lógica del typing la testeamos aparte (unit del
+    // wrapper `reply` con jest.useFakeTimers) — acá el foco es la FSM.
+    process.env.BOT_TYPING_ENABLED = 'false';
+
+    // Pool de variantes en `DEFAULT_BOT_MESSAGES`: fijamos `Math.random`
+    // en 0 para que `pickVariant` siempre devuelva la PRIMERA variante.
+    // Así los asserts históricos que buscan tokens ("persona del equipo",
+    // etc.) siguen matcheando sin tener que enumerar todas las variantes.
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+
     convoState = {
       id: 'convo-1',
       clinicId: 'clinic-A',
@@ -107,11 +120,25 @@ describe('BotService — FSM de agendamiento', () => {
       appointment: { findFirst: jest.fn().mockResolvedValue(null) },
     };
 
-    waha = { sendText: jest.fn().mockResolvedValue(undefined) };
+    waha = {
+      sendText: jest.fn().mockResolvedValue(undefined),
+      // Avatar refresh corre en background en cada handleIncoming — mockeamos
+      // para no ensuciar los logs con warns de "getContactAvatar is not a function".
+      getContactAvatar: jest.fn().mockResolvedValue(null),
+      // Typing indicator (`BotService.reply` los invoca antes del sendText,
+      // salvo que BOT_TYPING_ENABLED=false). Mockeados para no explotar.
+      startTyping: jest.fn().mockResolvedValue(undefined),
+      stopTyping: jest.fn().mockResolvedValue(undefined),
+    };
     reminders = {
       scheduleForAppointment: jest.fn(),
       cancelForAppointment: jest.fn(),
       confirmAppointment: jest.fn(),
+    };
+    followUps = {
+      scheduleForAppointment: jest.fn().mockResolvedValue(undefined),
+      cancelForAppointment: jest.fn().mockResolvedValue(undefined),
+      recordFeedback: jest.fn().mockResolvedValue({ created: true }),
     };
     intent = { detect: jest.fn().mockResolvedValue(Intent.AGENDAR) };
     availability = {
@@ -145,6 +172,7 @@ describe('BotService — FSM de agendamiento', () => {
       prisma as unknown as PrismaService,
       waha as unknown as WahaService,
       reminders as unknown as RemindersService,
+      followUps as unknown as FollowUpsService,
       intent as unknown as IntentService,
       availability as unknown as AvailabilityService,
       scheduling as unknown as SchedulingService,
@@ -687,10 +715,12 @@ describe('BotService — FSM de agendamiento', () => {
     });
 
     // Handoff: conversation → NEEDS_HUMAN + mensaje al paciente.
+    // El mensaje concreto es customizable per-tenant (clinic.botHandoffMsg,
+    // ver /panel/ajustes). Verificamos el default hardcodeado — "persona del
+    // equipo" es el fragmento estable en `BotService.DEFAULT_BOT_MESSAGES`.
     expect(convoState.state).toBe('NEEDS_HUMAN');
     const msg = waha.sendText.mock.calls.at(-1)![2];
     expect(msg).toMatch(/persona del equipo/i);
-    expect(msg).toMatch(/verificar/i);
   });
 
   // ─────────────────── Rate-limit por chatId (ADR 0007) ───────────────────
@@ -733,11 +763,13 @@ describe('BotService — FSM de agendamiento', () => {
     intent.detect.mockResolvedValue(Intent.OTRO);
     redis.incr.mockRejectedValueOnce(new Error('redis down'));
 
+    // Texto que NO es saludo — GREETING_REGEX cortaría antes de llegar a
+    // intent.detect y este test verifica que el pipeline LLM se ejecuta.
     await bot.handleIncoming({
       clinicId: 'clinic-A',
       chatId: convoState.chatId,
       phone: convoState.phone,
-      text: 'hola',
+      text: '¿tienen turno mañana?',
     });
 
     // Fail-open: intent.detect se llamó igual.
@@ -761,5 +793,69 @@ describe('BotService — FSM de agendamiento', () => {
     // Un número siempre resuelve por índice, sin importar largo.
     const resolved3 = (bot as any).resolveChoice(choices, '2');
     expect(resolved3.id).toBe('svc-b');
+  });
+
+  // ─────────────────── Bot messages: custom + placeholders ───────────────────
+
+  describe('resolveBotMessage (settings de /panel/ajustes)', () => {
+    it('sin custom → devuelve el DEFAULT_BOT_MESSAGES de la key', () => {
+      const clinic = makeClinic({
+        botGreeting: null,
+        botFallback: null,
+        botHandoffMsg: null,
+      });
+      expect((bot as any).resolveBotMessage(clinic, 'handoff')).toContain(
+        'persona del equipo',
+      );
+      expect((bot as any).resolveBotMessage(clinic, 'fallback')).toContain(
+        'agendar',
+      );
+    });
+
+    it('custom no vacío → pisa al default', () => {
+      const clinic = makeClinic({
+        botHandoffMsg: 'Ya te llamamos.',
+      });
+      expect((bot as any).resolveBotMessage(clinic, 'handoff')).toBe(
+        'Ya te llamamos.',
+      );
+    });
+
+    it('reemplaza {clinicName}', () => {
+      const clinic = makeClinic({
+        name: 'Mi Consultorio',
+        botGreeting: 'Hola, sos parte de {clinicName}',
+      });
+      expect((bot as any).resolveBotMessage(clinic, 'greeting')).toBe(
+        'Hola, sos parte de Mi Consultorio',
+      );
+    });
+
+    it('reemplaza {patientName} cuando viene, o "" cuando no', () => {
+      const clinic = makeClinic({
+        botFallback: 'Hola {patientName}, ¿en qué te ayudo?',
+      });
+      expect(
+        (bot as any).resolveBotMessage(clinic, 'fallback', {
+          patientName: 'Ana',
+        }),
+      ).toBe('Hola Ana, ¿en qué te ayudo?');
+      expect((bot as any).resolveBotMessage(clinic, 'fallback')).toBe(
+        'Hola , ¿en qué te ayudo?',
+      );
+    });
+
+    it('greeting: "hola" dispara greeting y NO llega al LLM', async () => {
+      intent.detect.mockClear();
+      await bot.handleIncoming({
+        clinicId: 'clinic-A',
+        chatId: '5804141234567@c.us',
+        phone: '+5804141234567',
+        text: 'hola',
+      });
+      const msg = waha.sendText.mock.calls.at(-1)![2];
+      expect(msg).toContain('Clínica A'); // {clinicName} en el default
+      expect(intent.detect).not.toHaveBeenCalled();
+    });
   });
 });

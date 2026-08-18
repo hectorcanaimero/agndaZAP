@@ -17,10 +17,16 @@ const config: Config = {
     },
     extend: {
       colors: {
-        // Paleta base — la ajustamos cuando arranque el branding real de AgendaZap.
-        // Escala 50-900 completa para poder construir todas las variantes semánticas
-        // sin hardcodear hex. Ver `src/components/ui/tokens.ts` para los tokens
-        // derivados (APPOINTMENT_STATUS_TOKENS, CONVERSATION_STATE_TOKENS, etc.).
+        // Escala verde 50-900 — representa el CANAL de WhatsApp en la UI (mock
+        // del hero, header de conversaciones, tokens de estado en el panel).
+        // Se mantiene después del rebrand a Showly porque no es el brand del
+        // producto, es el lenguaje visual del canal donde el producto opera.
+        // Ver `src/components/ui/tokens.ts` para tokens derivados
+        // (APPOINTMENT_STATUS_TOKENS, CONVERSATION_STATE_TOKENS, etc.).
+        //
+        // Los colores del brand Showly (navy + teal) viven como tokens planos
+        // navy/teal debajo, alineados con el logo en `apps/web/public/favicon.svg`
+        // y `showly-wordmark.svg`. Ver docs/notas/2026-08-11-brand-kit-showly.md.
         brand: {
           50: '#f0fdf4',
           100: '#dcfce7',
@@ -32,6 +38,8 @@ const config: Config = {
           700: '#15803d',
           800: '#166534',
           900: '#14532d',
+          navy: '#0F2A4A',
+          teal: '#28D9B9',
         },
         // Tokens semánticos shadcn/ui (leen variables CSS de globals.css).
         // Esto habilita que los componentes de shadcn (bg-primary, text-muted-foreground, etc.)
@@ -83,7 +91,16 @@ const config: Config = {
         sm: 'calc(var(--radius) - 4px)',
       },
       fontFamily: {
-        sans: ['ui-sans-serif', 'system-ui', 'sans-serif'],
+        // Inter — body/UI para toda la app (mejora legibilidad del panel también).
+        // Cargada via next/font en el root layout como `--font-inter`.
+        // También cubre todos los headings tras sacar Fraunces del sistema
+        // (batch 2 anti-slop): usamos `font-sans font-bold/extrabold` en H1-H3.
+        sans: ['var(--font-inter)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+      },
+      // Bloque de motion cut de Hallmark: durations + easings tokenizados
+      // para animar solo transform/opacity. No hay framer-motion en el proyecto.
+      transitionTimingFunction: {
+        'out-soft': 'cubic-bezier(0.22, 1, 0.36, 1)',
       },
       keyframes: {
         'accordion-down': {
@@ -94,10 +111,23 @@ const config: Config = {
           from: { height: 'var(--radix-accordion-content-height)' },
           to: { height: '0' },
         },
+        // Usada por las cards del dashboard para entrar escalonadamente.
+        // Solo opacity + transform → 60fps garantizado.
+        'fade-up': {
+          '0%': { opacity: '0', transform: 'translateY(6px)' },
+          '100%': { opacity: '1', transform: 'none' },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
+        'fade-up': 'fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both',
+      },
+      boxShadow: {
+        // Sombra sutil para cards del dashboard — evita la sombra shadcn default
+        // que se ve demasiado marcada sobre bg-gray-50.
+        'card-flat': '0 1px 2px rgba(15, 23, 42, 0.04), 0 0 0 1px rgba(15, 23, 42, 0.03)',
+        'card-lift': '0 8px 24px -8px rgba(15, 42, 74, 0.12), 0 2px 6px rgba(15, 42, 74, 0.06)',
       },
     },
   },

@@ -7,7 +7,7 @@ import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { AlertCircle, KeyRound, LogIn, Mail, Sparkles } from 'lucide-react';
+import { AlertCircle, KeyRound, LogIn, Mail, Sparkles, TerminalSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,6 +46,7 @@ export function LoginForm({ locale }: LoginFormProps) {
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -111,7 +112,7 @@ export function LoginForm({ locale }: LoginFormProps) {
           <Sparkles className="h-4 w-4" strokeWidth={2.25} />
         </div>
         <span className="text-base font-semibold tracking-tight text-foreground">
-          AgendaZap
+          Showly
         </span>
       </div>
 
@@ -215,6 +216,91 @@ export function LoginForm({ locale }: LoginFormProps) {
       <p className="mt-8 border-t border-border pt-6 text-center text-xs text-muted-foreground">
         {t('recovery.hint')}
       </p>
+
+      <DevCredentials
+        onPick={(email, password) => {
+          setValue('email', email, { shouldValidate: true });
+          setValue('password', password, { shouldValidate: true });
+        }}
+      />
+    </div>
+  );
+}
+
+/* ─────────────────────────── Dev-only credentials picker ─────────────────────────── */
+
+/**
+ * Panel de credenciales de dev inyectadas por `prisma/seed.ts`. Solo se
+ * renderiza cuando `NODE_ENV !== 'production'` — Next.js elimina el bloque
+ * completo del bundle en builds productivos vía dead-code elimination sobre
+ * `process.env.NODE_ENV`.
+ *
+ * Click en una fila autocompleta email + password del formulario para que
+ * el operador no tenga que memorizar los pares del seed. Diseño amber
+ * intencional para señalar "esto no es prod".
+ */
+const DEV_CREDENTIALS: Array<{
+  role: 'SUPERADMIN' | 'CLINIC_ADMIN' | 'CLINIC_ADMIN_SUSPENDED';
+  email: string;
+  password: string;
+  note: string;
+}> = [
+  {
+    role: 'SUPERADMIN',
+    email: 'super@showly.dev',
+    password: 'super1234',
+    note: 'Área /admin (cross-tenant)',
+  },
+  {
+    role: 'CLINIC_ADMIN',
+    email: 'admin@demo.dev',
+    password: 'demo1234',
+    note: 'Clínica demo activa',
+  },
+  {
+    role: 'CLINIC_ADMIN_SUSPENDED',
+    email: 'admin@demo-2.dev',
+    password: 'demo1234',
+    note: 'Clínica suspendida — login bloqueado',
+  },
+];
+
+function DevCredentials({
+  onPick,
+}: {
+  onPick: (email: string, password: string) => void;
+}) {
+  if (process.env.NODE_ENV === 'production') return null;
+
+  return (
+    <div className="mt-6 rounded-md border border-amber-300 bg-amber-50 p-3">
+      <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-amber-800">
+        <TerminalSquare className="h-3.5 w-3.5" aria-hidden="true" />
+        <span>Dev — click para autocompletar</span>
+      </div>
+      <ul className="flex flex-col gap-1">
+        {DEV_CREDENTIALS.map((c) => (
+          <li key={c.email}>
+            <button
+              type="button"
+              onClick={() => onPick(c.email, c.password)}
+              className="flex w-full items-start gap-2 rounded px-2 py-1 text-left transition-colors hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+            >
+              <span className="mt-0.5 shrink-0 rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">
+                {c.role}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-mono text-xs text-amber-900">
+                  {c.email} · {c.password}
+                </span>
+                <span className="block truncate text-[11px] text-amber-700">
+                  {c.note}
+                </span>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

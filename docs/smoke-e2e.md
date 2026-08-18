@@ -21,10 +21,10 @@ resultados observados vs esperados.
 - [ ] `curl -s http://localhost:3002/es/agendar/demo -o /dev/null -w "%{http_code}"` → **200** (web arriba, ruta pública responde).
 - [ ] Seed refrescado en los últimos 24h. Correr si no:
       ```bash
-      pnpm --filter @agendazap/backend prisma db seed
+      pnpm --filter @showly/backend prisma db seed
       ```
 - [ ] Verificar credenciales dev disponibles: `admin@demo.dev / demo1234`,
-      `super@agendazap.dev / super1234`.
+      `super@showly.dev / super1234`.
 - [ ] Sesión WAHA `demo-session` en estado `WORKING`:
       ```bash
       curl -s -H "X-Api-Key: $WAHA_API_KEY" \
@@ -106,11 +106,11 @@ Verificación:
       ```bash
       # Resolvés el id de la clínica demo por su slug — evita hardcodear el
       # cuid del seed (cambia si re-seedeás desde cero).
-      DEMO_CID=$(docker compose exec -T db psql -U agendazap -tAc \
+      DEMO_CID=$(docker compose exec -T db psql -U showly -tAc \
         "SELECT id FROM \"Clinic\" WHERE slug='demo'")
       echo "Demo clinic ID: $DEMO_CID"
 
-      docker exec agendazap-db-1 psql -U agendazap -d agendazap -c \
+      docker exec showly-db-1 psql -U showly -d showly -c \
         "SELECT id, status, \"startAt\", notes FROM \"Appointment\"
          WHERE \"clinicId\"='$DEMO_CID'
            AND \"createdAt\" > NOW() - INTERVAL '5 minutes'
@@ -118,7 +118,7 @@ Verificación:
       ```
 - [ ] Verificar recordatorios programados en Redis:
       ```bash
-      docker exec agendazap-redis-1 redis-cli --scan --pattern 'bull:reminders:*' | head -20
+      docker exec showly-redis-1 redis-cli --scan --pattern 'bull:reminders:*' | head -20
       ```
       Esperado: al menos 2 keys `reminder-<id>` + 1 `risk-<apptId>` (si
       la cita está a >6h).
@@ -133,18 +133,18 @@ Verificación:
 - [ ] Toast de éxito.
 - [ ] Verificar en DB:
       ```bash
-      docker exec agendazap-db-1 psql -U agendazap -d agendazap -c \
+      docker exec showly-db-1 psql -U showly -d showly -c \
         "SELECT status, \"canceledAt\" FROM \"Appointment\" WHERE id='<APPT_ID>';"
       ```
       Esperado: `status=CANCELADA`, `canceledAt` con timestamp reciente.
 - [ ] Verificar Redis limpio:
       ```bash
-      docker exec agendazap-redis-1 redis-cli --scan --pattern 'bull:reminders:*reminder-*' | wc -l
+      docker exec showly-redis-1 redis-cli --scan --pattern 'bull:reminders:*reminder-*' | wc -l
       ```
       Los jobs del appointment cancelado deben haberse eliminado.
 - [ ] Verificar reminders en DB:
       ```bash
-      docker exec agendazap-db-1 psql -U agendazap -d agendazap -c \
+      docker exec showly-db-1 psql -U showly -d showly -c \
         "SELECT status FROM \"Reminder\" WHERE \"appointmentId\"='<APPT_ID>';"
       ```
       Esperado: todos `CANCELED`.
@@ -260,7 +260,7 @@ esperar el próximo tick del worker BullMQ.
 - [ ] En logs del backend debería aparecer: `KnowledgeService: OPENAI_API_KEY faltante`.
 - [ ] Después de setear la key, correr:
       ```bash
-      pnpm --filter @agendazap/backend prisma:reindex-faq
+      pnpm --filter @showly/backend prisma:reindex-faq
       ```
       y repetir el test.
 
@@ -288,9 +288,9 @@ Después del smoke, si vas a mostrar a la clínica en poco tiempo:
 - [ ] Cancelar / eliminar las citas de test creadas (para no ensuciar el
       panel). Resolvés el id de la clínica demo por slug (evita hardcode del cuid):
       ```bash
-      DEMO_CID=$(docker compose exec -T db psql -U agendazap -tAc \
+      DEMO_CID=$(docker compose exec -T db psql -U showly -tAc \
         "SELECT id FROM \"Clinic\" WHERE slug='demo'")
-      docker compose exec -T db psql -U agendazap -c "
+      docker compose exec -T db psql -U showly -c "
       DELETE FROM \"Appointment\"
       WHERE notes LIKE '%[seed:v1]%' IS NOT TRUE
         AND \"createdAt\" > NOW() - INTERVAL '2 hours'
@@ -307,7 +307,7 @@ Después del smoke, si vas a mostrar a la clínica en poco tiempo:
 - [ ] Re-correr el seed para dejar el dashboard con la data histórica
       estable:
       ```bash
-      pnpm --filter @agendazap/backend prisma db seed
+      pnpm --filter @showly/backend prisma db seed
       ```
 
 ---

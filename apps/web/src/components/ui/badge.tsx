@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { APPOINTMENT_STATUS_TOKENS } from './tokens';
 
 /**
- * Estados de cita AgendaZap. Fuente única en `tokens.ts` — cualquier badge que
+ * Estados de cita Showly. Fuente única en `tokens.ts` — cualquier badge que
  * pinte un status DEBE consumir `APPOINTMENT_STATUS_TOKENS` (contrastes WCAG AA
  * ya verificados en los specs UX).
  */
@@ -30,7 +30,7 @@ const badgeVariants = cva(
         destructive:
           'border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80',
         outline: 'text-foreground',
-        // Variants extra AgendaZap: appointment status (tokens semánticos).
+        // Variants extra Showly: appointment status (tokens semánticos).
         PENDIENTE: APPOINTMENT_STATUS_TOKENS.PENDIENTE.intense,
         CONFIRMADA: APPOINTMENT_STATUS_TOKENS.CONFIRMADA.intense,
         EN_RIESGO: APPOINTMENT_STATUS_TOKENS.EN_RIESGO.intense,

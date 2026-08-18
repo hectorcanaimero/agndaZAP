@@ -1,4 +1,4 @@
-// AgendaZap — Prisma schema (MVP)
+// Showly — Prisma schema (MVP)
 // Multi-tenant: clinicId presente en todas las entidades de negocio.
 
 generator client {
@@ -15,19 +15,42 @@ datasource db {
 // ─────────────────────────── Tenancy & usuarios ───────────────────────────
 
 model Clinic {
-  id            String   @id @default(cuid())
+  id            String       @id @default(cuid())
   name          String
-  slug          String   @unique
-  timezone      String   @default("America/Caracas")
-  locale        String   @default("es") // es | pt
-  wahaSession   String   @unique          // nombre de instancia WAHA
-  wahaConnected Boolean  @default(false)
+  slug          String       @unique
+  timezone      String       @default("America/Caracas")
+  locale        String       @default("es") // es | pt
+  /// ISO 4217 currency code (3 chars uppercase). Default USD porque el foco
+  /// LATAM incluye países que ya usan dólar (Venezuela, Ecuador, Panamá) y da
+  /// el fallback más neutral. Se configura por clínica en /panel/ajustes.
+  currency      String       @default("USD")
+  wahaSession   String       @unique          // nombre de instancia WAHA
+  wahaConnected Boolean      @default(false)
   address       String?
   // Config de recordatorios (horas antes de la cita)
-  reminderOffsetsH Int[]  @default([24, 3])
+  reminderOffsetsH Int[]     @default([24, 3])
   // Umbral (horas) sin confirmar tras el cual la cita pasa a EN_RIESGO
-  confirmThresholdH Int   @default(6)
-  autoConfirm   Boolean  @default(false) // si true, la cita nace CONFIRMADA
+  confirmThresholdH Int      @default(6)
+  autoConfirm   Boolean      @default(false) // si true, la cita nace CONFIRMADA
+
+  // ─── Estado del tenant (gestionado desde el Área SaaS Admin) ─────
+  // ACTIVE = operativa, SUSPENDED = bloqueada temporalmente (ej. pago vencido),
+  // ARCHIVED = baja definitiva (soft-delete: datos se conservan para cumplimiento).
+  status           ClinicStatus @default(ACTIVE)
+  suspendedAt      DateTime?
+  suspendedReason  String?
+
+  // ─── Bot / Chatbot settings (Fase 1 — /panel/ajustes) ────────────
+  // Mensajes personalizables por tenant. Placeholders soportados:
+  // {clinicName} (siempre disponible), {patientName} (cuando exista Patient).
+  // Si NULL, `BotService` cae al fallback hardcodeado (bot.messages.default.*
+  // en i18n del backend).
+  botGreeting   String?
+  botFallback   String?
+  botHandoffMsg String?
+  // Tono que se inyecta al system prompt del LLM (intent + FAQ RAG).
+  // Valores esperados: "formal" | "cercano" | "tecnico". Default null = "cercano".
+  botTone       String?
 
   users         User[]
   professionals Professional[]
@@ -38,9 +61,16 @@ model Clinic {
   appointments  Appointment[]
   conversations Conversation[]
   faqChunks     FaqChunk[]
+  feedback      Feedback[]
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+enum ClinicStatus {
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
 }
 
 enum Role {
@@ -60,6 +90,12 @@ model User {
   // vínculo opcional a un profesional (para la app Flutter)
   professionalId String? @unique
   professional   Professional? @relation(fields: [professionalId], references: [id])
+  // acciones de administración SaaS realizadas por este usuario (solo SUPERADMIN las genera)
+  adminAuditLogs AdminAudit[]
+  // Invitación pendiente (1:1). Presente hasta que el user active la cuenta.
+  invitation      Invitation?  @relation("UserInvitation")
+  // Invitaciones que este user envió (solo SUPERADMIN típicamente).
+  sentInvitations Invitation[] @relation("InvitedBy")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -74,13 +110,35 @@ model Professional {
   clinic    Clinic   @relation(fields: [clinicId], references: [id])
   name      String
   active    Boolean  @default(true)
+  // Contacto (opcional). `email` es único por clínica para prevenir doble alta
+  // del mismo profesional. Se usará como identificador cuando se cree el `User`
+  // vinculado para el login de la app mobile (PR siguiente).
+  email     String?
+  phone     String?  // E.164
+  // Perfil visible al paciente en la página pública /agendar/[slug].
+  specialty String?
+  bio       String?
+  avatarUrl String?  // URL manual del profesional. Upload propio → follow-up.
+  // Regulatorio (matrícula) — obligatorio en clínicas médicas en AR/BR.
+  licenseNumber String?
+  // Color de calendar (hex, ej "#3b82f6"). Para diferenciar visualmente cuando
+  // hay varios profesionales en la misma agenda.
+  color     String?
+  // Follow-up post-atención: si `followUpEnabled=true`, cuando una cita del
+  // profesional pasa a ATENDIDA se encola un job BullMQ con delay =
+  // `followUpDelayHours` que le manda un mensaje al paciente pidiéndole
+  // feedback (escala 1-5 + comentario opcional). Ver ADR 0012.
+  followUpEnabled     Boolean @default(false)
+  followUpDelayHours  Int     @default(2)
   user      User?
   services  Service[] @relation("ProfessionalServices")
   businessHours BusinessHour[]
   timeOff   TimeOff[]
   appointments Appointment[]
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
+  @@unique([clinicId, email])
   @@index([clinicId])
 }
 
@@ -138,6 +196,7 @@ model Patient {
   name      String?
   consent   Boolean  @default(false)
   appointments Appointment[]
+  conversations Conversation[]
   createdAt DateTime @default(now())
 
   @@unique([clinicId, phone])
@@ -174,6 +233,7 @@ model Appointment {
   outcome        String?  // atendio | no_show | null
 
   reminders      Reminder[]
+  feedback       Feedback?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -204,6 +264,32 @@ model Reminder {
   @@index([fireAt, status])
 }
 
+// ─────────────────────────── Feedback (satisfacción post-atención) ────────────
+
+// Respuesta de satisfacción del paciente después de una cita ATENDIDA.
+// El disparo lo hace el processor `follow-ups` (ver `FollowUpsService`) N horas
+// después que `Appointment.status` pasa a ATENDIDA — N configurable por
+// `Professional.followUpDelayHours`. El bot pide `score` (1-5) y opcional
+// `comment` libre. Ver ADR 0012.
+//
+// `appointmentId` es unique — un paciente solo puede dejar 1 feedback por
+// cita. Si intenta responder dos veces, el segundo score se ignora
+// silenciosamente (el bot le agradece igual).
+model Feedback {
+  id            String   @id @default(cuid())
+  clinicId      String
+  clinic        Clinic   @relation(fields: [clinicId], references: [id])
+  appointmentId String   @unique
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  // Escala 1-5 (1 muy mala, 5 excelente). Ver ADR 0012 sobre por qué NO NPS 0-10.
+  score         Int
+  comment       String?
+  respondedAt   DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  @@index([clinicId, respondedAt])
+}
+
 // ─────────────────────────── Conversaciones (bandeja) ───────────────────────────
 
 enum ConversationState {
@@ -216,8 +302,23 @@ model Conversation {
   id         String   @id @default(cuid())
   clinicId   String
   clinic     Clinic   @relation(fields: [clinicId], references: [id])
-  chatId     String   // id de chat de WAHA (ej. 5804xxxx@c.us)
-  phone      String
+  chatId     String   // id de chat de WAHA (ej. 5804xxxx@c.us o <lid>@lid)
+  // `phone` en E.164 SI lo conocemos. Puede ser null cuando `chatId` es un LID
+  // (@lid) y todavia no lo resolvimos (WA no expone LID→phone publicamente; se
+  // rellena cuando el bot pide el numero en el flujo de agendamiento).
+  phone      String?
+  // LID nuevo de WhatsApp (privacidad). Guardado sin sufijo `@lid`.
+  lid        String?
+  // Nombre visible del contacto (pushName/notifyName de WhatsApp).
+  contactName String?
+  // URL de la foto de perfil (WAHA la devuelve para @c.us y @lid). Las URLs de
+  // WhatsApp expiran cada ~48h — refrescar en base a `avatarFetchedAt`.
+  avatarUrl  String?
+  avatarFetchedAt DateTime?
+  // Ligado al Patient de la clinica cuando el flujo completa (opcional: hay
+  // conversaciones sin cita, ej. dudas de FAQ).
+  patientId  String?
+  patient    Patient? @relation(fields: [patientId], references: [id])
   state      ConversationState @default(BOT)
   // paso del flujo (FSM) serializado
   flowStep   String?
@@ -228,6 +329,7 @@ model Conversation {
 
   @@unique([clinicId, chatId])
   @@index([clinicId, state])
+  @@index([patientId])
 }
 
 enum MessageDirection {
@@ -258,4 +360,114 @@ model FaqChunk {
   createdAt DateTime @default(now())
 
   @@index([clinicId])
+}
+
+// ─────────────────────────── Marketing / Leads ───────────────────────────
+// Prospects capturados desde la landing pública. NO tienen FK a Clinic
+// porque todavía no son clientes — son candidatos a serlo. El follow-up
+// es manual (por ahora): el owner ve la lista, contacta por WhatsApp, y
+// va marcando `status` conforme avanza el funnel.
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  DEMO
+  CONVERTED
+  LOST
+}
+
+model Lead {
+  id          String     @id @default(cuid())
+  name        String     @db.VarChar(80)
+  phone       String     @db.VarChar(20) // E.164 normalizado con `+`
+  clinicType  String?    @db.VarChar(40) // consultorio|clinica|estetica|especialista|otro
+  notes       String?    @db.VarChar(500)
+  source      String     @default("landing") @db.VarChar(20)
+  locale      String     @db.VarChar(2)  // es | pt
+  ip          String?    @db.VarChar(45) // IPv6 max 45
+  userAgent   String?    @db.VarChar(500)
+  status      LeadStatus @default(NEW)
+  contactedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([status, createdAt])
+  @@index([phone])
+}
+
+// ─────────────────────────── SaaS Admin — Auditoría ───────────────────────────
+// AdminAudit es cross-tenant: registra acciones del operador SaaS (SUPERADMIN)
+// que afectan a clínicas u otros recursos globales. Intencionalmente NO lleva
+// clinicId — el operador actúa sobre tenants, no pertenece a uno.
+
+enum AdminAction {
+  CREATE_CLINIC
+  UPDATE_CLINIC
+  SUSPEND_CLINIC
+  REACTIVATE_CLINIC
+  ARCHIVE_CLINIC
+  START_IMPERSONATION
+  // Captura toda mutation POST/PATCH/DELETE ejecutada bajo impersonation.
+  // targetType/targetId se infieren del path por AdminAuditInterceptor.
+  // Ver ADR 0016.
+  IMPERSONATED_WRITE
+}
+
+model AdminAudit {
+  id             String       @id @default(cuid())
+  actorUserId    String
+  actor          User         @relation(fields: [actorUserId], references: [id])
+  action         AdminAction
+  targetType     String       // "Clinic", "User", "Patient", "Appointment", etc.
+  targetId       String
+  metadata       Json?        // payload variable según acción (ej. reason en SUSPEND_CLINIC, method+path+clinicId en IMPERSONATED_WRITE)
+  ip             String?
+  userAgent      String?
+  // Presente solo cuando la acción se ejecutó bajo impersonation (JWT con
+  // impersonatedBy claim). Igual al actorUserId cuando el super se impersona
+  // a sí mismo — pero el campo separado permite filtrar y responder queries
+  // tipo "todas las acciones que el super X hizo impersonando la clínica Y".
+  impersonatedBy String?
+  createdAt      DateTime     @default(now())
+
+  @@index([actorUserId, createdAt])
+  @@index([targetType, targetId, createdAt])
+  @@index([action, createdAt])
+  @@index([impersonatedBy, createdAt])
+}
+
+// ─────────────────────────── Invitaciones (activación de cuenta) ───────────────────────────
+// Cuando el SUPERADMIN crea una clínica desde `/admin/clinics`, el backend crea:
+//   1) La clínica.
+//   2) Un User CLINIC_ADMIN con password random (nunca revelada).
+//   3) Una Invitation con token único + TTL 7 días.
+//   4) Envía email (Resend) con link `/{locale}/invite/{token}`.
+//
+// El invitado sigue el link, elige su propia password y activa la cuenta.
+// El password random inicial NUNCA vuelve al frontend ni al email — solo el
+// token viaja. Al aceptar, marcamos `acceptedAt` y la invitación queda
+// consumida (idempotencia: intentar aceptar de nuevo → 410 Gone).
+
+model Invitation {
+  id              String    @id @default(cuid())
+  // Token URL-safe (bytes hex, 64 chars). Único e indexado — es el lookup key
+  // del endpoint público `GET /public/invitations/:token`.
+  token           String    @unique @db.VarChar(64)
+  // Relación 1:1 con User. Solo puede haber UNA invitación por user (si la
+  // primera expira, el super genera una nueva vía "resend" — que borra la
+  // vieja antes de crear la nueva).
+  userId          String    @unique
+  user            User      @relation("UserInvitation", fields: [userId], references: [id], onDelete: Cascade)
+  // Quién envió la invitación. Nullable por si el user emisor se elimina
+  // (auditoría queda "huérfana" pero no rompe el flow del invitado).
+  invitedByUserId String?
+  invitedBy       User?     @relation("InvitedBy", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+  expiresAt       DateTime
+  // `acceptedAt` NULL = pendiente. NO NULL = ya usada. Un accept exitoso
+  // setea este campo y desde ahí el link queda "consumido" (410 Gone).
+  acceptedAt      DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([expiresAt])
+  @@index([invitedByUserId, createdAt])
 }

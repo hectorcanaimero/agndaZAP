@@ -39,16 +39,16 @@ básica.
 
 ```bash
 # 1. Crear usuario no-root (si no existe)
-adduser agendazap
-usermod -aG sudo agendazap
-mkdir -p /home/agendazap/.ssh && \
-  cp ~/.ssh/authorized_keys /home/agendazap/.ssh/ && \
-  chown -R agendazap:agendazap /home/agendazap/.ssh && \
-  chmod 700 /home/agendazap/.ssh
+adduser showly
+usermod -aG sudo showly
+mkdir -p /home/showly/.ssh && \
+  cp ~/.ssh/authorized_keys /home/showly/.ssh/ && \
+  chown -R showly:showly /home/showly/.ssh && \
+  chmod 700 /home/showly/.ssh
 
 # 2. Docker + Docker Compose
 curl -fsSL https://get.docker.com | sh
-usermod -aG docker agendazap
+usermod -aG docker showly
 
 # 3. UFW (firewall)
 apt-get install -y ufw
@@ -67,11 +67,11 @@ sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd
 systemctl restart sshd
 
 # 6. Crear estructura de datos
-mkdir -p /srv/agendazap/data/{db,redis,waha,caddy/data,caddy/config}
-chown -R agendazap:agendazap /srv/agendazap
+mkdir -p /srv/showly/data/{db,redis,waha,caddy/data,caddy/config}
+chown -R showly:showly /srv/showly
 ```
 
-Login como `agendazap`, y todo lo que sigue corre en su home.
+Login como `showly`, y todo lo que sigue corre en su home.
 
 ---
 
@@ -79,8 +79,8 @@ Login como `agendazap`, y todo lo que sigue corre en su home.
 
 ```bash
 cd ~
-git clone <repo-url> agendazap
-cd agendazap
+git clone <repo-url> showly
+cd showly
 
 # Crear .env.production (NUNCA commiteado)
 cp .env.example .env.production
@@ -97,7 +97,7 @@ Ya está en la raíz del repo. Diferencias clave vs `docker-compose.yml` (dev):
 - **Sin `platform: linux/amd64`**: server x86_64 nativo. Zero emulación.
 - **db + redis + waha + backend + web NO exponen puertos al host**: sólo
   accesibles en la red interna del compose. Caddy es la única puerta.
-- **Volúmenes en paths absolutos**: `/srv/agendazap/data/*` para
+- **Volúmenes en paths absolutos**: `/srv/showly/data/*` para
   backups fáciles.
 - **`restart: unless-stopped`** en todos los servicios.
 - **Backend + web** con Dockerfiles multi-stage (context = raíz).
@@ -112,9 +112,9 @@ que hay que cambiar:
 
 ```bash
 # ── Postgres ────────────────────────────────────────────
-POSTGRES_USER=agendazap
+POSTGRES_USER=showly
 POSTGRES_PASSWORD=$(openssl rand -base64 32)  # NO usar el default de dev
-POSTGRES_DB=agendazap
+POSTGRES_DB=showly
 
 # ── JWT ────────────────────────────────────────────────
 # ≥32 chars, NO puede empezar con 'dev-'. El backend fail-fast si es débil.
@@ -148,7 +148,7 @@ NEXT_PUBLIC_API_URL=https://api.tudominio.com
 **Reglas duras**:
 
 - `openssl rand` para todos los secrets. Nunca strings adivinables.
-- `.env.production` va en `/home/agendazap/agendazap/`, chmod 600.
+- `.env.production` va en `/home/showly/showly/`, chmod 600.
 - **Rotación**: cada 6 meses mínimo, o inmediato si sospechás filtración.
 - **Rotar `JWT_SECRET` invalida todos los tokens en vuelo** — coordinar
   con la clínica antes (todos los operadores del panel tendrán que
@@ -158,7 +158,7 @@ NEXT_PUBLIC_API_URL=https://api.tudominio.com
 
 ## 6. `Caddyfile`
 
-Crear `~/agendazap/Caddyfile` (Caddy lo lee via mount del compose):
+Crear `~/showly/Caddyfile` (Caddy lo lee via mount del compose):
 
 ```caddy
 # api.tudominio.com — backend NestJS
@@ -241,7 +241,7 @@ Esperar propagación (5-30 min). Verificar con `dig +short api.tudominio.com`.
 ## 8. Primer deploy
 
 ```bash
-cd ~/agendazap
+cd ~/showly
 
 # Build + start (primera vez)
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
@@ -286,7 +286,7 @@ Después escanear el QR de WAHA desde `https://waha.tudominio.com/dashboard`.
 ## 10. Backups
 
 **pg_dump diario CIFRADO con GPG** — cron simple en el host. Los dumps contienen
-PHI (dados de saúde) — un tarball plaintext en `/srv/agendazap/backups` es un
+PHI (dados de saúde) — un tarball plaintext en `/srv/showly/backups` es un
 vector obvio. La clave PRIVADA vive FUERA del server (offsite: laptop del
 operador + cofre físico); solo la pública se importa acá para poder cifrar.
 
@@ -295,12 +295,12 @@ operador + cofre físico); solo la pública se importa acá para poder cifrar.
 ```bash
 # Generar clave dedicada para backups (contraseña fuerte, key expira 5 años).
 gpg --full-generate-key
-# Elegir: (1) RSA and RSA, 4096, expires 5y, name="AgendaZap Backups",
-# email=backup@agendazap.dev, passphrase fuerte.
+# Elegir: (1) RSA and RSA, 4096, expires 5y, name="Showly Backups",
+# email=backup@showly.dev, passphrase fuerte.
 
 # Exportar la clave PÚBLICA (safe para copiar al server) y la PRIVADA (offsite).
-gpg --export --armor backup@agendazap.dev > agendazap-backup-pub.asc
-gpg --export-secret-keys --armor backup@agendazap.dev > agendazap-backup-priv.asc
+gpg --export --armor backup@showly.dev > showly-backup-pub.asc
+gpg --export-secret-keys --armor backup@showly.dev > showly-backup-priv.asc
 
 # La privada va: cofre físico + password manager. NUNCA al server prod.
 # La pública se copia al server (paso siguiente).
@@ -309,39 +309,39 @@ gpg --export-secret-keys --armor backup@agendazap.dev > agendazap-backup-priv.as
 **Setup en el server (una vez)**:
 
 ```bash
-# Copiar la clave pública al server e importarla como user agendazap.
-scp agendazap-backup-pub.asc agendazap@server:~/
-ssh agendazap@server 'gpg --import ~/agendazap-backup-pub.asc && rm ~/agendazap-backup-pub.asc'
+# Copiar la clave pública al server e importarla como user showly.
+scp showly-backup-pub.asc showly@server:~/
+ssh showly@server 'gpg --import ~/showly-backup-pub.asc && rm ~/showly-backup-pub.asc'
 
 # Marcar la clave como "trusted" (sin esto, gpg pregunta interactivamente).
-ssh agendazap@server "echo -e '5\ny\n' | gpg --command-fd 0 --edit-key backup@agendazap.dev trust"
+ssh showly@server "echo -e '5\ny\n' | gpg --command-fd 0 --edit-key backup@showly.dev trust"
 ```
 
 **Script de backup**:
 
 ```bash
-# ~/agendazap/scripts/backup.sh
+# ~/showly/scripts/backup.sh
 #!/bin/bash
 set -euo pipefail
 STAMP=$(date +%Y%m%d_%H%M%S)
-mkdir -p /srv/agendazap/backups
-docker compose -f ~/agendazap/docker-compose.prod.yml exec -T db \
-  pg_dump -U agendazap agendazap \
+mkdir -p /srv/showly/backups
+docker compose -f ~/showly/docker-compose.prod.yml exec -T db \
+  pg_dump -U showly showly \
   | gzip \
-  | gpg --encrypt --trust-model always --recipient backup@agendazap.dev \
-  > /srv/agendazap/backups/agendazap-$STAMP.sql.gz.gpg
+  | gpg --encrypt --trust-model always --recipient backup@showly.dev \
+  > /srv/showly/backups/showly-$STAMP.sql.gz.gpg
 # Retención: 7 días locales
-find /srv/agendazap/backups -name 'agendazap-*.sql.gz.gpg' -mtime +7 -delete
+find /srv/showly/backups -name 'showly-*.sql.gz.gpg' -mtime +7 -delete
 # TODO: subir a S3/B2 (rclone) para backups off-site.
-# rclone copy /srv/agendazap/backups/agendazap-$STAMP.sql.gz.gpg remote:agendazap-backups/
+# rclone copy /srv/showly/backups/showly-$STAMP.sql.gz.gpg remote:showly-backups/
 ```
 
 ```bash
-chmod +x ~/agendazap/scripts/backup.sh
-# Crontab (agendazap user)
+chmod +x ~/showly/scripts/backup.sh
+# Crontab (showly user)
 crontab -e
 # Agregar:
-# 30 3 * * * /home/agendazap/agendazap/scripts/backup.sh >> /srv/agendazap/backups/backup.log 2>&1
+# 30 3 * * * /home/showly/showly/scripts/backup.sh >> /srv/showly/backups/backup.log 2>&1
 ```
 
 **Off-site backups** (recomendado post-piloto): rclone → Backblaze B2 (~$5/TB)
@@ -353,10 +353,10 @@ descargar el backup a otro entorno con la privada):
 
 ```bash
 # Restaurar el backup más reciente (asumiendo la clave privada está importada).
-LAST=$(ls -t /srv/agendazap/backups/*.sql.gz.gpg | head -1)
+LAST=$(ls -t /srv/showly/backups/*.sql.gz.gpg | head -1)
 gpg --decrypt "$LAST" | gunzip | \
-  docker compose -f ~/agendazap/docker-compose.prod.yml exec -T db \
-    psql -U agendazap agendazap
+  docker compose -f ~/showly/docker-compose.prod.yml exec -T db \
+    psql -U showly showly
 ```
 
 **Deuda**: verificación automática del restore (mensual: descargar backup a
@@ -369,8 +369,8 @@ Sanity check antes de un release grande: `.dockerignore` debería excluir
 
 ```bash
 # Verificar que el Docker build no filtra .env dentro de la imagen.
-docker build -f apps/backend/Dockerfile -t agendazap-test .
-docker run --rm agendazap-test find / -name .env 2>/dev/null | head -5 || echo "OK"
+docker build -f apps/backend/Dockerfile -t showly-test .
+docker run --rm showly-test find / -name .env 2>/dev/null | head -5 || echo "OK"
 # Salida esperada: sólo "OK" (o nada). Si aparece cualquier ruta con .env → alarma.
 ```
 
@@ -382,10 +382,18 @@ Idem para `web`. Este check es manual por ahora; automatizarlo en CI post-piloto
 
 **Base (piloto)**:
 
+- **`GET /api/health`** — endpoint público (sin auth) que responde 200
+  con `{ ok, db, redis, timestamp }`. Chequea Postgres (`SELECT 1`) y
+  Redis (`PING`). Responde 200 con `ok: false` cuando hay problemas —
+  el orquestador decide qué es "unhealthy". Consumido por:
+  - Docker healthcheck (agregar a `docker-compose.prod.yml` — cuando se
+    documente el override).
+  - Uptime Robot / BetterUptime externo: pegar cada 5 min a
+    `https://api.tudominio.com/api/health`, alertar si `ok !== true`.
 - `docker compose logs -f backend web` — tail de logs. Sin agregador
   externo por ahora.
 - `docker stats` — CPU/RAM en tiempo real.
-- `df -h /srv/agendazap/data` — chequeo de disco semanal (WAHA acumula
+- `df -h /srv/showly/data` — chequeo de disco semanal (WAHA acumula
   logs, PG acumula WAL).
 
 **Post-piloto (recomendado)**:
@@ -407,7 +415,7 @@ Idem para `web`. Este check es manual por ahora; automatizarlo en CI post-piloto
 ### 12.1. Reiniciar todo
 
 ```bash
-cd ~/agendazap
+cd ~/showly
 docker compose -f docker-compose.prod.yml --env-file .env.production restart
 ```
 
@@ -462,7 +470,7 @@ puede conectar. Pasos:
 ```bash
 # 1. Cambiar password EN LA DB primero:
 docker compose -f docker-compose.prod.yml exec db \
-  psql -U agendazap -c "ALTER USER agendazap PASSWORD 'NUEVO_PASSWORD_STRONG';"
+  psql -U showly -c "ALTER USER showly PASSWORD 'NUEVO_PASSWORD_STRONG';"
 
 # 2. Actualizar .env.production con el nuevo POSTGRES_PASSWORD.
 
@@ -473,7 +481,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d backe
 ### 12.7. Rebuild después de actualizar código
 
 ```bash
-cd ~/agendazap
+cd ~/showly
 git pull origin main
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build backend web
 # Prisma migrate deploy corre en el entrypoint del backend automáticamente.
@@ -529,13 +537,46 @@ Documentado en [[adr/0004-pii-y-compliance]] y [[adr/0005-auth-mvp-y-deuda]]:
 
 - **Backups off-site automatizados**: rclone → B2 post-piloto.
 - **Alerting WAHA disconnect** → Slack.
-- **Health check endpoint del backend** (`/api/health` público sin auth,
-  chequeo por Uptime Robot). Hoy: usamos `GET /api/dashboard/metrics`
-  esperando 401.
+- ~~**Health check endpoint del backend**~~ ✅ **Listo** — `GET /api/health`
+  público responde `{ ok, db, redis, timestamp }`. Ver sección 11.
 - **Grafana + Prometheus** para métricas de containers.
-- **Sentry** para errores del backend.
+- **Sentry** para errores del backend (opcional — hoy los logs
+  estructurados de NestJS + `docker logs` cubren MVP).
 - **Kubernetes / Nomad** si escalás a >20 clínicas concurrentes.
 - **Multi-región** (LATAM + Europa) cuando el churn de latencia se note.
+
+---
+
+## 16. Quality gates — validación pre-merge
+
+Todos los PRs contra `staged` o `main` corren automáticamente el
+workflow `.github/workflows/ci.yml`, que valida:
+
+### Backend
+- `pnpm exec tsc --noEmit` — TypeScript strict.
+- `pnpm test` — Jest full suite.
+
+### Web
+- `pnpm exec tsc --noEmit` — TypeScript strict (incluye chequeo
+  type-safe de `next-intl` — `IntlMessages` global, ver
+  `apps/web/global.d.ts`).
+- `node scripts/i18n-check.mjs` — paridad estricta de paths escalares
+  `es.json` ↔ `pt.json` + missing keys por consumidor. Cierra el patrón
+  de `MISSING_MESSAGE` / `FORMATTING_ERROR` que apareció 3+ veces en
+  producción antes de que el chequeo estuviera automatizado.
+
+### Local (mismos comandos que CI)
+
+```bash
+pnpm check          # todo (backend + web + i18n)
+pnpm check:backend  # solo backend (tsc + tests)
+pnpm check:web      # solo web (tsc + i18n)
+pnpm i18n:check     # solo i18n (paridad + missing keys)
+```
+
+**Regla**: no mergear PRs con CI en rojo. GitHub debería tener
+"require status checks to pass" activado en `staged`/`main` (setup
+manual en Settings → Branches).
 
 Referencias: [[PRD]], [[ARCHITECTURE]], [[onboarding-clinica]],
 [[runbook-panel]].

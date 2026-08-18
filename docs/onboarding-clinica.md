@@ -1,6 +1,6 @@
 # Onboarding de una clínica nueva — Playbook
 
-Guía paso a paso para dar de alta una clínica real en AgendaZap. Escrito
+Guía paso a paso para dar de alta una clínica real en Showly. Escrito
 pensando en un onboarding manual (todavía **NO** hay endpoint `POST /clinics`
 en la API — ver §2 para el fallback vía Prisma).
 
@@ -21,14 +21,14 @@ Antes de arrancar el onboarding, la clínica debe tener:
   personal del dueño**. WAHA es no oficial y el riesgo de baneo, aunque bajo
   con volumen moderado, existe. Ver [[adr/0002-waha-no-oficial]].
 - **Dominio** (opcional pero recomendado): `panel.tuclinica.com` para el
-  panel y `agenda.tuclinica.com` (o `agendazap.dev/agendar/<slug>`) para
+  panel y `agenda.tuclinica.com` (o `showly.dev/agendar/<slug>`) para
   la página pública. Si no hay dominio propio, el piloto puede correr
-  contra el dominio de AgendaZap.
+  contra el dominio de Showly.
 - **Datos de la clínica**: nombre comercial, dirección, TZ, teléfono
   público, formas de pago aceptadas, horario de atención.
 - **Catálogo inicial**: servicios (con duración y buffer entre citas) y
   profesionales.
-- **Servidor** con la infra AgendaZap arriba. Ver [[deploy]] para el setup
+- **Servidor** con la infra Showly arriba. Ver [[deploy]] para el setup
   productivo (Hetzner / VPS + Docker Compose + Caddy).
 - **Variables de entorno productivas** ya cargadas en el servidor:
   `JWT_SECRET` (openssl rand base64 48), `WAHA_API_KEY`, `WEBHOOK_TOKEN`,
@@ -148,7 +148,7 @@ Ventaja frente al dashboard de WAHA: aislamiento multi-tenant real
 
 ### 3.a.bis. Fallback avanzado — dashboard/API de WAHA
 
-Sólo para el equipo técnico de AgendaZap cuando el panel no alcanza
+Sólo para el equipo técnico de Showly cuando el panel no alcanza
 (troubleshooting, automatizaciones, provisioning masivo):
 
 - Dashboard: `http://<host>:3000/dashboard`, protegido por
@@ -265,7 +265,7 @@ Comportamiento:
 - Después de setear la key, correr:
 
   ```bash
-  pnpm --filter @agendazap/backend prisma:reindex-faq
+  pnpm --filter @showly/backend prisma:reindex-faq
   ```
 
   Procesa todas las FAQs con `embedding IS NULL` y las embed. Idempotente.
@@ -338,7 +338,7 @@ elegida.
 ### 8.c. Verificación en Redis
 
 ```bash
-docker exec agendazap-redis-1 redis-cli KEYS 'bull:reminders:*' | head
+docker exec showly-redis-1 redis-cli KEYS 'bull:reminders:*' | head
 ```
 
 Esperado: keys tipo `bull:reminders:reminder-<id>` y `bull:reminders:risk-<apptId>`.
@@ -377,7 +377,7 @@ efectivamente llegan al paciente.
 
 Si el recordatorio no llega:
 
-- Revisar `docker logs agendazap-backend-1 | grep -i reminder` para ver si
+- Revisar `docker logs showly-backend-1 | grep -i reminder` para ver si
   el job disparó.
 - Revisar el estado de la sesión WAHA. Si está en `FAILED` o
   `SCAN_QR_CODE`, hay que re-escanear.
@@ -404,7 +404,7 @@ recepción física.
 
 | Síntoma | Causa probable | Fix |
 |---------|----------------|-----|
-| El bot no responde a "hola" | Sesión WAHA caída, webhook mal configurado, o backend caído. | Verificar sesión en `/dashboard` de WAHA. Verificar `docker logs agendazap-backend-1`. Verificar `WHATSAPP_HOOK_URL` en la env de WAHA. |
+| El bot no responde a "hola" | Sesión WAHA caída, webhook mal configurado, o backend caído. | Verificar sesión en `/dashboard` de WAHA. Verificar `docker logs showly-backend-1`. Verificar `WHATSAPP_HOOK_URL` en la env de WAHA. |
 | WAHA se desconecta seguido | Uso desde el celular con el mismo número en WhatsApp Web, wifi inestable en el server, o política anti-abuso de WhatsApp. | Cerrá WhatsApp Web en el celular. Reiniciá la sesión WAHA. Si persiste, número candidato a baneo — evaluá reducir volumen. |
 | El bot dice "no hay slots disponibles" | Todos los slots del rango están tomados, o BusinessHour mal configurado, o TimeOff cubre el rango. | Revisar `/panel/horarios` para el profesional. Revisar `/panel/bloqueos`. Consultar `GET /api/availability?serviceId=X&professionalId=Y&from=YYYY-MM-DD&days=7` con JWT admin para ver la lista cruda. |
 | Recordatorio no llegó | Cita a menos de 3h al crearla (offsets se omiten en el pasado), o la sesión WAHA se cayó entre crear y disparar, o Redis se reinició. | Revisar `SELECT status, jobId FROM "Reminder" WHERE "appointmentId"='X'`. Si `jobId IS NULL` → el schedule falló al crearse (bug — reportar). Si `status=SCHEDULED` pero pasó el `fireAt` → el worker no está corriendo, revisar `docker logs`. |

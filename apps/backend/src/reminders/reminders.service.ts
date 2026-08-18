@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { DateTime } from 'luxon';
+import { RequestContextService } from '../common/logger/request-context';
 import { PrismaService } from '../prisma/prisma.service';
 
 export const REMINDERS_QUEUE = 'reminders';
@@ -18,7 +19,20 @@ export class RemindersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly queue: Queue,
+    private readonly ctx: RequestContextService,
   ) {}
+
+  // Snapshot del request context — se serializa a job.data para que el worker
+  // pueda rehidratar el contexto y correlacionar logs con el request original.
+  private jobContextPayload(clinicId?: string): {
+    requestId?: string;
+    clinicId?: string;
+  } {
+    return {
+      requestId: this.ctx.get('requestId'),
+      clinicId: clinicId ?? this.ctx.get('clinicId'),
+    };
+  }
 
   /** Programa todos los recordatorios de una cita (idempotente). */
   async scheduleForAppointment(appointmentId: string): Promise<void> {
@@ -49,7 +63,10 @@ export class RemindersService {
       const delay = Math.max(0, fireAt.toMillis() - now.toMillis());
       const job = await this.queue.add(
         'send-reminder',
-        { reminderId: reminder.id },
+        {
+          reminderId: reminder.id,
+          ...this.jobContextPayload(appt.clinicId),
+        },
         {
           delay,
           // BullMQ 5.x prohíbe `:` en custom job IDs → usamos `-` como separador.
@@ -71,7 +88,10 @@ export class RemindersService {
     if (threshold > now) {
       await this.queue.add(
         'check-risk',
-        { appointmentId },
+        {
+          appointmentId,
+          ...this.jobContextPayload(appt.clinicId),
+        },
         {
           delay: threshold.toMillis() - now.toMillis(),
           jobId: `risk-${appointmentId}`,

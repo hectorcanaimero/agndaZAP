@@ -4,7 +4,6 @@ import {
   Controller,
   ForbiddenException,
   Get,
-  Logger,
   NotFoundException,
   Param,
   Patch,
@@ -14,17 +13,24 @@ import {
 } from '@nestjs/common';
 import { AppointmentStatus, Prisma } from '@prisma/client';
 import { DateTime } from 'luxon';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { tenantWhere, type AuthUser } from '../auth/tenant-context.util';
+import { FollowUpsService } from '../follow-ups/follow-ups.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RemindersService } from '../reminders/reminders.service';
+import { AvailabilityService } from '../scheduling/availability.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
-import { assertTransition } from './appointment-status.util';
+import {
+  assertReschedulable,
+  assertTransition,
+} from './appointment-status.util';
 import { CreatePanelAppointmentDto } from './dto/create-appointment.dto';
 import { ListAppointmentsQueryDto } from './dto/list-appointments.dto';
 import { PatchStatusDto } from './dto/patch-status.dto';
+import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
 
 /**
  * Controller de citas para el Panel.
@@ -37,8 +43,9 @@ import { PatchStatusDto } from './dto/patch-status.dto';
  *
  * NO exponemos `DELETE`. El "borrar" es `PATCH status = CANCELADA`.
  *
- * Multi-tenant: TODAS las queries pasan por `tenantWhere(user, ?)`. El PROFESSIONAL
- * tiene su propia rama con filtro adicional por `professionalId`.
+ * Multi-tenant: TODAS las queries pasan por `tenantWhere(user)`.
+ * (Fase 6: clinicId override removido — el scope siempre viene del JWT)
+ * El PROFESSIONAL tiene su propia rama con filtro adicional por `professionalId`.
  *
  * PII: Reducimos la exposición en `list()` — sólo devolvemos el `name` del
  * paciente y `phone` (necesario para contactar). NO devolvemos `notes` en la
@@ -47,13 +54,17 @@ import { PatchStatusDto } from './dto/patch-status.dto';
 @Controller('appointments')
 @UseGuards(RolesGuard)
 export class AppointmentsController {
-  private readonly logger = new Logger('AppointmentsController');
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly reminders: RemindersService,
+    private readonly followUps: FollowUpsService,
     private readonly scheduling: SchedulingService,
-  ) {}
+    private readonly availability: AvailabilityService,
+    @InjectPinoLogger() private readonly logger: PinoLogger,
+  ) {
+    // Ver AuthController: setContext en ctor reemplaza a LoggerModule.forFeature.
+    this.logger.setContext(AppointmentsController.name);
+  }
 
   @Get()
   @Roles('CLINIC_ADMIN', 'SUPERADMIN')
@@ -61,7 +72,7 @@ export class AppointmentsController {
     @CurrentUser() user: AuthUser,
     @Query() q: ListAppointmentsQueryDto,
   ) {
-    const scope = tenantWhere(user, q.clinicId);
+    const scope = tenantWhere(user);
     // Si viene `?professionalId=`, validamos que el profesional pertenece a
     // la clínica del scope. Sin esto, un filtro cross-tenant devolvería lista
     // vacía sin señalizar el error → 400 explícito (audit M6).
@@ -169,15 +180,56 @@ export class AppointmentsController {
     });
   }
 
+  /**
+   * `GET /slots?serviceId&professionalId&from&days&excludeAppointmentId`
+   *
+   * Slot picker interno para el panel (agendar / reagendar). Deliberadamente
+   * NO usa DTO — son 5 query params simples y el ValidationPipe global con
+   * `forbidNonWhitelisted` haría más ruido que el que evita.
+   *
+   * `excludeAppointmentId` se pasa cuando se está reagendando una cita
+   * existente: hace que su slot actual no aparezca ocupado (por sí misma).
+   *
+   * IMPORTANTE: registrado ANTES de `@Get(':id')` porque `slots` matcharía
+   * como `:id` si van al revés.
+   */
+  @Get('slots')
+  @Roles('CLINIC_ADMIN', 'SUPERADMIN')
+  async slots(
+    @CurrentUser() user: AuthUser,
+    @Query('serviceId') serviceId?: string,
+    @Query('professionalId') professionalId?: string,
+    @Query('from') fromISO?: string,
+    @Query('days') daysRaw?: string,
+    @Query('excludeAppointmentId') excludeAppointmentId?: string,
+  ) {
+    if (!serviceId || !professionalId || !fromISO) {
+      throw new BadRequestException(
+        'serviceId, professionalId y from son requeridos',
+      );
+    }
+    const scope = tenantWhere(user);
+    // Clamp para evitar queries pesadas si el frontend pide 365 días.
+    const days = Math.min(30, Math.max(1, Number(daysRaw ?? '7')));
+    return this.availability.getSlots({
+      clinicId: scope.clinicId,
+      serviceId,
+      professionalId,
+      fromISO,
+      days,
+      excludeAppointmentId,
+      limit: 200,
+    });
+  }
+
   @Get(':id')
   @Roles('CLINIC_ADMIN', 'SUPERADMIN', 'PROFESSIONAL')
   async findOne(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
     // PROFESSIONAL sólo puede ver sus propias citas.
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     const whereClause: Prisma.AppointmentWhereInput = { id, ...scope };
     if (user.role === 'PROFESSIONAL') {
       const dbUser = await this.prisma.user.findUnique({
@@ -219,9 +271,8 @@ export class AppointmentsController {
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Body() dto: PatchStatusDto,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     const existing = await this.prisma.appointment.findFirst({
       where: { id, ...scope },
     });
@@ -268,15 +319,23 @@ export class AppointmentsController {
         dto.status === AppointmentStatus.NO_SHOW
       ) {
         await this.reminders.cancelForAppointment(id);
+        // Además, si se revierte una ATENDIDA, cancelamos el follow-up
+        // pendiente. `cancelForAppointment` es silent-fail.
+        await this.followUps.cancelForAppointment(id);
+      } else if (dto.status === AppointmentStatus.ATENDIDA) {
+        // Encolamos el follow-up post-atención. Respeta la config del
+        // profesional (`followUpEnabled` + `followUpDelayHours`). Si el
+        // profesional lo tiene apagado, es no-op.
+        await this.followUps.scheduleForAppointment(id);
       }
     } catch (e) {
       this.logger.error(
-        `reminders side-effect falló apptId=${id} status=${dto.status}: ${(e as Error).message}`,
+        `side-effect (reminders/follow-ups) falló apptId=${id} status=${dto.status}: ${(e as Error).message}`,
       );
     }
 
     // Log de auditoría (CERO PII). apptId + old→new. `reason` NO se loguea.
-    this.logger.log(
+    this.logger.info(
       `appt status change apptId=${id} ${existing.status}->${dto.status} by=${user.userId}`,
     );
 
@@ -288,9 +347,8 @@ export class AppointmentsController {
   async create(
     @CurrentUser() user: AuthUser,
     @Body() dto: CreatePanelAppointmentDto,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     // Normalizamos phone: agregamos `+` si no lo trae (E.164 estricto).
     const normalizedPhone = dto.phone.startsWith('+')
       ? dto.phone
@@ -322,5 +380,50 @@ export class AppointmentsController {
       // pública (creación explícita, sin dedupe). Documentado en el CRUD MD.
       source: 'PUBLIC',
     });
+  }
+
+  /**
+   * `PATCH /:id/reschedule` — mueve el startAt de una cita existente sin cambiar
+   * paciente/servicio/profesional. Reprograma los recordatorios asociados.
+   *
+   * Errores:
+   *  - 404 si la cita no existe en este tenant.
+   *  - 422 si el status no permite reagendar (ATENDIDA/CANCELADA/NO_SHOW).
+   *  - 400 si `startAtISO` es inválido o pasado.
+   *  - 409 si el nuevo slot no está disponible (fuera BH, TimeOff, ya tomado).
+   *
+   * NO cambia el `status` — la cita reagendada mantiene su estado (PENDIENTE
+   * queda PENDIENTE, CONFIRMADA queda CONFIRMADA). Si querés forzar re-confirmación,
+   * pasá por PATCH /:id/status en flujo separado.
+   */
+  @Patch(':id/reschedule')
+  @Roles('CLINIC_ADMIN', 'SUPERADMIN')
+  async reschedule(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: RescheduleAppointmentDto,
+  ) {
+    const scope = tenantWhere(user);
+    // Cargar mínima: solo para chequear status + tenant. La lógica real vive
+    // en `SchedulingService.rescheduleAppointment`.
+    const existing = await this.prisma.appointment.findFirst({
+      where: { id, ...scope },
+      select: { id: true, status: true, startAt: true },
+    });
+    if (!existing) throw new NotFoundException('cita no encontrada');
+    assertReschedulable(existing.status);
+
+    const updated = await this.scheduling.rescheduleAppointment({
+      clinicId: scope.clinicId,
+      appointmentId: id,
+      startAtISO: dto.startAtISO,
+    });
+
+    // Log de auditoría (CERO PII). apptId + old→new startAt.
+    this.logger.info(
+      `appt reschedule apptId=${id} ${existing.startAt.toISOString()}->${updated.startAt.toISOString()} by=${user.userId}`,
+    );
+
+    return updated;
   }
 }

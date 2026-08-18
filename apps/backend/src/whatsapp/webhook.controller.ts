@@ -1,15 +1,16 @@
 import {
   Body,
   Controller,
-  ForbiddenException,
   Headers,
   HttpCode,
   Logger,
   Post,
+  Req,
 } from '@nestjs/common';
 import { Public } from '../auth/decorators/public.decorator';
 import { BotService } from '../bot/bot.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { verifyWebhookAuthFromEnv } from './webhook-auth.util';
 
 /**
  * Shape del cuerpo del webhook. NO usamos DTO con class-validator porque el
@@ -25,11 +26,21 @@ interface WahaWebhookBody {
   [key: string]: unknown;
 }
 
-/** Shape mínima esperada dentro de `payload` cuando `event === 'message'`. */
+/**
+ * Shape mínima esperada dentro de `payload` cuando `event === 'message'`.
+ * `notifyName` es el pushName que el contacto tiene configurado en su perfil de
+ * WhatsApp — nos lo manda WAHA en cada mensaje (puede venir en `_data.pushName`
+ * en algunas versiones, se cubren ambos abajo).
+ */
 interface WahaMessagePayload {
   fromMe?: boolean;
   from?: string;
   body?: string;
+  notifyName?: string;
+  _data?: {
+    notifyName?: string;
+    pushName?: string;
+  };
 }
 
 /** Shape mínima esperada dentro de `payload` cuando `event === 'session.status'`. */
@@ -62,29 +73,17 @@ export class WebhookController {
   @HttpCode(200)
   async handleWaha(
     @Body() body: WahaWebhookBody,
+    @Req() req: { rawBody?: Buffer },
     @Headers('x-webhook-token') token?: string,
+    @Headers('x-webhook-hmac') hmac?: string,
   ) {
-    // Validación del webhook (evita inyección externa).
-    // WAHA (build noweb-arm/community) NO envía WHATSAPP_HOOK_HEADERS custom
-    // — es feature de WAHA Plus. Para prod, usar WEBHOOK_HMAC de WAHA con
-    // verificación por firma, o exponer el backend detrás de un reverse-proxy
-    // que valide auth antes de llegar al endpoint.
-    const requiredToken = process.env.WEBHOOK_TOKEN;
-    const isProd = process.env.NODE_ENV === 'production';
-    if (isProd && !requiredToken) {
-      // En prod, sin token configurado el webhook queda expuesto — fail-closed.
-      throw new ForbiddenException('WEBHOOK_TOKEN no configurado en producción');
-    }
-    if (requiredToken && token !== requiredToken) {
-      // En dev, si el header simplemente no llegó (WAHA community no lo manda),
-      // permitir con warning. Si vino con valor incorrecto, sigue rechazando.
-      if (!isProd && !token) {
-        this.logger.warn(
-          'webhook sin x-webhook-token en dev — permitiendo (fail-open dev only). Configurar WEBHOOK_HMAC en prod.',
-        );
-      } else {
-        throw new ForbiddenException('token de webhook inválido');
-      }
+    // Auth del webhook. Preferencia: HMAC > shared token > skip (opt-in explícito).
+    // Ver `verifyWebhookAuth` en `webhook-auth.util.ts` para el detalle.
+    const authResult = verifyWebhookAuthFromEnv(req.rawBody, token, hmac);
+    if (authResult === 'skip-explicit') {
+      this.logger.warn(
+        'webhook sin auth — ALLOW_WEBHOOK_WITHOUT_TOKEN=true activo (dev only)',
+      );
     }
 
     const { event, session, payload } = body;
@@ -121,10 +120,39 @@ export class WebhookController {
       const body = msg?.body ?? '';
       if (!from) return { ok: true };
 
+      // WhatsApp está migrando de <phone>@c.us a <lid>@lid (Linked ID) para
+      // privacidad. Cuando llega un LID no tenemos forma pública de resolverlo
+      // al phone real (WAHA no expone endpoint). Loggeamos payload en dev para
+      // capturar qué campos alternativos manda Baileys (senderPn, remoteJidAlt)
+      // y refinar la resolución. Sin body para evitar PII.
+      if (
+        process.env.NODE_ENV !== 'production' &&
+        from.endsWith('@lid')
+      ) {
+        const { body: _b, ...msgSansBody } = (msg ?? {}) as Record<string, unknown>;
+        this.logger.log(
+          `[LID] chatId=${from} payload=${JSON.stringify(msgSansBody)}`,
+        );
+      }
+
+      // Separar identidad del contacto. El `chatId` de WAHA viene con sufijo
+      // `@c.us` (phone-based) o `@lid` (LID de privacidad). Guardamos ambos por
+      // separado para poder mostrar el número real cuando lo conocemos y no
+      // ensuciar la columna `phone` con LIDs.
+      const bareId = from.replace(/@(c\.us|lid|s\.whatsapp\.net)$/, '');
+      const isLid = from.endsWith('@lid');
+      const phone = isLid ? null : bareId;
+      const lid = isLid ? bareId : null;
+      // pushName: WAHA lo expone como `notifyName` top-level o dentro de `_data`.
+      const contactName =
+        msg?.notifyName ?? msg?._data?.notifyName ?? msg?._data?.pushName ?? null;
+
       await this.bot.handleIncoming({
         clinicId: clinic.id,
         chatId: from,
-        phone: from.replace('@c.us', ''),
+        phone,
+        lid,
+        contactName,
         text: body,
       });
     }

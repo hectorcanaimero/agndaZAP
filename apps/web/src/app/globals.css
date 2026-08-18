@@ -10,8 +10,11 @@
  * Esto permite aplicar opacidad con `bg-primary/50` correctamente.
  *
  * Mapeo brand → primary:
- *   brand-600 (#16a34a) ≈ hsl(142, 76%, 36%) → --primary
- *   Foreground blanco puro para máximo contraste sobre el verde.
+ *   brand-navy (#0F2A4A) ≈ hsl(213, 66%, 17%) → --primary
+ *   El navy es el brand REAL de Showly (ver docs/notas/2026-08-11-brand-kit-showly.md).
+ *   El verde brand-600 queda reservado para representar el CANAL WhatsApp
+ *   (nav activo del panel, tokens de estado de conversaciones, etc.),
+ *   NO para el brand del producto.
  *
  * Base color: neutral (grises fríos casi puros). No introducimos dark mode todavía —
  * el bloque .dark queda declarado para no romper en el futuro, pero el proyecto
@@ -28,8 +31,8 @@
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 3.9%;
 
-    /* Verde AgendaZap ≈ brand-600 (#16a34a). */
-    --primary: 142 76% 36%;
+    /* Brand navy Showly (#0F2A4A). */
+    --primary: 213 66% 17%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 0 0% 96.1%;
@@ -46,7 +49,7 @@
 
     --border: 0 0% 89.8%;
     --input: 0 0% 89.8%;
-    --ring: 142 76% 36%;
+    --ring: 213 66% 17%;
 
     /* Chart palette — pensada para dashboards no-show / conversaciones / agenda.
        Arrancamos con el verde brand + acentos complementarios. */
@@ -69,9 +72,10 @@
     --popover: 0 0% 3.9%;
     --popover-foreground: 0 0% 98%;
 
-    /* En dark subimos luminosidad de brand para mantener contraste WCAG AA. */
-    --primary: 142 71% 45%;
-    --primary-foreground: 0 0% 100%;
+    /* En dark usamos brand-teal (#28D9B9 ≈ hsl(170, 71%, 50%)) para
+       mantener contraste WCAG AA contra fondo oscuro; navy no rinde. */
+    --primary: 170 71% 50%;
+    --primary-foreground: 213 66% 17%;
 
     --secondary: 0 0% 14.9%;
     --secondary-foreground: 0 0% 98%;
@@ -87,7 +91,7 @@
 
     --border: 0 0% 14.9%;
     --input: 0 0% 14.9%;
-    --ring: 142 71% 45%;
+    --ring: 170 71% 50%;
 
     --chart-1: 142 71% 45%;
     --chart-2: 160 60% 45%;

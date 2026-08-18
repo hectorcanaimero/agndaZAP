@@ -1,4 +1,5 @@
 import {
+  ForbiddenException,
   HttpException,
   HttpStatus,
   Inject,
@@ -37,6 +38,7 @@ export interface AuthMe {
     slug: string;
     timezone: string;
     locale: string;
+    currency: string;
   } | null;
 }
 
@@ -101,7 +103,10 @@ export class AuthService {
       );
     }
 
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      include: { clinic: true },
+    });
 
     if (!user) {
       // Timing-attack mitigation: gastar el mismo tiempo de CPU que un login real.
@@ -114,6 +119,22 @@ export class AuthService {
     if (!ok) {
       await this.incrementFail(emailKey);
       throw new UnauthorizedException('credenciales inválidas');
+    }
+
+    // Gate de status de clínica — respaldo del botón "Suspender clínica" del
+    // Área SaaS Admin (ver ADR 0014). SUPERADMIN no tiene clínica asignada,
+    // así que queda excluido del chequeo.
+    if (user.role !== 'SUPERADMIN') {
+      if (!user.clinic) {
+        throw new ForbiddenException('usuario sin clínica asignada');
+      }
+      if (user.clinic.status !== 'ACTIVE') {
+        throw new ForbiddenException(
+          user.clinic.status === 'SUSPENDED'
+            ? 'esta cuenta está suspendida — contactá al soporte'
+            : 'esta cuenta ya no está disponible',
+        );
+      }
     }
 
     const payload: JwtPayload = {
@@ -148,6 +169,7 @@ export class AuthService {
             slug: true,
             timezone: true,
             locale: true,
+            currency: true,
           },
         },
       },

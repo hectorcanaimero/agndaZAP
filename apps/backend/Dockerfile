@@ -1,4 +1,4 @@
-# AgendaZap backend — multi-stage Dockerfile.
+# Showly backend — multi-stage Dockerfile.
 #
 # Contexto: se buildea DESDE LA RAÍZ del monorepo para poder acceder a
 # `pnpm-workspace.yaml`, `pnpm-lock.yaml` y `packages/`. Ver
@@ -22,7 +22,7 @@ COPY packages/shared/package.json ./packages/shared/
 
 # Instalar TODAS las deps (dev+prod) del workspace del backend + shared.
 # `--frozen-lockfile` = build reproducible.
-RUN pnpm install --frozen-lockfile --filter @agendazap/backend...
+RUN pnpm install --frozen-lockfile --filter @showly/backend...
 
 # Copiar el resto del código.
 COPY packages/shared ./packages/shared
@@ -63,7 +63,7 @@ COPY --from=build /repo/packages/shared/package.json ./packages/shared/package.j
 # Prisma client se regenera con `pnpm exec prisma generate` (postinstall skipped
 # por `--ignore-scripts`; corremos generate explícito abajo).
 RUN corepack enable && corepack prepare pnpm@9.0.0 --activate && \
-    pnpm install --prod --frozen-lockfile --ignore-scripts --filter @agendazap/backend... && \
+    pnpm install --prod --frozen-lockfile --ignore-scripts --filter @showly/backend... && \
     cd apps/backend && pnpm exec prisma generate && cd /repo && \
     chown -R app:app /repo
 

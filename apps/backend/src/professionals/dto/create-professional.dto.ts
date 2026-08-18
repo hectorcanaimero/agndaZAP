@@ -6,8 +6,9 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { ProfessionalProfileFieldsDto } from './professional-profile-fields.dto';
 
-export class CreateProfessionalDto {
+export class CreateProfessionalDto extends ProfessionalProfileFieldsDto {
   @IsString()
   @MinLength(2)
   @MaxLength(120)

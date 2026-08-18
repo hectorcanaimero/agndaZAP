@@ -54,14 +54,18 @@ const STATUS_STYLES: Record<string, string> = {
   UNKNOWN: 'bg-gray-100 text-gray-700 border-gray-300',
 };
 
-const KNOWN_STATUSES = new Set([
+// `as const` para que TypeScript infiera el union literal y `statusKey` sea
+// asignable a `t(\`status.${...}\`)` con el nuevo type-safe next-intl.
+const KNOWN_STATUSES = [
   'WORKING',
   'STARTING',
   'SCAN_QR_CODE',
   'STOPPED',
   'FAILED',
   'UNKNOWN',
-]);
+] as const;
+type KnownStatus = (typeof KNOWN_STATUSES)[number];
+const KNOWN_STATUS_SET = new Set<string>(KNOWN_STATUSES);
 
 /**
  * Cadence del polling adaptativo según status.
@@ -238,9 +242,11 @@ export function WhatsappConnectionClient({ initial, token }: Props) {
     }
   }, [inFlight, token, t]);
 
-  const statusKey = KNOWN_STATUSES.has(state.status) ? state.status : 'UNKNOWN';
+  const statusKey: KnownStatus = KNOWN_STATUS_SET.has(state.status)
+    ? (state.status as KnownStatus)
+    : 'UNKNOWN';
   const badgeClass = STATUS_STYLES[statusKey] ?? STATUS_STYLES.UNKNOWN;
-  const statusLabel = t(`status.${statusKey}` as const);
+  const statusLabel = t(`status.${statusKey}`);
   const showQr = state.status === 'SCAN_QR_CODE' && !!state.qr;
 
   // Estados para deshabilitar botones — combinamos "ya estoy en ese lado" con

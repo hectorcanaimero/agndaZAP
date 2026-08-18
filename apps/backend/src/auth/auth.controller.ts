@@ -3,12 +3,12 @@ import {
   Controller,
   Get,
   HttpCode,
-  Logger,
   Post,
   Req,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { extractIp, MinimalRequest } from '../common/extract-ip';
 import { RateLimit } from '../public/rate-limit.guard';
 import { AuthMe, AuthService, LoginResult } from './auth.service';
@@ -29,10 +29,17 @@ import { LoginDto } from './dto/login.dto';
  */
 @Controller('auth')
 export class AuthController {
-  private readonly logger = new Logger('AuthController');
   private readonly trustProxy = process.env.TRUST_PROXY === 'true';
 
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    @InjectPinoLogger() private readonly logger: PinoLogger,
+  ) {
+    // `setContext` en el ctor evita la necesidad de `LoggerModule.forFeature`
+    // (removido en nestjs-pino v4). El context queda como base field en cada
+    // log entry emitido desde este controller.
+    this.logger.setContext(AuthController.name);
+  }
 
   /**
    * Login. Mismo mensaje de error para "email inexistente" y "password mala"

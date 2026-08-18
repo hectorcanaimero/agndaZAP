@@ -1,14 +1,18 @@
 {
-  "name": "agendazap",
+  "name": "showly",
   "private": true,
   "packageManager": "pnpm@9.0.0",
   "scripts": {
-    "dev:backend": "pnpm --filter @agendazap/backend start:dev",
-    "dev:web": "pnpm --filter @agendazap/web dev",
+    "dev:backend": "pnpm --filter @showly/backend start:dev",
+    "dev:web": "pnpm --filter @showly/web dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "infra:up": "docker compose up -d db redis waha",
-    "infra:down": "docker compose down"
+    "infra:down": "docker compose down",
+    "i18n:check": "node scripts/i18n-check.mjs",
+    "check:backend": "pnpm --filter @showly/backend exec tsc --noEmit && pnpm --filter @showly/backend test",
+    "check:web": "pnpm --filter @showly/web exec tsc --noEmit && pnpm i18n:check",
+    "check": "pnpm check:backend && pnpm check:web"
   },
   "devDependencies": {
     "typescript": "^5.5.4"

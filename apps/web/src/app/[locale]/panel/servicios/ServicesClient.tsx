@@ -2,26 +2,37 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type ColumnDef } from '@tanstack/react-table';
-import { ArrowUpDown, Pencil, Trash2 } from 'lucide-react';
+import {
+  Clock,
+  DollarSign,
+  Plus,
+  Search,
+  Sparkles,
+  Trash2,
+  User,
+  Users,
+  X,
+} from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { DataTable } from '@/components/ui/data-table';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  EmptyStatePanel,
+  MasterDetailRow,
+  MasterDetailShell,
+  useMobileSheet,
+} from '@/components/panel/master-detail';
 import { apiMutation, apiQuery } from '@/lib/query-fn';
 import { queryKeys } from '@/lib/query-keys';
+import { cn } from '@/lib/utils';
+
+/* ─────────────────────────── Types ─────────────────────────── */
 
 interface Service {
   id: string;
@@ -52,31 +63,82 @@ const serviceSchema = z.object({
 
 type ServiceFormValues = z.infer<typeof serviceSchema>;
 
-export function ServicesClient({ services: initialServices, professionals }: Props) {
+/**
+ * Estado del panel derecho:
+ *  - `empty`    → no hay selección; muestra empty state con CTA.
+ *  - `create`   → panel vacío en modo "nueva".
+ *  - `edit:ID`  → editando el servicio ID.
+ */
+type PanelMode =
+  | { kind: 'empty' }
+  | { kind: 'create' }
+  | { kind: 'edit'; service: Service };
+
+/* ═══════════════════════════════════════════════════════════════════
+ *                        SERVICES CLIENT (root)
+ * ═══════════════════════════════════════════════════════════════════ */
+
+/**
+ * Layout master-detail 2-col:
+ *  - Izq (~380px): lista custom con search + CTA "Nuevo". Row activo con
+ *    marker vertical brand (mismo lenguaje que conversaciones).
+ *  - Der (flex): panel dual-state — empty con carácter o form inline.
+ *
+ * Mobile (<md): solo la lista full-width. Seleccionar/crear abre un `Sheet`
+ * desde la derecha con el mismo form (respeta touch targets del panel).
+ *
+ * NO usamos DataTable acá — 5-15 servicios promedio por clínica no justifican
+ * sorting/column-visibility. La lista custom permite jerarquía visual clara
+ * (nombre grande, meta compacta, chips de profesionales) que la tabla no daba.
+ */
+export function ServicesClient({
+  services: initialServices,
+  professionals,
+}: Props) {
   const t = useTranslations('panel.services');
   const qc = useQueryClient();
 
-  const [editing, setEditing] = useState<Service | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [search, setSearch] = useState('');
+  const [panel, setPanel] = useState<PanelMode>({ kind: 'empty' });
   const [deleteTarget, setDeleteTarget] = useState<Service | null>(null);
+  const mobileSheet = useMobileSheet();
 
-  /*
-   * useQuery con `initialData` proveniente del SSR — la primera render usa el
-   * server-fetched snapshot y no dispara refetch hasta pasado `staleTime` (30s
-   * del makeQueryClient). Toda mutation invalida `queryKeys.services` y el
-   * refetch corre automáticamente — adiós `router.refresh()`.
-   */
   const { data: services = initialServices } = useQuery({
     queryKey: queryKeys.services,
     queryFn: () => apiQuery<Service[]>('/api/services'),
     initialData: initialServices,
+    // 30s antes de considerar stale — evita refetch loops si el user hace
+    // muchas mutations seguidas.
+    staleTime: 30_000,
   });
 
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return services;
+    return services.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        s.professionals.some((p) => p.name.toLowerCase().includes(q)),
+    );
+  }, [services, search]);
+
+  const activeId =
+    panel.kind === 'edit' ? panel.service.id : null;
+
+  /* ─────── Mutations ─────── */
+
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => apiMutation<void>(`/api/services/${id}`, 'DELETE'),
-    onSuccess: () => {
+    mutationFn: (id: string) =>
+      apiMutation<void>(`/api/services/${id}`, 'DELETE'),
+    onSuccess: (_data, deletedId) => {
       toast.success(t('deleted'));
       void qc.invalidateQueries({ queryKey: queryKeys.services });
+      // Si borramos el servicio activo, volvemos a empty (sino el panel muestra
+      // datos de un servicio inexistente hasta el próximo click).
+      if (panel.kind === 'edit' && panel.service.id === deletedId) {
+        setPanel({ kind: 'empty' });
+        mobileSheet.close();
+      }
     },
     onError: () => {
       toast.error(t('deleteFailed'));
@@ -84,243 +146,158 @@ export function ServicesClient({ services: initialServices, professionals }: Pro
     onSettled: () => setDeleteTarget(null),
   });
 
-  function performDelete() {
-    if (!deleteTarget) return;
-    deleteMutation.mutate(deleteTarget.id);
+  /* ─────── Handlers ─────── */
+
+  function openCreate() {
+    setPanel({ kind: 'create' });
+    mobileSheet.openIfMobile();
   }
 
-  /*
-   * Definimos columns dentro del componente para poder capturar `t`,
-   * `setEditing` y `setDeleteTarget` en el cell renderer. Usamos `useMemo`
-   * para no reasignar en cada render y evitar que TanStack Table pierda el
-   * estado interno de sorting/visibility.
-   *
-   * IDs explícitos en columnas sin accessorKey (professionals, actions) para
-   * poder mapearlos en `columnLabels` del DataTable y en el dropdown de
-   * visibility.
-   */
-  const columns = useMemo<ColumnDef<Service>[]>(
-    () => [
-      {
-        accessorKey: 'name',
-        id: 'name',
-        header: ({ column }) => (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="-ml-3 h-8 px-2 text-xs uppercase tracking-wider text-gray-500"
-            onClick={() =>
-              column.toggleSorting(column.getIsSorted() === 'asc')
-            }
-          >
-            {t('fields.name')}
-            <ArrowUpDown className="ml-1 h-3.5 w-3.5" />
-          </Button>
-        ),
-        cell: ({ row }) => (
-          <span className="font-medium text-gray-900">{row.original.name}</span>
-        ),
-      },
-      {
-        accessorKey: 'durationMin',
-        id: 'duration',
-        header: ({ column }) => (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="-ml-3 h-8 px-2 text-xs uppercase tracking-wider text-gray-500"
-            onClick={() =>
-              column.toggleSorting(column.getIsSorted() === 'asc')
-            }
-          >
-            {t('fields.duration')}
-            <ArrowUpDown className="ml-1 h-3.5 w-3.5" />
-          </Button>
-        ),
-        cell: ({ row }) => (
-          <span className="tabular-nums text-gray-700">
-            {row.original.durationMin} min
-            {row.original.bufferMin > 0 ? ` +${row.original.bufferMin}` : ''}
-          </span>
-        ),
-      },
-      {
-        accessorKey: 'priceCents',
-        id: 'price',
-        header: ({ column }) => (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="-ml-3 h-8 px-2 text-xs uppercase tracking-wider text-gray-500"
-            onClick={() =>
-              column.toggleSorting(column.getIsSorted() === 'asc')
-            }
-          >
-            {t('fields.price')}
-            <ArrowUpDown className="ml-1 h-3.5 w-3.5" />
-          </Button>
-        ),
-        cell: ({ row }) =>
-          row.original.priceCents !== null ? (
-            <span className="tabular-nums text-gray-700">
-              ${(row.original.priceCents / 100).toFixed(2)}
-            </span>
-          ) : (
-            <span className="text-gray-400">—</span>
-          ),
-      },
-      {
-        id: 'professionals',
-        header: () => (
-          <span className="text-xs uppercase tracking-wider text-gray-500">
-            {t('fields.professionals')}
-          </span>
-        ),
-        cell: ({ row }) => (
-          <span className="block max-w-xs truncate text-sm text-gray-600">
-            {row.original.professionals.length === 0
-              ? '—'
-              : row.original.professionals.map((p) => p.name).join(', ')}
-          </span>
-        ),
-      },
-      {
-        id: 'actions',
-        enableHiding: false,
-        header: () => (
-          <span className="sr-only">{t('actions')}</span>
-        ),
-        cell: ({ row }) => (
-          <div className="flex justify-end gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setEditing(row.original)}
-              aria-label={t('edit')}
-              className="h-8 w-8 p-0"
-            >
-              <Pencil className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setDeleteTarget(row.original)}
-              aria-label={t('delete')}
-              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-        ),
-      },
-    ],
-    [t],
-  );
+  function openEdit(s: Service) {
+    setPanel({ kind: 'edit', service: s });
+    mobileSheet.openIfMobile();
+  }
 
-  const columnLabels = useMemo(
-    () => ({
-      name: t('fields.name'),
-      duration: t('fields.duration'),
-      price: t('fields.price'),
-      professionals: t('fields.professionals'),
-    }),
-    [t],
+  function closePanel() {
+    setPanel({ kind: 'empty' });
+    mobileSheet.close();
+  }
+
+  function handleFormSuccess(saved: Service, wasCreate: boolean) {
+    // Después de guardar, mantenemos el servicio en el panel en modo edición —
+    // el operador puede seguir tocándolo o volver a la lista con "cerrar".
+    setPanel({ kind: 'edit', service: saved });
+    if (wasCreate) {
+      // En mobile, tras crear cerramos el sheet para que el user vea la lista
+      // actualizada. En desktop lo dejamos abierto para permitir tweaks.
+      mobileSheet.close();
+    }
+  }
+
+  /* ─────── Render ─────── */
+
+  const panelContent =
+    panel.kind === 'empty' ? (
+      <EmptyPanel onCreate={openCreate} />
+    ) : (
+      <ServiceForm
+        // key remonta el useForm cuando cambia el modo/servicio (evita defaults
+        // de stale). Sin esto, al pasar de edit A → edit B, el form muestra A.
+        key={panel.kind === 'edit' ? panel.service.id : 'new'}
+        mode={panel}
+        professionals={professionals}
+        onClose={closePanel}
+        onSuccess={handleFormSuccess}
+        onDelete={(s) => setDeleteTarget(s)}
+      />
+    );
+
+  const sidebar = (
+    <>
+      {/* Toolbar: search + count + CTA */}
+      <div className="shrink-0 space-y-2 border-b border-border/60 p-3">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search
+              className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t('searchPlaceholder')}
+              className="h-9 pl-8"
+              aria-label={t('searchPlaceholder')}
+            />
+          </div>
+          <Button
+            size="sm"
+            className="h-9 shrink-0 gap-1.5"
+            onClick={openCreate}
+            aria-label={t('new')}
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            <span className="hidden sm:inline">{t('new')}</span>
+          </Button>
+        </div>
+        <p className="px-0.5 text-[11px] tabular-nums text-muted-foreground">
+          {t('countLabel', { n: services.length })}
+          {search && filtered.length !== services.length ? (
+            <>
+              {' '}
+              ·{' '}
+              <span className="text-foreground">
+                {t('countMatch', { n: filtered.length })}
+              </span>
+            </>
+          ) : null}
+        </p>
+      </div>
+
+      {/* Lista */}
+      {filtered.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center p-6">
+          <div className="text-center">
+            <p className="text-sm text-muted-foreground">
+              {search ? t('noSearchResults') : t('emptyList')}
+            </p>
+            {!search ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-3"
+                onClick={openCreate}
+              >
+                <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                {t('createFirst')}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : (
+        <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-1">
+          {filtered.map((s) => (
+            <li key={s.id}>
+              <ServiceRow
+                service={s}
+                active={s.id === activeId}
+                onSelect={() => openEdit(s)}
+                t={t}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 
   return (
     <>
-      <div className="flex justify-end">
-        <Button onClick={() => setCreating(true)}>{t('new')}</Button>
-      </div>
-
-      {/* Desktop ≥md: shadcn DataTable (sorting + filter + column vis). */}
-      <div className="hidden md:block">
-        <DataTable
-          columns={columns}
-          data={services}
-          searchKey="name"
-          searchPlaceholder={t('searchPlaceholder')}
-          emptyMessage={t('empty')}
-          columnLabels={columnLabels}
-        />
-      </div>
-
-      {/*
-        Mobile <md: cards. Evita scroll horizontal en el body que rompe
-        el patrón de la tabla. Ver spec `docs/ux/2026-08-09-panel-tables-a-cards-en-mobile.md`.
-        Acciones con `min-h-11 min-w-11` (WCAG 2.5.5 Target Size 44×44).
-      */}
-      <div className="space-y-3 md:hidden">
-        {services.length === 0 ? (
-          <div className="rounded-md border border-gray-200 bg-white p-6 text-center text-sm text-gray-500">
-            {t('empty')}
-          </div>
-        ) : (
-          services.map((s) => (
-            <div
-              key={s.id}
-              className="rounded-md border border-gray-200 bg-white p-4"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-gray-900">{s.name}</p>
-                  <p className="mt-1 text-xs tabular-nums text-gray-500">
-                    {s.durationMin} min
-                    {s.bufferMin > 0 ? ` +${s.bufferMin}` : ''}
-                    {s.priceCents !== null
-                      ? ` · $${(s.priceCents / 100).toFixed(2)}`
-                      : ''}
-                  </p>
-                  <p className="mt-1 truncate text-xs text-gray-600">
-                    {s.professionals.length === 0
-                      ? '—'
-                      : s.professionals.map((p) => p.name).join(', ')}
-                  </p>
-                </div>
-                <div className="flex shrink-0 flex-col gap-1">
-                  <button
-                    type="button"
-                    className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md px-3 text-sm text-brand-700 hover:bg-brand-50"
-                    onClick={() => setEditing(s)}
-                  >
-                    {t('edit')}
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md px-3 text-sm text-red-600 hover:bg-red-50"
-                    onClick={() => setDeleteTarget(s)}
-                  >
-                    {t('delete')}
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-
-      <ServiceFormModal
-        open={creating}
-        onClose={() => setCreating(false)}
-        professionals={professionals}
-        mode="create"
-      />
-      <ServiceFormModal
-        open={editing !== null}
-        onClose={() => setEditing(null)}
-        professionals={professionals}
-        mode="edit"
-        service={editing}
+      <MasterDetailShell
+        sidebar={sidebar}
+        panel={panelContent}
+        mobile={mobileSheet}
+        mobileTitle={
+          panel.kind === 'create'
+            ? t('newTitle')
+            : panel.kind === 'edit'
+              ? t('editTitle')
+              : ''
+        }
+        hidePanelInSheet={panel.kind === 'empty'}
       />
 
       <ConfirmDialog
         open={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
-        onConfirm={performDelete}
+        onConfirm={() => {
+          if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
+        }}
         title={t('confirmDelete.title')}
         description={t.rich('confirmDelete.description', {
           name: () => (
-            <strong className="font-semibold text-gray-900">
+            <strong className="font-semibold text-foreground">
               {deleteTarget?.name ?? ''}
             </strong>
           ),
@@ -332,21 +309,209 @@ export function ServicesClient({ services: initialServices, professionals }: Pro
   );
 }
 
-function ServiceFormModal({
-  open,
-  onClose,
-  professionals,
-  mode,
+/* ═══════════════════════════════════════════════════════════════════
+ *                            SERVICE ROW
+ * ═══════════════════════════════════════════════════════════════════ */
+
+/**
+ * Row de la lista izquierda. Diseño compacto pero con jerarquía:
+ *   - Nombre grande (font-medium)
+ *   - Meta compacta con duration + price (números tabular)
+ *   - Chips de profesionales con inicial + color estable por hash
+ *   - Marker vertical brand a la izquierda cuando está activo (patrón conversaciones)
+ */
+function ServiceRow({
   service,
+  active,
+  onSelect,
+  t,
 }: {
-  open: boolean;
-  onClose: () => void;
+  service: Service;
+  active: boolean;
+  onSelect: () => void;
+  t: ReturnType<typeof useTranslations<'panel.services'>>;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-current={active ? 'true' : undefined}
+      className={cn(
+        'group relative flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        active
+          ? 'bg-brand-50 text-foreground'
+          : 'hover:bg-accent hover:text-accent-foreground',
+      )}
+    >
+      {active ? (
+        <span
+          aria-hidden="true"
+          className="absolute left-0 top-2.5 h-10 w-0.5 rounded-r-full bg-brand-600"
+        />
+      ) : null}
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-foreground">
+          {service.name}
+        </p>
+        <p className="mt-0.5 flex items-center gap-2 text-[11px] tabular-nums text-muted-foreground">
+          <span className="inline-flex items-center gap-1">
+            <Clock className="h-3 w-3" aria-hidden="true" />
+            {service.durationMin}
+            {service.bufferMin > 0 ? `+${service.bufferMin}` : ''} min
+          </span>
+          {service.priceCents !== null ? (
+            <>
+              <span aria-hidden="true">·</span>
+              <span>${(service.priceCents / 100).toFixed(2)}</span>
+            </>
+          ) : null}
+        </p>
+        <p
+          className={cn(
+            'mt-1 flex items-center gap-1 text-[11px]',
+            service.professionals.length === 0
+              ? 'italic text-muted-foreground'
+              : 'text-muted-foreground',
+          )}
+        >
+          {service.professionals.length === 0 ? (
+            <>
+              <User className="h-3 w-3" aria-hidden="true" />
+              {t('noProfessionalsRow')}
+            </>
+          ) : (
+            <>
+              <Users className="h-3 w-3" aria-hidden="true" />
+              <span className="tabular-nums">
+                {t('professionalCount', {
+                  n: service.professionals.length,
+                })}
+              </span>
+            </>
+          )}
+        </p>
+      </div>
+    </button>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ *                            EMPTY PANEL
+ * ═══════════════════════════════════════════════════════════════════ */
+
+/**
+ * Estado vacío del panel derecho. SVG inline con líneas orgánicas + CTA.
+ * NO usar imágenes decorativas genéricas — vale más un dibujo inline con
+ * personalidad que un `<Sparkles>` de lucide sin contexto.
+ */
+function EmptyPanel({ onCreate }: { onCreate: () => void }) {
+  const t = useTranslations('panel.services');
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
+      <div className="relative">
+        <svg
+          width="120"
+          height="120"
+          viewBox="0 0 120 120"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true"
+          className="text-brand-600/80"
+        >
+          {/* Círculo suave de fondo */}
+          <circle cx="60" cy="60" r="52" className="fill-brand-50" />
+          {/* Reloj estilizado */}
+          <circle
+            cx="60"
+            cy="60"
+            r="30"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            className="opacity-40"
+          />
+          <path
+            d="M60 42v18l12 8"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+          {/* Marcadores de horas — solo 4 para no saturar */}
+          {[0, 90, 180, 270].map((deg) => {
+            const rad = (deg * Math.PI) / 180;
+            const x1 = 60 + Math.sin(rad) * 26;
+            const y1 = 60 - Math.cos(rad) * 26;
+            const x2 = 60 + Math.sin(rad) * 30;
+            const y2 = 60 - Math.cos(rad) * 30;
+            return (
+              <line
+                key={deg}
+                x1={x1}
+                y1={y1}
+                x2={x2}
+                y2={y2}
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                className="opacity-50"
+              />
+            );
+          })}
+          {/* Sparkle decorativo */}
+          <path
+            d="M96 32l1.5 4 4 1.5-4 1.5-1.5 4-1.5-4-4-1.5 4-1.5z"
+            className="fill-amber-400"
+          />
+          <path
+            d="M22 88l1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1z"
+            className="fill-amber-400"
+          />
+        </svg>
+      </div>
+      <div className="max-w-xs space-y-1.5">
+        <h2 className="text-base font-semibold tracking-tight text-foreground">
+          {t('empty.title')}
+        </h2>
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          {t('empty.description')}
+        </p>
+      </div>
+      <Button onClick={onCreate} className="mt-2 gap-1.5">
+        <Plus className="h-4 w-4" aria-hidden="true" />
+        {t('empty.cta')}
+      </Button>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ *                            SERVICE FORM
+ * ═══════════════════════════════════════════════════════════════════ */
+
+/**
+ * Form inline (no modal). Header con nombre + acciones (cerrar/eliminar),
+ * body con los 5 campos y footer sticky con Cancelar + Guardar.
+ *
+ * Comparte la MISMA schema y la MISMA API que el modal anterior. Solo
+ * cambia el chrome — cero cambios en backend contracts.
+ */
+function ServiceForm({
+  mode,
+  professionals,
+  onClose,
+  onSuccess,
+  onDelete,
+}: {
+  mode: { kind: 'create' } | { kind: 'edit'; service: Service };
   professionals: Professional[];
-  mode: 'create' | 'edit';
-  service?: Service | null;
+  onClose: () => void;
+  onSuccess: (saved: Service, wasCreate: boolean) => void;
+  onDelete: (service: Service) => void;
 }) {
   const t = useTranslations('panel.services');
   const qc = useQueryClient();
+  const isEdit = mode.kind === 'edit';
+  const service = isEdit ? mode.service : null;
 
   const {
     register,
@@ -354,7 +519,7 @@ function ServiceFormModal({
     reset,
     setValue,
     watch,
-    formState: { errors, isSubmitting },
+    formState: { errors, isDirty },
   } = useForm<ServiceFormValues>({
     resolver: zodResolver(serviceSchema),
     defaultValues: {
@@ -366,7 +531,21 @@ function ServiceFormModal({
     },
   });
 
-  // Reset defaults al abrir con otro `service`.
+  // Re-reset cuando cambia el servicio (por si React reusa la instancia — el
+  // `key` en el padre debería evitarlo pero es defensa en profundidad).
+  useEffect(() => {
+    reset({
+      name: service?.name ?? '',
+      durationMin: service?.durationMin ?? 30,
+      bufferMin: service?.bufferMin ?? 0,
+      priceCents: service?.priceCents ?? undefined,
+      professionalIds: service?.professionals.map((p) => p.id) ?? [],
+    });
+    // Sólo reset al cambiar el servicio identificado por id — evita re-resets
+    // en cada render y perdida de estado que el user está tipeando.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [service?.id]);
+
   const selected = watch('professionalIds') ?? [];
 
   function toggleProfessional(id: string) {
@@ -374,20 +553,16 @@ function ServiceFormModal({
       setValue(
         'professionalIds',
         selected.filter((p) => p !== id),
+        { shouldDirty: true },
       );
     } else {
-      setValue('professionalIds', [...selected, id]);
+      setValue('professionalIds', [...selected, id], { shouldDirty: true });
     }
   }
 
-  /*
-   * Una sola mutation para create/edit — el path y método se resuelven en el
-   * mutationFn a partir del `mode` + `service.id` capturados por closure. Es
-   * más simple que dos useMutation separados y comparte el mismo onSuccess.
-   */
   const saveMutation = useMutation({
     mutationFn: async (payload: Record<string, unknown>) => {
-      if (mode === 'create') {
+      if (!isEdit) {
         return apiMutation<Service, Record<string, unknown>>(
           '/api/services',
           'POST',
@@ -400,11 +575,10 @@ function ServiceFormModal({
         payload,
       );
     },
-    onSuccess: () => {
+    onSuccess: (saved) => {
       toast.success(t('saved'));
-      reset();
-      onClose();
       void qc.invalidateQueries({ queryKey: queryKeys.services });
+      onSuccess(saved, !isEdit);
     },
     onError: () => {
       toast.error(t('saveFailed'));
@@ -421,101 +595,214 @@ function ServiceFormModal({
         : {}),
       professionalIds: values.professionalIds,
     };
-    await saveMutation.mutateAsync(payload).catch(() => {
-      // el onError ya toasted; swallow para no romper el handleSubmit
-    });
+    await saveMutation.mutateAsync(payload).catch(() => undefined);
   }
 
+  const busy = saveMutation.isPending;
+
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
-            {mode === 'create' ? t('newTitle') : t('editTitle')}
-          </DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-3" noValidate>
-        <div className="space-y-1">
+    <form
+      onSubmit={handleSubmit(onSubmit)}
+      className="flex h-full min-h-0 flex-col"
+      noValidate
+    >
+      {/* Header sticky */}
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border/60 px-5 py-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            {isEdit ? t('editTitle') : t('newTitle')}
+          </p>
+          <h2 className="truncate text-base font-semibold text-foreground">
+            {isEdit ? service!.name : t('newSubtitle')}
+          </h2>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {isEdit ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => onDelete(service!)}
+              aria-label={t('delete')}
+              disabled={busy}
+            >
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={onClose}
+            aria-label={t('close')}
+            disabled={busy}
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        </div>
+      </header>
+
+      {/* Body scrollable */}
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+        {/* Nombre */}
+        <div className="space-y-1.5">
           <Label htmlFor="svc-name">{t('fields.name')}</Label>
-          <Input id="svc-name" {...register('name')} />
+          <Input
+            id="svc-name"
+            {...register('name')}
+            disabled={busy}
+            placeholder={t('placeholders.name')}
+          />
           {errors.name ? (
-            <p className="text-xs text-red-600">{t('errors.required')}</p>
+            <p className="text-xs text-destructive">{t('errors.required')}</p>
           ) : null}
         </div>
+
+        {/* Duración + Buffer */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label htmlFor="svc-dur">{t('fields.duration')} (min)</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="svc-dur" className="flex items-center gap-1.5">
+              <Clock className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+              {t('fields.duration')}{' '}
+              <span className="text-xs text-muted-foreground">(min)</span>
+            </Label>
             <Input
               id="svc-dur"
               type="number"
               min={5}
+              step={5}
               {...register('durationMin')}
+              disabled={busy}
             />
             {errors.durationMin ? (
-              <p className="text-xs text-red-600">{t('errors.required')}</p>
+              <p className="text-xs text-destructive">
+                {t('errors.required')}
+              </p>
             ) : null}
           </div>
-          <div className="space-y-1">
-            <Label htmlFor="svc-buf">{t('fields.buffer')} (min)</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="svc-buf">
+              {t('fields.buffer')}{' '}
+              <span className="text-xs text-muted-foreground">(min)</span>
+            </Label>
             <Input
               id="svc-buf"
               type="number"
               min={0}
+              step={5}
               {...register('bufferMin')}
+              disabled={busy}
             />
+            <p className="text-[11px] text-muted-foreground">
+              {t('hints.buffer')}
+            </p>
           </div>
         </div>
-        <div className="space-y-1">
-          <Label htmlFor="svc-price">{t('fields.priceCents')}</Label>
+
+        {/* Precio */}
+        <div className="space-y-1.5">
+          <Label htmlFor="svc-price" className="flex items-center gap-1.5">
+            <DollarSign
+              className="h-3.5 w-3.5 text-muted-foreground"
+              aria-hidden="true"
+            />
+            {t('fields.priceCents')}
+          </Label>
           <Input
             id="svc-price"
             type="number"
             min={0}
             placeholder="1500"
             {...register('priceCents')}
+            disabled={busy}
           />
-          <p className="text-xs text-gray-500">{t('hints.priceCents')}</p>
+          <p className="text-[11px] text-muted-foreground">
+            {t('hints.priceCents')}
+          </p>
         </div>
-        <div className="space-y-1">
-          <Label>{t('fields.professionals')}</Label>
-          <div className="space-y-1 rounded-md border border-gray-200 p-2">
-            {professionals.length === 0 ? (
-              <p className="text-xs text-gray-500">{t('noProfessionals')}</p>
-            ) : (
-              professionals.map((p) => (
-                <label
-                  key={p.id}
-                  className="flex items-center gap-2 text-sm text-gray-700"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selected.includes(p.id)}
-                    onChange={() => toggleProfessional(p.id)}
-                    className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
-                  />
-                  {p.name}
-                </label>
-              ))
-            )}
-          </div>
+
+        {/* Profesionales */}
+        <div className="space-y-1.5">
+          <Label className="flex items-center gap-1.5">
+            <Users
+              className="h-3.5 w-3.5 text-muted-foreground"
+              aria-hidden="true"
+            />
+            {t('fields.professionals')}
+            {selected.length > 0 ? (
+              <span className="ml-auto text-[11px] tabular-nums text-muted-foreground">
+                {t('selectedCount', { n: selected.length })}
+              </span>
+            ) : null}
+          </Label>
+          {professionals.length === 0 ? (
+            <div className="rounded-md border border-dashed border-border p-3 text-center">
+              <p className="text-xs text-muted-foreground">
+                {t('noProfessionals')}
+              </p>
+            </div>
+          ) : (
+            <div className="max-h-48 space-y-0.5 overflow-y-auto rounded-md border border-border p-1">
+              {professionals.map((p) => {
+                const checked = selected.includes(p.id);
+                return (
+                  <label
+                    key={p.id}
+                    className={cn(
+                      'flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors',
+                      checked
+                        ? 'bg-brand-50 text-foreground'
+                        : 'hover:bg-accent hover:text-accent-foreground',
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleProfessional(p.id)}
+                      disabled={busy}
+                      className="h-4 w-4 rounded border-border text-brand-600 focus:ring-brand-500"
+                    />
+                    <span className="flex-1 truncate">{p.name}</span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
         </div>
-        <div className="flex justify-end gap-2 pt-2">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => {
-              reset();
-              onClose();
-            }}
-          >
-            {t('cancel')}
-          </Button>
-          <Button type="submit" disabled={isSubmitting || saveMutation.isPending}>
-            {isSubmitting || saveMutation.isPending ? t('saving') : t('save')}
-          </Button>
-        </div>
-        </form>
-      </DialogContent>
-    </Dialog>
+      </div>
+
+      {/* Footer sticky */}
+      <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-border/60 px-5 py-3">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onClose}
+          disabled={busy}
+        >
+          {t('cancel')}
+        </Button>
+        <Button
+          type="submit"
+          size="sm"
+          disabled={busy || (isEdit && !isDirty)}
+          className="min-w-[100px]"
+        >
+          {busy ? (
+            <>
+              <Sparkles
+                className="mr-1.5 h-3.5 w-3.5 animate-pulse"
+                aria-hidden="true"
+              />
+              {t('saving')}
+            </>
+          ) : (
+            t('save')
+          )}
+        </Button>
+      </footer>
+    </form>
   );
 }

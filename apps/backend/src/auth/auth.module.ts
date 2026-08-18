@@ -41,6 +41,9 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     JwtStrategy,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],
-  exports: [AuthService],
+  // Exportamos `JwtModule` para que `AdminModule` (impersonation, ADR 0014)
+  // pueda inyectar `JwtService` sin duplicar la configuración del secret /
+  // algoritmo. Un único signer = un único punto donde rotar credenciales.
+  exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

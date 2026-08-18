@@ -24,8 +24,14 @@ export class AvailabilityService {
     fromISO: string; // fecha inicio (día)
     days?: number; // cuántos días mirar hacia adelante
     limit?: number; // máximo de slots a devolver
+    /**
+     * Cita a excluir del cálculo de ocupación. Usado por `rescheduleAppointment`
+     * para que la cita que se está moviendo no bloquee su propio slot actual
+     * (ni el nuevo si se está probando el mismo servicio+profesional).
+     */
+    excludeAppointmentId?: string;
   }): Promise<Slot[]> {
-    const { clinicId, serviceId, professionalId } = params;
+    const { clinicId, serviceId, professionalId, excludeAppointmentId } = params;
     const days = params.days ?? 7;
     const limit = params.limit ?? 20;
 
@@ -60,13 +66,16 @@ export class AvailabilityService {
       },
     });
 
-    // Citas ocupadas (no canceladas) del profesional en el rango
+    // Citas ocupadas (no canceladas) del profesional en el rango.
+    // Excluimos la cita que se está reagendando (si aplica) para que su slot
+    // actual no aparezca como "ocupado por sí misma".
     const taken = await this.prisma.appointment.findMany({
       where: {
         professionalId,
         status: { notIn: ['CANCELADA', 'NO_SHOW'] },
         startAt: { lt: rangeEnd.toJSDate() },
         endAt: { gt: rangeStart.toJSDate() },
+        ...(excludeAppointmentId ? { id: { not: excludeAppointmentId } } : {}),
       },
       select: { startAt: true, endAt: true },
     });

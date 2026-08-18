@@ -1,6 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import { Logger } from '@nestjs/common';
+import * as Sentry from '@sentry/nestjs';
 import { Worker, Job } from 'bullmq';
 import { DateTime } from 'luxon';
+import { requestContext } from '../common/logger/request-context';
+import { isSentryEnabled } from '../common/sentry/sentry.config';
 import { PrismaService } from '../prisma/prisma.service';
 import { WahaService } from '../whatsapp/waha.service';
 import { REMINDERS_QUEUE } from './reminders.service';
@@ -20,6 +24,39 @@ export function createRemindersWorker(
   return new Worker(
     REMINDERS_QUEUE,
     async (job: Job) => {
+      // Hidrata el requestContext con datos del producer (populados en
+      // reminders.service.ts al hacer queue.add) — permite que los logs del
+      // job y sus llamadas downstream compartan requestId + clinicId con el
+      // request HTTP que originó el schedule.
+      const store = {
+        requestId: (job.data.requestId as string) ?? randomUUID(),
+        clinicId: (job.data.clinicId as string) ?? undefined,
+      };
+      return await requestContext.run(store, async () => {
+        try {
+          return await handle(job);
+        } catch (err) {
+          if (isSentryEnabled()) {
+            Sentry.captureException(err, {
+              tags: {
+                queue: REMINDERS_QUEUE,
+                jobName: job.name,
+                jobId: String(job.id ?? '?'),
+                attempt: String(job.attemptsMade + 1),
+                ...(store.clinicId ? { clinicId: store.clinicId } : {}),
+              },
+              extra: { requestId: store.requestId, data: job.data },
+            });
+          }
+          // Rethrow para respetar la política de retry de BullMQ.
+          throw err;
+        }
+      });
+    },
+    { connection },
+  );
+
+  async function handle(job: Job): Promise<void> {
       if (job.name === 'send-reminder') {
         const { reminderId } = job.data;
         const reminder = await prisma.reminder.findUnique({
@@ -70,7 +107,5 @@ export function createRemindersWorker(
           // TODO: emitir evento/notificación a la bandeja del panel.
         }
       }
-    },
-    { connection },
-  );
+  }
 }

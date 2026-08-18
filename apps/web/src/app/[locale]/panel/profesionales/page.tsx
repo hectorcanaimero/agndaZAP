@@ -6,6 +6,15 @@ interface Professional {
   id: string;
   name: string;
   active: boolean;
+  email: string | null;
+  phone: string | null;
+  specialty: string | null;
+  bio: string | null;
+  avatarUrl: string | null;
+  licenseNumber: string | null;
+  color: string | null;
+  followUpEnabled: boolean;
+  followUpDelayHours: number;
   services: Array<{ id: string; name: string }>;
 }
 
@@ -29,21 +38,28 @@ export default async function ProfessionalsPage({
     fetcher<ServiceLite[]>('/api/services', { token }),
   ]);
 
+  // Full-height split layout (mismo patrón que agenda/conversaciones/servicios).
   return (
-    <div className="max-w-5xl space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900">{t('title')}</h1>
-        <p className="text-sm text-gray-500">{t('subtitle')}</p>
+    <div className="flex h-full min-h-0 flex-col gap-4">
+      <div className="shrink-0">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          {t('title')}
+        </h1>
+        <p className="text-sm text-muted-foreground">{t('subtitle')}</p>
       </div>
+
       {!profsRes.ok ? (
-        <div className="rounded-md bg-red-50 p-3 text-sm text-red-800">
+        <div className="shrink-0 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
           {t('loadError', { status: profsRes.status })}
         </div>
       ) : null}
-      <ProfessionalsClient
-        professionals={profsRes.ok ? profsRes.data : []}
-        services={servicesRes.ok ? servicesRes.data : []}
-      />
+
+      <div className="min-h-0 flex-1">
+        <ProfessionalsClient
+          professionals={profsRes.ok ? profsRes.data : []}
+          services={servicesRes.ok ? servicesRes.data : []}
+        />
+      </div>
     </div>
   );
 }

@@ -57,9 +57,8 @@ export class BusinessHoursController {
   async create(
     @CurrentUser() user: AuthUser,
     @Body() dto: CreateBusinessHourDto,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     this.assertRange(dto.startMinutes, dto.endMinutes);
     await this.assertProfessionalInClinic(scope.clinicId, dto.professionalId);
     return this.prisma.businessHour.create({
@@ -76,12 +75,11 @@ export class BusinessHoursController {
   @Get()
   async list(
     @CurrentUser() user: AuthUser,
-    @Query('clinicId') clinicIdOverride?: string,
     @Query('professionalId') professionalId?: string,
   ) {
     return this.prisma.businessHour.findMany({
       where: {
-        ...tenantWhere(user, clinicIdOverride),
+        ...tenantWhere(user),
         ...(professionalId ? { professionalId } : {}),
       },
       orderBy: [{ weekday: 'asc' }, { startMinutes: 'asc' }],
@@ -93,9 +91,8 @@ export class BusinessHoursController {
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Body() dto: UpdateBusinessHourDto,
-    @Query('clinicId') clinicIdOverride?: string,
   ) {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     const existing = await this.prisma.businessHour.findFirst({
       where: { id, clinicId: scope.clinicId },
     });
@@ -131,9 +128,8 @@ export class BusinessHoursController {
   async remove(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Query('clinicId') clinicIdOverride?: string,
   ): Promise<void> {
-    const scope = tenantWhere(user, clinicIdOverride);
+    const scope = tenantWhere(user);
     const existing = await this.prisma.businessHour.findFirst({
       where: { id, clinicId: scope.clinicId },
       select: { id: true },

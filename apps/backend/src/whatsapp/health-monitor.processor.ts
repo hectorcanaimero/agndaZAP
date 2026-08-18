@@ -1,5 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { Logger } from '@nestjs/common';
+import * as Sentry from '@sentry/nestjs';
 import { Worker, Job } from 'bullmq';
+import { requestContext } from '../common/logger/request-context';
+import { isSentryEnabled } from '../common/sentry/sentry.config';
 import { WahaHealthMonitor } from './health-monitor.service';
 
 /**
@@ -47,15 +51,30 @@ export function createHealthMonitorWorker(
   return new Worker(
     WAHA_HEALTH_QUEUE,
     async (job: Job) => {
-      if (job.name !== WAHA_HEALTH_JOB) return;
-      try {
-        return await monitor.checkAll();
-      } catch (err) {
-        logger.error(
-          `Job ${job.id} fallo: ${(err as Error).message ?? 'unknown'}`,
-        );
-        throw err;
-      }
+      // Cada tick es un scope aislado — el store solo lleva requestId (uuid
+      // sintético) porque el health-monitor no tiene clinicId ni usuario.
+      // Sirve para correlacionar todos los logs de ese tick en Axiom.
+      return await requestContext.run({ requestId: randomUUID() }, async () => {
+        if (job.name !== WAHA_HEALTH_JOB) return;
+        try {
+          return await monitor.checkAll();
+        } catch (err) {
+          logger.error(
+            `Job ${job.id} fallo: ${(err as Error).message ?? 'unknown'}`,
+          );
+          if (isSentryEnabled()) {
+            Sentry.captureException(err, {
+              tags: {
+                queue: WAHA_HEALTH_QUEUE,
+                jobName: job.name,
+                jobId: String(job.id ?? '?'),
+                attempt: String(job.attemptsMade + 1),
+              },
+            });
+          }
+          throw err;
+        }
+      });
     },
     { connection },
   );

@@ -1,4 +1,4 @@
-# 🗂️ Índice del vault — AgendaZap
+# 🗂️ Índice del vault — Showly
 
 Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 
@@ -12,6 +12,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 ## Piloto (operación y deploy)
 - [[onboarding-clinica|Onboarding de una clínica nueva]] — playbook alta.
 - [[runbook-panel|Runbook del panel]] — día a día de recepción.
+- [[runbook-lanzamiento|Runbook de lanzamiento]] — playbook pre-canary 40 clínicas (2026-08-18).
 - [[smoke-e2e|Smoke E2E]] — checklist pre-demo.
 - [[deploy|Deploy productivo]] — Hetzner + Docker + Caddy.
 
@@ -25,6 +26,23 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[adr/0007-rate-limit-bot|0007 — Rate-limit del bot de WhatsApp (protección LLM budget)]]
 - [[adr/0008-panel-conexion-waha-y-observabilidad|0008 — Panel de conexión WAHA + observabilidad]]
 - [[adr/0009-faq-title-y-markdown-strip|0009 — FAQ: `title` opcional y strip de markdown antes del embedding]]
+- [[adr/0010-lid-y-contacto-whatsapp|0010 — WhatsApp LID, identidad del contacto y perfil visible]]
+- [[adr/0011-perfil-profesional-e-ical-feed|0011 — Perfil de Profesional e iCal feed para sincronización con calendar]]
+- [[adr/0012-feedback-post-atencion|0012 — Feedback post-atención (satisfacción) por WhatsApp]]
+- [[adr/0013-rename-a-showly|0013 — Rebrand de "gochat" / "AgendaZap" a "Showly"]]
+- [[adr/0014-superadmin-como-operador-saas|0014 — SUPERADMIN como operador del SaaS (impersonation + auditoría)]]
+- [[adr/0015-pino-axiom-sentry|0015 — Observabilidad: Pino + Axiom + Sentry]]
+- [[adr/0016-admin-audit-impersonation-trail|0016 — Trail estructurado de mutations bajo impersonation]]
+- [[adr/0017-webhook-hmac-cookie-hardening|0017 — HMAC del webhook WAHA + hardening de cookies]]
+
+## Specs de sprint (implementación)
+- [[specs/2026-08-18-observabilidad-pino-axiom-sentry|2026-08-18 — Spec Observabilidad (Pino + Axiom + Sentry) — Sprint 40 clínicas día 1-2]]
+- [[specs/2026-08-19-health-checks-uptime|2026-08-19 — Spec Health checks + Uptime (BetterStack) — Sprint día 3]]
+- [[specs/2026-08-20-admin-audit-impersonation|2026-08-20 — Spec AdminAudit + trail de impersonation — Sprint día 4]]
+- [[specs/2026-08-21-hmac-webhook-cookies|2026-08-21 — Spec HMAC webhook + hardening cookies — Sprint día 5]]
+
+## Planes de implementación
+- [[plans/2026-08-18-observabilidad-plan|2026-08-18 — Plan Observabilidad (16h, 21 tasks, 2 días)]]
 
 ## Notas y descubrimientos
 - [[notas/2026-08-08-prisma-pgvector-y-env|2026-08-08 — Prisma + pgvector y carga de `.env` en el monorepo]]
@@ -37,6 +55,12 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[notas/2026-08-09-panel-backend-cruds|2026-08-09 — Panel Backend: TenantContext + CRUDs (Etapa 1)]]
 - [[notas/2026-08-09-rag-faq|2026-08-09 — Bloque RAG FAQ (KnowledgeModule)]]
 - [[notas/2026-08-09-f5-rediseno-shadcn-recharts|2026-08-09 — F5 rediseño shadcn + Recharts (4 pantallas grandes)]]
+- [[notas/2026-08-10-nombre-gochat-y-logo|2026-08-10 — Nombre `gochat` para la marca pública + logo]]
+- [[notas/2026-08-11-brand-kit-showly|2026-08-11 — Brand kit de Showly (logo, paleta, favicon)]]
+- [[notas/2026-08-11-onboarding-wizard|2026-08-11 — Plan del wizard de onboarding first-time para CLINIC_ADMIN]]
+- [[notas/2026-08-14-impersonation-flow|2026-08-14 — Impersonation flow: cookies, redirects y edge cases]]
+- [[notas/2026-08-19-observabilidad-implementada|2026-08-19 — Observabilidad Pino+Axiom+Sentry implementada + smoke tests]]
+- [[notas/2026-08-18-sprint-completo-40-clinicas|2026-08-18 — Sprint completo pre-lanzamiento 40 clínicas (CIERRE)]]
 
 ## Flujo de trabajo
 - [[skills-y-flujo|Skills, agentes y flujo de trabajo]]

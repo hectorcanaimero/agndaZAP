@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, setRequestLocale } from 'next-intl/server';
+import { Inter } from 'next/font/google';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { routing } from '@/i18n/routing';
@@ -8,18 +9,34 @@ import { QueryProvider } from '@/lib/query-provider';
 import { Toaster } from '@/components/ui/sonner';
 import '../globals.css';
 
+// Inter — única fuente del sistema: body, UI, headings landing y panel.
+// display: 'swap' evita el flash invisible mientras carga. Fraunces se sacó
+// en el batch 2 (ver docs/notas): el serif no jugaba con el brand navy/teal
+// y sumaba peso al bundle sin retorno visual claro.
+const inter = Inter({
+  subsets: ['latin', 'latin-ext'],
+  variable: '--font-inter',
+  display: 'swap',
+});
+
 export const metadata: Metadata = {
-  title: 'AgendaZap',
+  title: 'Showly',
   description: 'Agendá tu cita en un minuto.',
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.ico', sizes: 'any' },
+    ],
+    apple: '/apple-touch-icon.png',
+  },
+  openGraph: {
+    title: 'Showly',
+    description: 'Agendá tu cita en un minuto.',
+    images: ['/og-image.png'],
+    type: 'website',
+  },
 };
 
-/**
- * Layout por locale. Provee `<html lang>` correcto según el segmento `[locale]`
- * y monta el `NextIntlClientProvider` para que los client components accedan
- * a `useTranslations`.
- *
- * Static params: pre-generamos los locales conocidos para SSG cuando aplique.
- */
 export function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }));
 }
@@ -33,26 +50,17 @@ export default async function LocaleLayout({
 }) {
   const { locale } = await params;
 
-  // Validamos que el locale sea uno soportado; caso contrario 404.
   if (!routing.locales.includes(locale as 'es' | 'pt')) {
     notFound();
   }
 
-  // Habilita features estáticas para el request actual.
   setRequestLocale(locale);
 
-  // Carga los mensajes del locale para hidratar al cliente.
   const messages = await getMessages();
 
   return (
-    <html lang={locale}>
-      <body className="antialiased">
-        {/*
-          Orden: QueryProvider (más externo) → NextIntlClientProvider → children.
-          Razón: hooks tipo `useSomethingQuery` pueden querer leer traducciones
-          en su `select`/`onError`; con este orden ambas capas ven al provider
-          hermano si lo necesitan, y los devtools de Query envuelven todo.
-        */}
+    <html lang={locale} className={inter.variable} suppressHydrationWarning>
+      <body className="antialiased font-sans" suppressHydrationWarning>
         <QueryProvider>
           <NextIntlClientProvider messages={messages} locale={locale}>
             {children}

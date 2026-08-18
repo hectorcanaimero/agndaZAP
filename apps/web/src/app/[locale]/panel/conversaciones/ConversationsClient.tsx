@@ -40,7 +40,11 @@ type ConvState = 'BOT' | 'NEEDS_HUMAN' | 'HUMAN';
 export interface ConversationListItem {
   id: string;
   chatId: string;
-  phone: string;
+  // `phone` puede ser null cuando el contacto llegó con LID (privacidad WA).
+  phone: string | null;
+  lid: string | null;
+  contactName: string | null;
+  avatarUrl: string | null;
   state: ConvState;
   updatedAt: string;
   createdAt: string;
@@ -155,7 +159,8 @@ export function ConversationsClient({
     if (!q) return convos;
     return convos.filter(
       (c) =>
-        c.phone.toLowerCase().includes(q) ||
+        (c.contactName ?? '').toLowerCase().includes(q) ||
+        (c.phone ?? '').toLowerCase().includes(q) ||
         (c.lastMessage?.body ?? '').toLowerCase().includes(q),
     );
   }, [convos, search]);
@@ -505,12 +510,24 @@ export function ConversationsClient({
                   <ArrowLeft className="h-4 w-4" aria-hidden="true" />
                 </button>
               ) : null}
-              <ContactAvatar phone={detail.phone} state={detail.state} size="lg" />
+              <ContactAvatar
+                phone={detail.phone}
+                contactName={detail.contactName}
+                avatarUrl={detail.avatarUrl}
+                state={detail.state}
+                size="lg"
+              />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-base font-semibold text-foreground">
-                  {formatPhone(detail.phone)}
+                  {displayName(detail)}
                 </p>
                 <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                  {detail.phone && detail.contactName ? (
+                    <>
+                      <span className="tabular-nums">{formatPhone(detail.phone)}</span>
+                      <span aria-hidden="true">·</span>
+                    </>
+                  ) : null}
                   <StateDot state={detail.state} />
                   <span>{t(`state.${detail.state}`)}</span>
                   <span aria-hidden="true">·</span>
@@ -686,11 +703,21 @@ function ConversationListRow({
             className="absolute left-0 top-2.5 h-8 w-0.5 rounded-r-full bg-brand-600"
           />
         ) : null}
-        <ContactAvatar phone={conv.phone} state={conv.state} size="md" />
+        <ContactAvatar
+          phone={conv.phone}
+          contactName={conv.contactName}
+          avatarUrl={conv.avatarUrl}
+          state={conv.state}
+          size="md"
+        />
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-2">
-            <p className="truncate text-sm font-medium tabular-nums text-foreground">
-              {formatPhoneShort(conv.phone)}
+            <p className="truncate text-sm font-medium text-foreground">
+              {conv.contactName?.trim()
+                ? conv.contactName
+                : conv.phone
+                  ? formatPhoneShort(conv.phone)
+                  : 'Contacto WhatsApp'}
             </p>
             {time ? (
               <span className="shrink-0 text-[10.5px] tabular-nums text-muted-foreground">
@@ -722,24 +749,43 @@ function ConversationListRow({
 
 function ContactAvatar({
   phone,
+  contactName,
+  avatarUrl,
   state,
   size,
 }: {
-  phone: string;
+  phone: string | null;
+  contactName: string | null;
+  avatarUrl: string | null;
   state: ConvState;
   size: 'md' | 'lg';
 }) {
-  const initials = getPhoneInitials(phone);
+  const initials = getContactInitials({ contactName, phone });
   const dim = size === 'lg' ? 'h-10 w-10 text-xs' : 'h-9 w-9 text-[11px]';
+  // Las URLs de perfil de WhatsApp expiran (~48h) y pueden dar 403. Usamos
+  // <img> nativo + onError para caer a iniciales sin romper el layout.
+  const [imgFailed, setImgFailed] = useState(false);
+  const showImg = avatarUrl && !imgFailed;
   return (
     <div className="relative shrink-0">
       <div
         className={cn(
-          'flex items-center justify-center rounded-full bg-muted font-semibold tabular-nums text-foreground',
+          'flex items-center justify-center overflow-hidden rounded-full bg-muted font-semibold tabular-nums text-foreground',
           dim,
         )}
       >
-        {initials}
+        {showImg ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={avatarUrl}
+            alt=""
+            className="h-full w-full object-cover"
+            referrerPolicy="no-referrer"
+            onError={() => setImgFailed(true)}
+          />
+        ) : (
+          initials
+        )}
       </div>
       <StateDot
         state={state}
@@ -1000,7 +1046,9 @@ function ContactPanel({
     hour: '2-digit',
     minute: '2-digit',
   });
-  const waPhone = detail.phone.replace(/[^0-9]/g, '');
+  // wa.me solo funciona con phone real. Cuando el contacto llegó con LID
+  // (@lid), no lo conocemos → escondemos el botón de "Abrir en WhatsApp".
+  const waPhone = detail.phone ? detail.phone.replace(/[^0-9]/g, '') : null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -1016,38 +1064,44 @@ function ContactPanel({
           <div className="flex items-center gap-3">
             <ContactAvatar
               phone={detail.phone}
+              contactName={detail.contactName}
+              avatarUrl={detail.avatarUrl}
               state={detail.state}
               size="lg"
             />
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-foreground">
-                {formatPhone(detail.phone)}
+                {displayName(detail)}
               </p>
               <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
                 <UserRound className="h-3 w-3" aria-hidden="true" />
-                {t('unknownContact')}
+                {detail.phone
+                  ? formatPhone(detail.phone)
+                  : t('unknownContact')}
               </p>
             </div>
           </div>
-          <Button
-            asChild
-            variant="outline"
-            size="sm"
-            className="mt-3 w-full justify-center gap-1.5"
-          >
-            <a
-              href={`https://wa.me/${waPhone}`}
-              target="_blank"
-              rel="noopener noreferrer"
+          {waPhone ? (
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="mt-3 w-full justify-center gap-1.5"
             >
-              <Phone className="h-3.5 w-3.5" aria-hidden="true" />
-              {t('openInWhatsApp')}
-              <ExternalLink
-                className="h-3 w-3 opacity-60"
-                aria-hidden="true"
-              />
-            </a>
-          </Button>
+              <a
+                href={`https://wa.me/${waPhone}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Phone className="h-3.5 w-3.5" aria-hidden="true" />
+                {t('openInWhatsApp')}
+                <ExternalLink
+                  className="h-3 w-3 opacity-60"
+                  aria-hidden="true"
+                />
+              </a>
+            </Button>
+          ) : null}
         </section>
 
         {/* Estado */}
@@ -1139,11 +1193,43 @@ function ContactPanelEmpty({
 /* ═════════════════════════════════════════════════════════════════════════ */
 
 /**
+ * Nombre visible para un contacto. Preferencia:
+ *   1) pushName de WhatsApp (contactName)
+ *   2) phone formateado (si lo conocemos)
+ *   3) fallback genérico "Contacto WhatsApp"
+ * Nunca devolvemos el LID pelado al usuario (número random sin significado).
+ */
+function displayName(conv: {
+  contactName: string | null;
+  phone: string | null;
+}): string {
+  if (conv.contactName && conv.contactName.trim()) return conv.contactName;
+  if (conv.phone) return formatPhone(conv.phone);
+  return 'Contacto WhatsApp';
+}
+
+/** Iniciales para el avatar: del nombre si existe, sino de los últimos 2 del phone. */
+function getContactInitials(conv: {
+  contactName: string | null;
+  phone: string | null;
+}): string {
+  const name = conv.contactName?.trim();
+  if (name) {
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  }
+  if (conv.phone) return getPhoneInitials(conv.phone);
+  return '··';
+}
+
+/**
  * Formatea "5491135551234" → "+54 9 11 3555 1234" (fallback: agrega + adelante
  * si empieza con dígito). No pretende ser libphonenumber-perfect — solo mejorar
  * legibilidad. Cubre AR (54 9) y BR (55) que son las clínicas objetivo.
  */
-function formatPhone(raw: string): string {
+function formatPhone(raw: string | null | undefined): string {
+  if (!raw) return '—';
   const digits = raw.replace(/[^0-9]/g, '');
   if (digits.length < 8) return raw;
   if (digits.startsWith('549') && digits.length >= 12) {
@@ -1157,14 +1243,16 @@ function formatPhone(raw: string): string {
   return `+${digits}`;
 }
 
-function formatPhoneShort(raw: string): string {
+function formatPhoneShort(raw: string | null | undefined): string {
+  if (!raw) return '—';
   const d = raw.replace(/[^0-9]/g, '');
   if (d.length < 8) return raw;
   if (d.length >= 12) return `+${d.slice(0, 2)} … ${d.slice(-6)}`;
   return `+${d}`;
 }
 
-function getPhoneInitials(raw: string): string {
+function getPhoneInitials(raw: string | null | undefined): string {
+  if (!raw) return '··';
   const d = raw.replace(/[^0-9]/g, '');
   return d.slice(-2) || '··';
 }

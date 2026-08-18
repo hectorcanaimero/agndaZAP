@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-hidden="true">
+  <!-- Placeholder Batch 3 — mockup ilustrado de un chat de WhatsApp entrando.
+       Estilo flat, brand navy #0F2A4A + teal #28D9B9 + WhatsApp green #25D366.
+       Reemplaza a la imagen generada con Flux Schnell que tenía texto ilegible. -->
+  <defs>
+    <linearGradient id="bg1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#132F52" />
+      <stop offset="1" stop-color="#0F2A4A" />
+    </linearGradient>
+    <linearGradient id="phone1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F8FAFC" />
+      <stop offset="1" stop-color="#EEF2F6" />
+    </linearGradient>
+    <filter id="soft1" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="6" />
+    </filter>
+  </defs>
+
+  <!-- Fondo navy con blobs teal -->
+  <rect width="800" height="600" fill="url(#bg1)" />
+  <circle cx="130" cy="120" r="120" fill="#28D9B9" opacity="0.14" filter="url(#soft1)" />
+  <circle cx="700" cy="500" r="150" fill="#28D9B9" opacity="0.10" filter="url(#soft1)" />
+
+  <!-- Teléfono -->
+  <g transform="translate(230 60)">
+    <rect x="0" y="0" width="340" height="480" rx="42" ry="42" fill="#0B2038" />
+    <rect x="10" y="10" width="320" height="460" rx="34" ry="34" fill="url(#phone1)" />
+
+    <!-- Notch -->
+    <rect x="130" y="18" width="80" height="18" rx="9" ry="9" fill="#0B2038" />
+
+    <!-- Header WhatsApp -->
+    <rect x="10" y="46" width="320" height="72" fill="#075E54" />
+    <circle cx="60" cy="82" r="22" fill="#28D9B9" />
+    <path d="M50 82 q10 -12 20 0 q-10 12 -20 0Z" fill="#0F2A4A" opacity="0.55" />
+    <rect x="94" y="70" width="140" height="10" rx="5" fill="#FFFFFF" opacity="0.95" />
+    <rect x="94" y="88" width="90" height="8" rx="4" fill="#FFFFFF" opacity="0.55" />
+
+    <!-- Área del chat -->
+    <rect x="10" y="118" width="320" height="342" fill="#ECE5DD" opacity="0.55" />
+
+    <!-- Mensaje incoming (paciente) -->
+    <g transform="translate(34 168)">
+      <rect x="0" y="0" width="200" height="66" rx="14" fill="#FFFFFF" />
+      <rect x="14" y="16" width="170" height="8" rx="4" fill="#0F2A4A" opacity="0.85" />
+      <rect x="14" y="32" width="130" height="8" rx="4" fill="#0F2A4A" opacity="0.65" />
+      <rect x="14" y="48" width="90" height="6" rx="3" fill="#0F2A4A" opacity="0.4" />
+      <path d="M0 4 L-8 -2 L0 -4Z" fill="#FFFFFF" />
+    </g>
+
+    <!-- Mensaje outgoing (clínica) -->
+    <g transform="translate(112 262)">
+      <rect x="0" y="0" width="196" height="62" rx="14" fill="#DCF8C6" />
+      <rect x="14" y="16" width="150" height="8" rx="4" fill="#0F2A4A" opacity="0.75" />
+      <rect x="14" y="32" width="110" height="8" rx="4" fill="#0F2A4A" opacity="0.55" />
+      <path d="M170 44 l6 6 l14 -14" stroke="#25D366" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+      <path d="M196 4 L204 -2 L196 -4Z" fill="#DCF8C6" />
+    </g>
+
+    <!-- Indicador escribiendo -->
+    <g transform="translate(34 352)">
+      <rect x="0" y="0" width="90" height="34" rx="17" fill="#FFFFFF" />
+      <circle cx="24" cy="17" r="4" fill="#25D366" />
+      <circle cx="42" cy="17" r="4" fill="#25D366" opacity="0.6" />
+      <circle cx="60" cy="17" r="4" fill="#25D366" opacity="0.3" />
+    </g>
+
+    <!-- Barra de input -->
+    <rect x="10" y="422" width="320" height="38" rx="0" fill="#F0F0F0" />
+    <rect x="24" y="430" width="240" height="22" rx="11" fill="#FFFFFF" stroke="#DDE2E6" stroke-width="1" />
+    <circle cx="298" cy="441" r="14" fill="#25D366" />
+    <path d="M292 441 l4 4 l8 -8" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+  </g>
+
+  <!-- Etiqueta de canal (chip decorativo) -->
+  <g transform="translate(52 520)">
+    <rect x="0" y="0" width="128" height="34" rx="17" fill="#25D366" opacity="0.16" />
+    <circle cx="20" cy="17" r="6" fill="#25D366" />
+    <rect x="34" y="12" width="80" height="10" rx="5" fill="#28D9B9" opacity="0.9" />
+  </g>
+</svg>

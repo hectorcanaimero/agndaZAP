@@ -1,4 +1,4 @@
-# CLAUDE.md — AgendaZap
+# CLAUDE.md — Showly
 
 Contexto para Claude Code al trabajar en este repo.
 
@@ -26,13 +26,13 @@ Reglas:
 
 ## Monorepo (pnpm workspace)
 ```
-agendazap/
+showly/
 ├── apps/
-│   ├── backend/   NestJS 10 + Prisma + BullMQ  (@agendazap/backend)
-│   ├── web/       Next.js 15: panel admin + página pública /agendar/[clinicSlug]  (@agendazap/web)
+│   ├── backend/   NestJS 10 + Prisma + BullMQ  (@showly/backend)
+│   ├── web/       Next.js 15: panel admin + página pública /agendar/[clinicSlug]  (@showly/web)
 │   └── mobile/    Flutter (app del profesional)
 ├── packages/
-│   └── shared/    tipos TS compartidos backend↔web  (@agendazap/shared)
+│   └── shared/    tipos TS compartidos backend↔web  (@showly/shared)
 ├── docs/          vault Obsidian: PRD, SPEC, ARCHITECTURE, INDEX, adr/, notas/, bitacora
 ├── docker-compose.yml   db(pgvector)+redis+waha+backend
 ├── pnpm-workspace.yaml · package.json

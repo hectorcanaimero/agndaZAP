@@ -9,6 +9,7 @@ import { Clinic, Conversation, Service } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import Redis from 'ioredis';
 import { DateTime } from 'luxon';
+import { FollowUpsService } from '../follow-ups/follow-ups.service';
 import { KnowledgeService } from '../knowledge/knowledge.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { REDIS_CLIENT } from '../public/rate-limit.guard';
@@ -24,7 +25,12 @@ type FlowStep =
   | 'ASK_PROFESSIONAL'
   | 'ASK_SLOT'
   | 'ASK_NAME'
-  | 'CONFIRM';
+  | 'CONFIRM'
+  // Sub-FSM de follow-up post-atención (satisfacción). El processor deja la
+  // conversation en AWAITING_NPS_SCORE al mandar el prompt; el paciente
+  // responde 1-5, opcionalmente sigue con un comentario. Ver ADR 0012.
+  | 'AWAITING_NPS_SCORE'
+  | 'AWAITING_NPS_COMMENT';
 
 /** Datos acumulados durante la FSM, persistidos en Conversation.flowData. */
 interface FlowData {
@@ -37,6 +43,10 @@ interface FlowData {
   choices?: Array<{ id: string; label: string }>;
   /** Nombre del paciente capturado en ASK_NAME (solo si no existía en DB). */
   patientName?: string;
+  /** Sub-FSM de feedback: id de la cita que estamos puntuando. */
+  feedbackAppointmentId?: string;
+  /** Sub-FSM de feedback: score ya capturado, esperando comentario opcional. */
+  feedbackScore?: number;
 }
 
 /**
@@ -62,6 +72,7 @@ export class BotService {
     private readonly prisma: PrismaService,
     private readonly waha: WahaService,
     private readonly reminders: RemindersService,
+    private readonly followUps: FollowUpsService,
     private readonly intent: IntentService,
     private readonly availability: AvailabilityService,
     private readonly scheduling: SchedulingService,
@@ -79,13 +90,152 @@ export class BotService {
     return createHash('sha256').update(chatId).digest('hex').slice(0, 8);
   }
 
+  /**
+   * Actualiza `avatarUrl` + `avatarFetchedAt` de una conversación en background.
+   * Silencia errores (WAHA caido, contacto sin foto) — el fallback en frontend
+   * son las iniciales del contactName / phone.
+   */
+  private async refreshAvatar(
+    convoId: string,
+    wahaSession: string,
+    chatId: string,
+  ): Promise<void> {
+    try {
+      const url = await this.waha.getContactAvatar(wahaSession, chatId);
+      await this.prisma.conversation.update({
+        where: { id: convoId },
+        data: {
+          avatarUrl: url,
+          avatarFetchedAt: DateTime.now().toJSDate(),
+        },
+      });
+    } catch (e) {
+      this.logger.warn(
+        `refreshAvatar falló convoId=${convoId}: ${(e as Error).message}`,
+      );
+    }
+  }
+
+  /**
+   * Pools de mensajes default cuando `clinic.bot*` es NULL. Cada `key`
+   * mapea a un ARRAY de variantes; `pickVariant()` elige una al azar en
+   * cada respuesta.
+   *
+   * WHY pool: WhatsApp/Meta detecta bots no oficiales por patrones como
+   * "mismo string palabra por palabra en N chats distintos". Rotar
+   * variantes reduce esa huella. El costo es mínimo (~4 strings por key)
+   * y sin migración — los overrides tenant (`clinic.botGreeting`, etc.)
+   * siguen siendo single-line y ganan sobre el pool.
+   *
+   * Placeholders soportados: `{clinicName}`, `{patientName}`. Para
+   * `confirmAppointment` además: `{status}`, `{when}`, `{address}`.
+   */
+  private static readonly DEFAULT_BOT_MESSAGES = {
+    greeting: [
+      '¡Hola! Soy el asistente de {clinicName}. Puedo ayudarte a *agendar*, *reagendar* o *cancelar* una cita, o responder dudas. ¿Qué necesitás?',
+      'Hola 👋 Estoy acá para ayudarte con tus citas en {clinicName}. Podés *agendar*, *reagendar*, *cancelar* o preguntarme algo. ¿Cómo te ayudo?',
+      '¡Hola! Bienvenida a {clinicName}. Escribime *agendar* para reservar una cita, *reagendar* para moverla o *cancelar*. También respondo dudas 🙂',
+      '¡Hola! Gracias por escribir a {clinicName}. ¿Querés *agendar*, *reagendar* o *cancelar* una cita? También podés preguntarme lo que necesites.',
+    ],
+    fallback: [
+      'Puedo ayudarte a *agendar*, *reagendar* o *cancelar* una cita, o responder dudas. ¿Qué necesitás?',
+      'Contame qué necesitás: puedo *agendar*, *reagendar* o *cancelar* una cita, o responder dudas.',
+      'Estoy para ayudarte con tu cita. Podés escribir *agendar*, *reagendar*, *cancelar*, o preguntarme algo.',
+    ],
+    handoff: [
+      'Enseguida te atiende una persona del equipo. 🙏',
+      'Te derivo con alguien del equipo, enseguida te responden. 🙏',
+    ],
+    confirmAppointment: [
+      '¡Listo! Tu cita quedó {status} para el {when} en {clinicName}.{address}\n\nSi necesitás cambiarla, escribime *reagendar* o *cancelar*.',
+      '¡Perfecto! Reservé tu cita para el {when} en {clinicName}.{address}\n\nCualquier cambio, escribime *reagendar* o *cancelar*.',
+      '✅ Tu cita quedó {status} — {when} en {clinicName}.{address}\n\nSi necesitás moverla, escribime *reagendar*; si no vas a poder, *cancelar*.',
+    ],
+  } as const;
+
+  /** Regex para detectar saludos → dispara `greeting` en vez de fallback. */
+  private static readonly GREETING_REGEX =
+    /^(hola|holis|holaa+|buenas|buenos d[ií]as|buenas tardes|buenas noches|hey|hi|hello)\b/i;
+
+  /**
+   * Elige una variante al azar de un array. `Math.random` es suficiente:
+   * el objetivo es "no siempre el mismo string", no criptografía. Un
+   * PRNG sesgado no tiene impacto de seguridad acá.
+   */
+  private pickVariant<T>(variants: readonly T[]): T {
+    return variants[Math.floor(Math.random() * variants.length)]!;
+  }
+
+  /**
+   * Resuelve el mensaje del bot para una clínica, aplicando el custom si
+   * existe o eligiendo una variante random del pool default. Reemplaza
+   * placeholders `{clinicName}` y `{patientName}`.
+   *
+   * Contrato del override: si `clinic.botGreeting` (u otro) está seteado,
+   * se usa TAL CUAL — es una única cadena, no rota. Motivo: mantener la
+   * migración fuera de scope y respetar el mental model del owner
+   * (setea un mensaje, ve ese mensaje). Si en el futuro se quiere pool
+   * custom, el campo pasa a `Json` con una migración.
+   */
+  private resolveBotMessage(
+    clinic: Pick<
+      Clinic,
+      'name' | 'botGreeting' | 'botFallback' | 'botHandoffMsg'
+    >,
+    key: 'greeting' | 'fallback' | 'handoff',
+    ctx?: { patientName?: string | null },
+  ): string {
+    const customMap = {
+      greeting: clinic.botGreeting,
+      fallback: clinic.botFallback,
+      handoff: clinic.botHandoffMsg,
+    } as const;
+    const template =
+      customMap[key] || this.pickVariant(BotService.DEFAULT_BOT_MESSAGES[key]);
+    return template
+      .replace(/\{clinicName\}/g, clinic.name)
+      .replace(/\{patientName\}/g, ctx?.patientName ?? '');
+  }
+
+  /**
+   * Arma el mensaje de confirmación post-agendamiento eligiendo una
+   * variante random del pool `confirmAppointment`. Placeholders:
+   *  - `{status}`      → "confirmada" | "agendada"
+   *  - `{when}`        → fecha formateada (Luxon)
+   *  - `{clinicName}`  → nombre de la clínica
+   *  - `{address}`     → línea "\nDirección: X" (o string vacío)
+   *
+   * Sin custom-per-clinic todavía: si aparece la necesidad se agrega un
+   * campo `Clinic.botConfirm` en una migración aparte. Ver deuda técnica.
+   */
+  private resolveConfirmMessage(input: {
+    status: string;
+    when: string;
+    clinicName: string;
+    address: string;
+  }): string {
+    const template = this.pickVariant(
+      BotService.DEFAULT_BOT_MESSAGES.confirmAppointment,
+    );
+    return template
+      .replace(/\{status\}/g, input.status)
+      .replace(/\{when\}/g, input.when)
+      .replace(/\{clinicName\}/g, input.clinicName)
+      .replace(/\{address\}/g, input.address);
+  }
+
   async handleIncoming(input: {
     clinicId: string;
     chatId: string;
-    phone: string;
+    /** E.164 sin sufijo, o null si `chatId` es un @lid (no conocemos el phone). */
+    phone: string | null;
+    /** LID de WhatsApp sin sufijo, si el chatId venia como @lid. */
+    lid?: string | null;
+    /** pushName visible del contacto (puede cambiar entre mensajes). */
+    contactName?: string | null;
     text: string;
   }): Promise<void> {
-    const { clinicId, chatId, phone, text } = input;
+    const { clinicId, chatId, phone, lid, contactName, text } = input;
 
     // ── Rate-limit por conversación + circuit breaker global (ADR 0007) ──
     // Fixed-window por minuto en `(clinicId, chatId)`. Silencio total al superar:
@@ -125,14 +275,34 @@ export class BotService {
       where: { id: clinicId },
     });
 
+    // Upsert de la conversación. En update solo tocamos `contactName` si vino
+    // uno nuevo (WhatsApp permite cambiarlo) — evita clobbears innecesarios.
     const convo = await this.prisma.conversation.upsert({
       where: { clinicId_chatId: { clinicId, chatId } },
-      create: { clinicId, chatId, phone, state: 'BOT' },
-      update: {},
+      create: {
+        clinicId,
+        chatId,
+        phone,
+        lid,
+        contactName,
+        state: 'BOT',
+      },
+      update: contactName ? { contactName } : {},
     });
     await this.prisma.message.create({
       data: { conversationId: convo.id, direction: 'IN', body: text },
     });
+
+    // Avatar: refresh en background si nunca lo trajimos o si expiró (>24h).
+    // Fire-and-forget: no bloqueamos el pipeline del bot por un avatar.
+    const AVATAR_TTL_MS = 24 * 60 * 60 * 1000;
+    const needsAvatar =
+      !convo.avatarFetchedAt ||
+      Date.now() - convo.avatarFetchedAt.getTime() > AVATAR_TTL_MS;
+    if (needsAvatar) {
+      // No await — errores se loggean dentro de refreshAvatar.
+      void this.refreshAvatar(convo.id, clinic.wahaSession, chatId);
+    }
 
     // Si un humano tomó la conversación, el bot no responde.
     if (convo.state === 'HUMAN') return;
@@ -172,7 +342,19 @@ export class BotService {
         clinic.wahaSession,
         chatId,
         convo.id,
-        'Enseguida te atiende una persona del equipo. 🙏',
+        this.resolveBotMessage(clinic, 'handoff'),
+      );
+      return;
+    }
+
+    // 0.5) Saludo — antes de meterse con confirmaciones/intent. Responde
+    // el `botGreeting` (o default). Cortés y barato: no gasta LLM.
+    if (BotService.GREETING_REGEX.test(normalized)) {
+      await this.reply(
+        clinic.wahaSession,
+        chatId,
+        convo.id,
+        this.resolveBotMessage(clinic, 'greeting'),
       );
       return;
     }
@@ -184,7 +366,12 @@ export class BotService {
     }
 
     // 2) Confirmaciones deterministas (recordatorios) — solo si NO hay FSM.
-    if (['sí', 'si', 'confirmo', 'confirmar', 'ok', 'dale'].includes(normalized)) {
+    // Requiere phone conocido (buscamos Patient por phone). Si el contacto
+    // llegó con LID (phone=null) no podemos correlacionar → skip.
+    if (
+      phone &&
+      ['sí', 'si', 'confirmo', 'confirmar', 'ok', 'dale'].includes(normalized)
+    ) {
       const appt = await this.findUpcomingAppointment(clinicId, phone);
       if (appt) {
         await this.reminders.confirmAppointment(appt.id);
@@ -197,7 +384,7 @@ export class BotService {
         return;
       }
     }
-    if (['cancelar', 'cancela'].includes(normalized)) {
+    if (phone && ['cancelar', 'cancela'].includes(normalized)) {
       const appt = await this.findUpcomingAppointment(clinicId, phone);
       if (appt) {
         await this.prisma.appointment.update({
@@ -227,7 +414,7 @@ export class BotService {
           clinic.wahaSession,
           chatId,
           convo.id,
-          'Enseguida te atiende una persona del equipo.',
+          this.resolveBotMessage(clinic, 'handoff'),
         );
         break;
 
@@ -244,6 +431,7 @@ export class BotService {
           clinicId,
           question: text,
           locale: clinic.locale,
+          tone: clinic.botTone, // custom per-tenant desde /panel/ajustes
         });
         if (result) {
           await this.reply(
@@ -261,7 +449,7 @@ export class BotService {
             clinic.wahaSession,
             chatId,
             convo.id,
-            'Déjame verificar esa información y en breve te responde una persona del equipo. 🙏',
+            this.resolveBotMessage(clinic, 'handoff'),
           );
         }
         break;
@@ -272,7 +460,7 @@ export class BotService {
           clinic.wahaSession,
           chatId,
           convo.id,
-          'Puedo ayudarte a *agendar*, *reagendar* o *cancelar* una cita, o responder dudas. ¿Qué necesitás?',
+          this.resolveBotMessage(clinic, 'fallback'),
         );
     }
   }
@@ -348,6 +536,12 @@ export class BotService {
         return;
       case 'CONFIRM':
         await this.handleConfirm(clinic, convo, data, normalized, originalText);
+        return;
+      case 'AWAITING_NPS_SCORE':
+        await this.handleAwaitingNpsScore(clinic, convo, data, normalized);
+        return;
+      case 'AWAITING_NPS_COMMENT':
+        await this.handleAwaitingNpsComment(clinic, convo, data, originalText);
         return;
       default:
         // Estado desconocido: resetear y arrancar de cero.
@@ -589,11 +783,17 @@ export class BotService {
 
     // Si ya tenemos el nombre del paciente registrado en DB, saltamos ASK_NAME.
     // Nunca pisamos un nombre existente (respetamos la privacidad + evitamos typos).
-    const existingPatient = await this.prisma.patient.findUnique({
-      where: {
-        clinicId_phone: { clinicId: clinic.id, phone: convo.phone },
-      },
-    });
+    // Requiere `convo.phone` (Patient se identifica por phone). En conversaciones
+    // que llegaron via LID (phone=null), forzamos ASK_NAME → mas abajo el flujo
+    // va a pedir el numero de contacto tambien. TODO: extender FSM con ASK_PHONE
+    // cuando phone no se conoce.
+    const existingPatient = convo.phone
+      ? await this.prisma.patient.findUnique({
+          where: {
+            clinicId_phone: { clinicId: clinic.id, phone: convo.phone },
+          },
+        })
+      : null;
     if (existingPatient?.name && existingPatient.name.trim().length > 0) {
       await this.prisma.conversation.update({
         where: { id: convo.id },
@@ -737,6 +937,19 @@ export class BotService {
       return;
     }
 
+    // Sin phone conocido no podemos crear el Patient. TODO: agregar ASK_PHONE
+    // al FSM para conversaciones que llegaron con LID.
+    if (!convo.phone) {
+      await this.resetFlow(convo.id);
+      await this.reply(
+        clinic.wahaSession,
+        convo.chatId,
+        convo.id,
+        'Para confirmar tu cita necesito tu número de teléfono. Por favor escribíme al número directo de la clínica desde tu contacto.',
+      );
+      return;
+    }
+
     try {
       const appt = await this.scheduling.createAppointment({
         clinicId: clinic.id,
@@ -761,7 +974,12 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        `¡Listo! Tu cita quedó ${status} para el ${when} en ${clinic.name}.${address}\n\nSi necesitás cambiarla, escribime *reagendar* o *cancelar*.`,
+        this.resolveConfirmMessage({
+          status,
+          when,
+          clinicName: clinic.name,
+          address,
+        }),
       );
     } catch (e) {
       if (e instanceof ConflictException) {
@@ -986,6 +1204,122 @@ export class BotService {
       .toFormat("cccc d 'de' LLLL 'a las' HH:mm");
   }
 
+  // ─────────────────────────── Sub-FSM: feedback ───────────────────────────
+
+  // AWAITING_NPS_SCORE: paciente responde el prompt de satisfacción con un
+  // número 1-5. Aceptamos también el número escrito ("cinco") sólo para 1-5.
+  // Fuera de rango o texto que no matchea: le pedimos que corrija (no
+  // reseteamos la sub-FSM porque podría estar tipeando distinto).
+  private async handleAwaitingNpsScore(
+    clinic: Clinic,
+    convo: Conversation,
+    data: FlowData,
+    normalized: string,
+  ): Promise<void> {
+    const apptId = data.feedbackAppointmentId;
+    if (!apptId) {
+      // Estado corrupto: caemos gracefully al reset.
+      await this.resetFlow(convo.id);
+      return;
+    }
+
+    const score = this.parseNpsScore(normalized);
+    if (score === null) {
+      await this.reply(
+        clinic.wahaSession,
+        convo.chatId,
+        convo.id,
+        'No entendí. Respondeme con un número del *1* al *5*.',
+      );
+      return;
+    }
+
+    const { created } = await this.followUps.recordFeedback(
+      clinic.id,
+      apptId,
+      score,
+    );
+
+    if (!created) {
+      // Ya había respondido antes. Le agradecemos igual y cerramos sub-FSM.
+      await this.resetFlow(convo.id);
+      await this.reply(
+        clinic.wahaSession,
+        convo.chatId,
+        convo.id,
+        '¡Gracias por tu respuesta!',
+      );
+      return;
+    }
+
+    // Guardamos el score en flowData y pasamos a esperar comentario opcional.
+    const nextData: FlowData = { ...data, feedbackScore: score };
+    await this.prisma.conversation.update({
+      where: { id: convo.id },
+      data: {
+        flowStep: 'AWAITING_NPS_COMMENT',
+        flowData: nextData as object,
+      },
+    });
+
+    await this.reply(
+      clinic.wahaSession,
+      convo.chatId,
+      convo.id,
+      '¡Gracias! Si querés contarnos algo más, escribilo ahora ' +
+        '(o respondé *no* para finalizar).',
+    );
+  }
+
+  // AWAITING_NPS_COMMENT: 2do paso opcional. El paciente puede mandar un
+  // texto libre que se guarda como `Feedback.comment`, o "no"/"nada"/"listo"
+  // para cerrar sin comentario. En ambos casos reseteamos la sub-FSM.
+  private async handleAwaitingNpsComment(
+    clinic: Clinic,
+    convo: Conversation,
+    data: FlowData,
+    originalText: string,
+  ): Promise<void> {
+    const apptId = data.feedbackAppointmentId;
+    const skip = ['no', 'nada', 'listo', 'ok'].includes(
+      originalText.trim().toLowerCase(),
+    );
+
+    if (apptId && !skip) {
+      // Actualizamos el comment del feedback existente (la row se creó en el
+      // paso previo). NO usamos followUps.recordFeedback porque ya existe.
+      await this.prisma.feedback.update({
+        where: { appointmentId: apptId },
+        data: { comment: originalText.trim().slice(0, 1000) },
+      });
+    }
+
+    await this.resetFlow(convo.id);
+    await this.reply(
+      clinic.wahaSession,
+      convo.chatId,
+      convo.id,
+      '¡Muchas gracias por tu tiempo! Que tengas un buen día.',
+    );
+  }
+
+  // Parsea "5", "cinco", " 3 " → 1-5 | null si no es válido.
+  // Solo aceptamos escrito para dígitos 1-5 (rango de nuestro NPS/CSAT).
+  private parseNpsScore(input: string): number | null {
+    const t = input.trim().toLowerCase();
+    const digit = Number.parseInt(t, 10);
+    if (Number.isInteger(digit) && digit >= 1 && digit <= 5) return digit;
+    const map: Record<string, number> = {
+      uno: 1,
+      dos: 2,
+      tres: 3,
+      cuatro: 4,
+      cinco: 5,
+    };
+    if (t in map) return map[t];
+    return null;
+  }
+
   private async resetFlow(convoId: string): Promise<void> {
     await this.prisma.conversation.update({
       where: { id: convoId },
@@ -1009,15 +1343,55 @@ export class BotService {
     });
   }
 
+  /**
+   * Envía la respuesta del bot al paciente. Antes del `sendText`:
+   *  1) Muestra "escribiendo…" (WAHA presence).
+   *  2) Duerme `typingDelayFor(text)` ms — sensación de tipeo humano.
+   *  3) Detiene "escribiendo…" justo antes de mandar el texto.
+   *
+   * Todos los pasos de typing son best-effort: fallan silenciosos (el
+   * `WahaService.startTyping/stopTyping` ya loguea a warn y no lanza).
+   * El `sendText` final sí puede tirar — es lo único crítico.
+   *
+   * Opt-out con `BOT_TYPING_ENABLED=false`: útil en tests (evita segundos
+   * de sleep por cada assert de bot) y en dev cuando querés iterar rápido.
+   *
+   * Después del `sendText` persistimos el `Message` con dirección OUT
+   * (siempre; incluso si el typing falló) para no perder trazabilidad.
+   */
   private async reply(
     session: string,
     chatId: string,
     convoId: string,
     text: string,
   ) {
+    if (process.env.BOT_TYPING_ENABLED !== 'false') {
+      await this.waha.startTyping(session, chatId);
+      await BotService.sleep(this.typingDelayFor(text));
+      await this.waha.stopTyping(session, chatId);
+    }
     await this.waha.sendText(session, chatId, text);
     await this.prisma.message.create({
       data: { conversationId: convoId, direction: 'OUT', body: text },
     });
+  }
+
+  /**
+   * Delay antes de mandar el mensaje, en ms. Modela una velocidad de
+   * tipeo humana promedio (~40 chars/seg ≈ 30 wpm). Cap superior 4s
+   * para no dejar al paciente esperando en respuestas largas del LLM;
+   * mínimo 700 ms para no responder instantáneo ni siquiera al "hola".
+   * Jitter ±20% para que el mismo texto no dé siempre la misma latencia
+   * (los detectores buscan patrones repetidos incluso en timings).
+   */
+  private typingDelayFor(text: string): number {
+    const base = Math.min(4000, Math.max(700, text.length * 25));
+    const jitter = 1 + (Math.random() * 0.4 - 0.2);
+    return Math.round(base * jitter);
+  }
+
+  /** Sleep utilitario. Static para poder ser mockeado si algún test lo pide. */
+  private static sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

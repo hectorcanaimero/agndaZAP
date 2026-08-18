@@ -13,6 +13,7 @@ import {
   Clock,
   Filter,
   LayoutGrid,
+  Plus,
   Rows3,
   Search,
   Sparkles,
@@ -25,6 +26,7 @@ import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Badge, type AppointmentStatus } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   Dialog,
   DialogContent,
@@ -54,6 +56,7 @@ import { APPOINTMENT_STATUS_TOKENS } from '@/components/ui/tokens';
 import { ApiError, apiMutation, apiQuery } from '@/lib/query-fn';
 import { queryKeys } from '@/lib/query-keys';
 import { cn } from '@/lib/utils';
+import { AppointmentDialog } from './AppointmentDialog';
 
 type ViewMode = 'month' | 'week' | 'day';
 
@@ -70,6 +73,15 @@ interface Appointment {
 interface Professional {
   id: string;
   name: string;
+  active?: boolean;
+  serviceIds?: string[];
+}
+
+interface ServiceLite {
+  id: string;
+  name: string;
+  durationMin: number;
+  active: boolean;
 }
 
 interface AgendaClientProps {
@@ -81,6 +93,8 @@ interface AgendaClientProps {
   query: string;
   appointments: Appointment[];
   professionals: Professional[];
+  services: ServiceLite[];
+  timezone: string;
 }
 
 /**
@@ -122,6 +136,8 @@ export function AgendaClient({
   query,
   appointments: initialAppointments,
   professionals,
+  services,
+  timezone,
 }: AgendaClientProps) {
   const t = useTranslations('panel.agenda');
   const tStatus = useTranslations('panel.dashboard.status');
@@ -133,6 +149,12 @@ export function AgendaClient({
   // sin actualizar la URL. La URL se sincroniza on blur/enter (patrón similar
   // al listado de conversaciones).
   const [searchDraft, setSearchDraft] = useState(query);
+  // Dialogs de agendar/reagendar/cancelar. Solo uno abierto a la vez.
+  const [createOpen, setCreateOpen] = useState(false);
+  const [rescheduleTarget, setRescheduleTarget] = useState<Appointment | null>(
+    null,
+  );
+  const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null);
 
   const statusSet = useMemo(
     () =>
@@ -329,28 +351,41 @@ export function AgendaClient({
             </div>
           </div>
 
-          <Tabs
-            value={view}
-            onValueChange={(v) => {
-              const next = v as ViewMode;
-              updateQuery({ view: next, date: normalizeDateForView(date, next) });
-            }}
-          >
-            <TabsList className="h-9">
-              <TabsTrigger value="month" className="gap-1.5 px-3">
-                <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
-                {t('viewMonth')}
-              </TabsTrigger>
-              <TabsTrigger value="week" className="gap-1.5 px-3">
-                <Rows3 className="h-3.5 w-3.5" aria-hidden="true" />
-                {t('viewWeek')}
-              </TabsTrigger>
-              <TabsTrigger value="day" className="gap-1.5 px-3">
-                <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
-                {t('viewDay')}
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <div className="flex items-center gap-2">
+            <Tabs
+              value={view}
+              onValueChange={(v) => {
+                const next = v as ViewMode;
+                updateQuery({
+                  view: next,
+                  date: normalizeDateForView(date, next),
+                });
+              }}
+            >
+              <TabsList className="h-9">
+                <TabsTrigger value="month" className="gap-1.5 px-3">
+                  <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
+                  {t('viewMonth')}
+                </TabsTrigger>
+                <TabsTrigger value="week" className="gap-1.5 px-3">
+                  <Rows3 className="h-3.5 w-3.5" aria-hidden="true" />
+                  {t('viewWeek')}
+                </TabsTrigger>
+                <TabsTrigger value="day" className="gap-1.5 px-3">
+                  <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
+                  {t('viewDay')}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <Button
+              size="sm"
+              className="h-9 gap-1.5"
+              onClick={() => setCreateOpen(true)}
+            >
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              {t('newAppointment')}
+            </Button>
+          </div>
         </div>
 
         {/* Filtros: TODO en una sola fila.
@@ -539,22 +574,58 @@ export function AgendaClient({
                   {t('detail.transitions')}
                 </p>
                 <div className="flex flex-wrap gap-2">
+                  {/* "Reagendar" es una acción ortogonal al FSM de status —
+                      solo tiene sentido cuando la cita sigue viva (mismos
+                      estados que RESCHEDULABLE_STATUSES del backend). */}
+                  {RESCHEDULABLE_STATUSES.includes(selected.status) ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => {
+                        const target = selected;
+                        setSelected(null);
+                        setRescheduleTarget(target);
+                      }}
+                    >
+                      {t('detail.reschedule')}
+                    </Button>
+                  ) : null}
                   {TRANSITIONS[selected.status].length === 0 ? (
                     <p className="text-sm text-muted-foreground">
                       {t('detail.noTransitions')}
                     </p>
                   ) : (
-                    TRANSITIONS[selected.status].map((next) => (
-                      <Button
-                        key={next}
-                        size="sm"
-                        variant={transitionButtonVariant(next)}
-                        disabled={busy}
-                        onClick={() => changeStatus(next)}
-                      >
-                        {tStatus(next)}
-                      </Button>
-                    ))
+                    TRANSITIONS[selected.status].map((next) => {
+                      // Cancelación/no-show → pedir confirmación (evita clic
+                      // accidental irreversible). El resto va directo.
+                      const needsConfirm =
+                        next === 'CANCELADA' || next === 'NO_SHOW';
+                      return (
+                        <Button
+                          key={next}
+                          size="sm"
+                          variant={transitionButtonVariant(next)}
+                          disabled={busy}
+                          onClick={() => {
+                            if (needsConfirm) {
+                              // Cerramos el detalle y abrimos el confirm por
+                              // separado — evitamos dialog dentro de dialog.
+                              const target = selected;
+                              setSelected(null);
+                              setCancelTarget({
+                                ...target,
+                                status: next, // memorizamos el status objetivo
+                              } as Appointment);
+                            } else {
+                              changeStatus(next);
+                            }
+                          }}
+                        >
+                          {tStatus(next)}
+                        </Button>
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -562,9 +633,108 @@ export function AgendaClient({
           ) : null}
         </DialogContent>
       </Dialog>
+
+      {/* ─────────────────  DIALOG: Nueva cita  ───────────────── */}
+      {createOpen ? (
+        <AppointmentDialog
+          mode="create"
+          open={createOpen}
+          onClose={() => setCreateOpen(false)}
+          onSuccess={() => {
+            void qc.invalidateQueries({ queryKey: appointmentsKey });
+            void qc.invalidateQueries({ queryKey: queryKeys.dashboardMetrics });
+          }}
+          locale={locale}
+          timezone={timezone}
+          services={services}
+          professionals={professionals.map((p) => ({
+            id: p.id,
+            name: p.name,
+            active: p.active ?? true,
+            serviceIds: p.serviceIds ?? [],
+          }))}
+          initialDate={date}
+        />
+      ) : null}
+
+      {/* ─────────────────  DIALOG: Reagendar  ───────────────── */}
+      {rescheduleTarget ? (
+        <AppointmentDialog
+          mode="reschedule"
+          open={rescheduleTarget !== null}
+          onClose={() => setRescheduleTarget(null)}
+          onSuccess={() => {
+            void qc.invalidateQueries({ queryKey: appointmentsKey });
+          }}
+          locale={locale}
+          timezone={timezone}
+          appointment={{
+            id: rescheduleTarget.id,
+            startAt: rescheduleTarget.startAt,
+            patient: rescheduleTarget.patient,
+            service: rescheduleTarget.service,
+            professional: rescheduleTarget.professional,
+          }}
+        />
+      ) : null}
+
+      {/* ─────────────────  CONFIRM: Cancelar / No-show  ───────────────── */}
+      <ConfirmDialog
+        open={cancelTarget !== null}
+        onClose={() => setCancelTarget(null)}
+        onConfirm={async () => {
+          if (!cancelTarget) return;
+          await new Promise<void>((resolve, reject) => {
+            changeStatusMutation.mutate(
+              { id: cancelTarget.id, next: cancelTarget.status },
+              {
+                onSuccess: () => {
+                  setCancelTarget(null);
+                  resolve();
+                },
+                onError: (err) => {
+                  // El onError global ya muestra toast — solo resolvemos para
+                  // que el ConfirmDialog cierre su spinner.
+                  reject(err);
+                },
+              },
+            );
+          }).catch(() => undefined);
+        }}
+        title={
+          cancelTarget?.status === 'NO_SHOW'
+            ? t('confirmNoShow.title')
+            : t('confirmCancel.title')
+        }
+        description={
+          cancelTarget?.status === 'NO_SHOW'
+            ? t('confirmNoShow.description', {
+                name: cancelTarget?.patient.name ?? '',
+              })
+            : t('confirmCancel.description', {
+                name: cancelTarget?.patient.name ?? '',
+              })
+        }
+        confirmLabel={
+          cancelTarget?.status === 'NO_SHOW'
+            ? t('confirmNoShow.confirm')
+            : t('confirmCancel.confirm')
+        }
+        variant="destructive"
+      />
     </>
   );
 }
+
+/**
+ * Estados vivos que aceptan reagendamiento. Debe estar sincronizado con
+ * `RESCHEDULABLE_STATUSES` del backend (appointment-status.util.ts).
+ */
+const RESCHEDULABLE_STATUSES: AppointmentStatus[] = [
+  'PENDIENTE',
+  'CONFIRMADA',
+  'EN_RIESGO',
+];
 
 /* ═══════════════════════════════════════════════════════════════════
  *                        STATUS FILTER DROPDOWN

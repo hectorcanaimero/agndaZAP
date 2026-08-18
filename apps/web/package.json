@@ -1,8 +1,8 @@
 {
-  "name": "@agendazap/web",
+  "name": "@showly/web",
   "version": "0.1.0",
   "private": true,
-  "description": "AgendaZap — panel admin + página pública /agendar/[clinicSlug]",
+  "description": "Showly — panel admin + página pública /agendar/[clinicSlug]",
   "scripts": {
     "dev": "next dev -p 3002",
     "build": "next build",
@@ -23,6 +23,7 @@
     "@radix-ui/react-slot": "^1.3.3",
     "@radix-ui/react-tabs": "^1.1.21",
     "@radix-ui/react-tooltip": "^1.2.16",
+    "@sentry/nextjs": "^10.70.0",
     "@tanstack/react-query": "^5.101.4",
     "@tanstack/react-query-devtools": "^5.101.4",
     "@tanstack/react-table": "^8.21.3",
@@ -30,6 +31,7 @@
     "@uiw/react-md-editor": "^4.1.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "framer-motion": "^11",
     "lucide-react": "^1.31.0",
     "next": "^15.4.0",
     "next-intl": "^3.20.0",

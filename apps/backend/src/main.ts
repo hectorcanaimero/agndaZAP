@@ -1,8 +1,14 @@
 import 'reflect-metadata';
-import { Logger, RequestMethod, ValidationPipe } from '@nestjs/common';
+// initSentry() DEBE llamarse ANTES de importar AppModule para capturar
+// errores de bootstrap (módulos que fallan al inicializar). El import
+// order no lo garantiza — la llamada explícita en bootstrap() sí.
+import { RequestMethod, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { Queue } from 'bullmq';
+import express from 'express';
 import helmet from 'helmet';
+import { Logger } from 'nestjs-pino';
+import { initSentry, isSentryEnabled } from './common/sentry/sentry.config';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
 import { WahaService } from './whatsapp/waha.service';
@@ -14,9 +20,14 @@ import {
 } from './whatsapp/health-monitor.processor';
 import { createRemindersWorker } from './reminders/reminders.processor';
 import { parseRedis } from './reminders/reminders.module';
+import { createFollowUpsWorker } from './follow-ups/follow-ups.processor';
 
 async function bootstrap(): Promise<void> {
-  const logger = new Logger('Bootstrap');
+  // Sentry ANTES que cualquier NestFactory / Module init. Sin esto, si un
+  // provider falla en su constructor, perdemos el error (no llega al filter).
+  if (isSentryEnabled()) {
+    initSentry();
+  }
 
   // Fail-fast en producción: si faltan env vars críticas, morir antes de bootstrappear
   // Nest (ahorra logs confusos y evita que arranque a medias). En dev seguimos con
@@ -54,9 +65,25 @@ async function bootstrap(): Promise<void> {
     if (jwtSecret.startsWith('dev-')) {
       throw new Error('JWT_SECRET no puede tener prefijo "dev-" en producción');
     }
+
+    // Observabilidad: en prod SENTRY_DSN no es opcional. Sin él quedamos
+    // ciegos frente a errores en las 40 clínicas del piloto.
+    if (!process.env.SENTRY_DSN) {
+      throw new Error('SENTRY_DSN es obligatoria en producción');
+    }
   }
 
-  const app = await NestFactory.create(AppModule, { bufferLogs: false });
+  // `bufferLogs: true` retiene los logs internos de Nest hasta que
+  // `app.useLogger()` los adopte — sin esto perdemos los mensajes de
+  // inicialización (module init, route mapping) en Pino.
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+
+  // Reemplazar el Logger default de Nest por Pino global. A partir de acá
+  // TODOS los `Logger.log()` internos de Nest y los `logger.log()` de este
+  // bootstrap salen como JSON estructurado con los base fields
+  // (service, env) y respetando el `redact` de PII.
+  const logger = app.get(Logger);
+  app.useLogger(logger);
 
   // Trust proxy: si el backend está detrás de un proxy confiable (Cloudflare,
   // nginx, ALB), Express necesita saberlo para resolver `req.ip` desde el
@@ -71,6 +98,23 @@ async function bootstrap(): Promise<void> {
       instance.set('trust proxy', 1);
     }
   }
+
+  // Body parsers con `verify` callback que preserva el buffer raw en `req.rawBody`.
+  // Necesario para verificar HMAC del webhook WAHA sobre los bytes originales
+  // (JSON.stringify del body parseado no es determinístico — se pierden
+  // whitespace, orden de keys, encoding). Solo se guarda el raw en el path del
+  // webhook para no gastar memoria en TODO request.
+  const captureRawBody = (
+    req: express.Request & { rawBody?: Buffer },
+    _res: express.Response,
+    buf: Buffer,
+  ): void => {
+    if (req.url?.startsWith('/webhooks/')) {
+      req.rawBody = buf;
+    }
+  };
+  app.use(express.json({ verify: captureRawBody, limit: '1mb' }));
+  app.use(express.urlencoded({ extended: true, verify: captureRawBody }));
 
   // Helmet ANTES de CORS: headers de seguridad (X-Content-Type-Options,
   // Strict-Transport-Security, referrer-policy, etc.) aplican también a la
@@ -111,8 +155,14 @@ async function bootstrap(): Promise<void> {
 
   // El webhook de WAHA NO debe llevar el prefijo /api porque WHATSAPP_HOOK_URL
   // apunta a http://backend:4000/webhooks/waha (ver docker-compose.yml).
+  // Los feeds iCal tampoco: los clientes de calendar (iOS/Android/Google) no
+  // envían Bearer y no queremos anteponer /api a una URL que el usuario
+  // copia/pega en su app. Ver `ProfessionalsIcalController` (@Public + HMAC).
   app.setGlobalPrefix('api', {
-    exclude: [{ path: 'webhooks/(.*)', method: RequestMethod.ALL }],
+    exclude: [
+      { path: 'webhooks/(.*)', method: RequestMethod.ALL },
+      { path: 'ical/(.*)', method: RequestMethod.ALL },
+    ],
   });
 
   // Cierre limpio de Prisma (delega en beforeExit → app.close()).
@@ -128,11 +178,22 @@ async function bootstrap(): Promise<void> {
     logger.error(`Job ${job?.id} falló: ${err?.message ?? 'unknown'}`);
   });
 
+  // Worker de follow-ups post-atención (satisfacción). Misma conexión Redis
+  // que reminders (parseRedis()). Es un worker separado porque la Queue es
+  // distinta — así el failure de uno no arrastra al otro.
+  const followUpsWorker = createFollowUpsWorker(parseRedis(), prisma, waha);
+  followUpsWorker.on('ready', () => logger.log('FollowUpsWorker listo'));
+  followUpsWorker.on('failed', (job, err) => {
+    logger.error(
+      `FollowUp job ${job?.id} falló: ${err?.message ?? 'unknown'}`,
+    );
+  });
+
   // Health-monitor de sesiones WAHA. Repeatable job cada N minutos que corre
   // `WahaHealthMonitor.checkAll()`. El `jobId` fijo hace que BullMQ dedupe el
   // repeatable a través de restarts del backend (idempotente). Si se revierte
   // este bloque, limpiar el estado del repeatable con:
-  //   docker exec agendazap-redis-1 redis-cli DEL bull:waha-health:*
+  //   docker exec showly-redis-1 redis-cli DEL bull:waha-health:*
   const healthQueue = app.get<Queue>(WAHA_HEALTH_QUEUE_TOKEN);
   const healthMonitor = app.get(WahaHealthMonitor);
   const intervalMin = Number(process.env.WAHA_HEALTH_INTERVAL_MIN ?? 5);
@@ -163,6 +224,13 @@ async function bootstrap(): Promise<void> {
       logger.error(`Error cerrando worker: ${(e as Error).message}`);
     }
     try {
+      await followUpsWorker.close();
+    } catch (e) {
+      logger.error(
+        `Error cerrando follow-ups worker: ${(e as Error).message}`,
+      );
+    }
+    try {
       await healthWorker.close();
     } catch (e) {
       logger.error(
@@ -186,7 +254,7 @@ async function bootstrap(): Promise<void> {
 
   const port = Number.parseInt(process.env.PORT ?? '4000', 10);
   await app.listen(port);
-  logger.log(`AgendaZap backend escuchando en http://localhost:${port}`);
+  logger.log(`Showly backend escuchando en http://localhost:${port}`);
   logger.log(`Webhook WAHA: POST http://localhost:${port}/webhooks/waha`);
 }
 

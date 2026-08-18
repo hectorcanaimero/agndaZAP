@@ -45,10 +45,42 @@ describe('WahaService (primitives)', () => {
   // ─────────────────────────── startSession ───────────────────────────
 
   describe('startSession', () => {
-    it('non-ok: fetch responde 500 → rechaza con Error("WAHA startSession 500")', async () => {
-      // Consistency fix (T3): startSession originalmente no verificaba `!res.ok`,
-      // lo que dejaba al controller sin poder distinguir un WAHA caido de un
-      // start exitoso. Alineamos el comportamiento con sendText y logoutSession.
+    it('happy path: POST /api/sessions con config del store → resuelve sin fallback', async () => {
+      const fetchMock = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 201,
+        text: async () => '',
+      });
+      global.fetch = fetchMock as unknown as typeof fetch;
+
+      await expect(svc.startSession('clinic-abc')).resolves.toBeUndefined();
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe(`${BASE_URL}/api/sessions`);
+      expect((init as any).method).toBe('POST');
+      // El store DEBE venir habilitado (load-bearing para resolver metadata
+      // de contactos y evitar el error "Enable NOWEB store").
+      const body = JSON.parse((init as any).body);
+      expect(body.name).toBe('clinic-abc');
+      expect(body.config.noweb.store.enabled).toBe(true);
+    });
+
+    it('fallback: 409 (sesion existe) → cae a POST /api/sessions/start', async () => {
+      const fetchMock = jest
+        .fn()
+        .mockResolvedValueOnce({ ok: false, status: 409, text: async () => 'exists' })
+        .mockResolvedValueOnce({ ok: true, status: 200, text: async () => '' });
+      global.fetch = fetchMock as unknown as typeof fetch;
+
+      await expect(svc.startSession('clinic-abc')).resolves.toBeUndefined();
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls[0][0]).toBe(`${BASE_URL}/api/sessions`);
+      expect(fetchMock.mock.calls[1][0]).toBe(`${BASE_URL}/api/sessions/start`);
+    });
+
+    it('non-ok: POST /api/sessions responde 500 → rechaza con "WAHA createSession 500"', async () => {
       const fetchMock = jest.fn().mockResolvedValue({
         ok: false,
         status: 500,
@@ -57,8 +89,75 @@ describe('WahaService (primitives)', () => {
       global.fetch = fetchMock as unknown as typeof fetch;
 
       await expect(svc.startSession('clinic-abc')).rejects.toThrow(
+        /WAHA createSession 500/,
+      );
+    });
+
+    it('fallback non-ok: 409 + start 500 → rechaza con "WAHA startSession 500"', async () => {
+      const fetchMock = jest
+        .fn()
+        .mockResolvedValueOnce({ ok: false, status: 409, text: async () => 'exists' })
+        .mockResolvedValueOnce({ ok: false, status: 500, text: async () => 'boom' });
+      global.fetch = fetchMock as unknown as typeof fetch;
+
+      await expect(svc.startSession('clinic-abc')).rejects.toThrow(
         /WAHA startSession 500/,
       );
+    });
+  });
+
+  // ─────────────────────────── getContactAvatar ───────────────────────────
+
+  describe('getContactAvatar', () => {
+    it('happy path: GET /api/contacts/profile-picture con session+contactId → URL', async () => {
+      const fetchMock = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ profilePictureURL: 'https://pps.whatsapp.net/x.jpg' }),
+      });
+      global.fetch = fetchMock as unknown as typeof fetch;
+
+      const url = await svc.getContactAvatar('clinic-abc', '5541998819501@c.us');
+
+      expect(url).toBe('https://pps.whatsapp.net/x.jpg');
+      const [reqUrl, init] = fetchMock.mock.calls[0];
+      expect(reqUrl).toContain('/api/contacts/profile-picture');
+      expect(reqUrl).toContain('session=clinic-abc');
+      // encodeURIComponent en URL.searchParams → @ pasa a %40
+      expect(reqUrl).toContain('contactId=5541998819501%40c.us');
+      expect((init as any).headers['X-Api-Key']).toBe(API_KEY);
+    });
+
+    it('funciona con @lid (WhatsApp expone foto aunque no resolvamos LID→phone)', async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ profilePictureURL: 'https://pps.whatsapp.net/y.jpg' }),
+      }) as unknown as typeof fetch;
+
+      const url = await svc.getContactAvatar('clinic-abc', '63556976398516@lid');
+      expect(url).toBe('https://pps.whatsapp.net/y.jpg');
+    });
+
+    it('404 / sin foto → null (degrada silencioso, no rompe el ingest)', async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        json: async () => ({}),
+      }) as unknown as typeof fetch;
+
+      const url = await svc.getContactAvatar('clinic-abc', 'x@c.us');
+      expect(url).toBeNull();
+    });
+
+    it('fetch throws (WAHA caido) → null + warn (no rompe pipeline)', async () => {
+      global.fetch = jest.fn().mockRejectedValue(new Error('econnrefused')) as unknown as typeof fetch;
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+
+      const url = await svc.getContactAvatar('clinic-abc', 'x@c.us');
+
+      expect(url).toBeNull();
+      expect(warnSpy).toHaveBeenCalled();
     });
   });
 

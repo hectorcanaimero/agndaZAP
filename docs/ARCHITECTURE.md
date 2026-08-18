@@ -1,4 +1,4 @@
-# Arquitectura — AgendaZap
+# Arquitectura — Showly
 
 ## Visión de alto nivel
 
@@ -100,6 +100,58 @@
 - Multi-tenant: `tenantId` (clinicId) en todas las tablas y en el JWT.
 - RBAC: SUPERADMIN, CLINIC_ADMIN (recepción), PROFESSIONAL.
 - Cada clínica tiene su sesión WAHA (nombre de instancia) + su TZ + su config de recordatorios.
+- `Clinic.status` (`ACTIVE | SUSPENDED | ARCHIVED`) controla el acceso: `AuthService.login()` rechaza con 403 si la clínica no está `ACTIVE` (excepto SUPERADMIN, que no tiene clínica propia).
+
+### Área SaaS Admin (módulo `admin/`)
+
+Panel de operación de la plataforma para el rol SUPERADMIN. Ruta base de API: `/api/admin/*`. Path frontend: `/[locale]/admin/*`.
+
+#### Estructura del módulo backend
+
+```
+apps/backend/src/admin/
+├── admin.module.ts
+├── admin-audit.interceptor.ts   # intercepta toda acción no-read; persiste en AdminAudit
+├── admin-audit.service.ts       # logAction() — helper reusable internamente
+├── admin-clinics.controller.ts  # CRUD de tenants + suspend/reactivate
+├── admin-clinics.service.ts
+├── admin-metrics.controller.ts  # GET /admin/metrics/overview — cross-tenant
+├── admin-metrics.service.ts
+├── admin-audit.controller.ts    # GET /admin/audit — log paginado con filtros
+└── impersonation.controller.ts  # POST /admin/clinics/:id/impersonate
+    impersonation.service.ts
+```
+
+Todos los controllers llevan `@Roles('SUPERADMIN')` a nivel de clase. El `AdminAuditInterceptor` registra IP + User-Agent + payload contextual en `AdminAudit` para toda acción de escritura.
+
+#### Flujo de impersonation
+
+Ver diagrama detallado en [[notas/2026-08-14-impersonation-flow]].
+
+1. `POST /api/admin/clinics/:id/impersonate` valida que la clínica esté `ACTIVE`.
+2. Genera JWT temporal (30 min) con payload `{ sub, role: 'CLINIC_ADMIN', clinicId: X, impersonatedBy: sub }`.
+3. El frontend guarda el JWT original en la cookie `showly_admin_token` y sobrescribe `showly_token` con el temporal.
+4. Redirect a `/panel/dashboard`. `PanelShell` detecta `jwt.impersonatedBy` y renderiza `ImpersonationBanner`.
+5. Al hacer click en "Volver al Admin": restaurar `showly_token` desde `showly_admin_token`, redirect a `/admin/dashboard`.
+
+#### Tabla AdminAudit
+
+Toda acción de escritura del SUPERADMIN queda en `AdminAudit`: `actorUserId`, `action` (enum `AdminAction`), `targetType`, `targetId`, `metadata` (JSON), `ip`, `userAgent`, `createdAt`. Índices sobre `(actorUserId, createdAt)` y `(targetType, targetId, createdAt)`.
+
+#### Frontend (`apps/web/src/app/[locale]/admin/*`)
+
+| Página | Ruta |
+|---|---|
+| Dashboard cross-tenant | `/admin/dashboard` |
+| Lista de clínicas + acciones | `/admin/clinics` |
+| Detalle de clínica + impersonar | `/admin/clinics/[id]` |
+| Log de auditoría | `/admin/audit` |
+
+`AdminShell.tsx` es el nav lateral equivalente a `PanelShell.tsx` del panel de clínica. `ImpersonationBanner` se renderiza dentro de `PanelShell` cuando el JWT activo tiene el claim `impersonatedBy`.
+
+#### Deprecation del override `?clinicId=xxx`
+
+El patrón `SUPERADMIN + ?clinicId=xxx` en `tenant-context.util.ts` está **eliminado**. `assertClinicScope` ahora tira 400 con "SUPERADMIN debe impersonar una clínica primero" si no hay `clinicId` en el JWT. Los controllers de panel (`services`, `appointments`, `business-hours`, `clinics`, `conversations`, `faq`, `dashboard`, `feedback`, `time-off`, `whatsapp-panel`) no aceptan ni leen el parámetro. Ver [[adr/0014-superadmin-como-operador-saas]].
 
 ## Estados de la cita (máquina de estados)
 

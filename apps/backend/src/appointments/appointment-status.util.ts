@@ -41,3 +41,22 @@ export function assertTransition(
     );
   }
 }
+
+/**
+ * Estados vivos que aceptan reagendamiento (mover startAt/endAt sin cambiar
+ * el status). Estados terminales (ATENDIDA/CANCELADA/NO_SHOW) NO se reagendan
+ * — la política es crear una cita nueva y dejar la histórica intacta.
+ */
+export const RESCHEDULABLE_STATUSES: ReadonlyArray<AppointmentStatus> = [
+  'PENDIENTE',
+  'CONFIRMADA',
+  'EN_RIESGO',
+];
+
+export function assertReschedulable(status: AppointmentStatus): void {
+  if (!RESCHEDULABLE_STATUSES.includes(status)) {
+    throw new UnprocessableEntityException(
+      `no se puede reagendar una cita en estado ${status}`,
+    );
+  }
+}

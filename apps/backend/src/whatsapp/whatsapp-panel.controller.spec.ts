@@ -15,8 +15,8 @@ type Deep<T> = { [K in keyof T]?: any } & Record<string, any>;
  *
  * Reglas duras cubiertas aca:
  *  - `session` proviene SIEMPRE de clinic.wahaSession (nunca del request).
- *  - `assertClinicScope(user)` sin override → SUPERADMIN da 400 (contradiccion
- *    resuelta en §8 del plan; se mantiene el ADR).
+ *  - `assertClinicScope(user)` sin impersonation → SUPERADMIN da 400
+ *    (contradiccion resuelta en §8 del plan; reforzado por ADR 0014).
  *  - Cuando status !== 'SCAN_QR_CODE', NO se pide QR ni se incluye en response.
  *  - Cuando status === 'SCAN_QR_CODE' y `getQrCode` devuelve null, la response
  *    no incluye la clave `qr` (contrato: qr opcional).
@@ -97,9 +97,10 @@ describe('WhatsappPanelController — GET /status', () => {
     expect(waha.getQrCode).toHaveBeenCalledWith(clinicASession);
   });
 
-  it('SUPERADMIN sin override → 400 y no toca Prisma ni WAHA', async () => {
-    // Contradicción resuelta en §8 del plan: SUPERADMIN sin clinicId explícito
-    // se rechaza con 400 (por assertClinicScope). No happy path aquí.
+  it('SUPERADMIN sin impersonation activa → 400 y no toca Prisma ni WAHA', async () => {
+    // Post-ADR 0014: sin JWT impersonado, no hay acceso a la sesión de WhatsApp
+    // de ninguna clínica. El SUPERADMIN debe pasar por
+    // /admin/clinics/:id/impersonate primero. Corte antes de tocar DB o WAHA.
     await expect(controller.status(superadmin)).rejects.toBeInstanceOf(
       BadRequestException,
     );
@@ -152,8 +153,8 @@ describe('WhatsappPanelController — GET /status', () => {
  *
  * Reglas duras cubiertas aca:
  *  - `session` proviene SIEMPRE de clinic.wahaSession (nunca del request).
- *  - `assertClinicScope(user)` sin override → SUPERADMIN da 400 (misma
- *    contradiccion resuelta en §8 del plan).
+ *  - `assertClinicScope(user)` sin impersonation → SUPERADMIN da 400 (misma
+ *    contradiccion resuelta en §8 del plan; reforzado por ADR 0014).
  *  - Cuando WAHA falla (startSession/logoutSession tiran), el controller
  *    envuelve el error como BadGatewayException (502) para NO filtrar
  *    internals ni stacks al cliente.
@@ -235,7 +236,9 @@ describe('WhatsappPanelController — POST /start + POST /logout', () => {
     expect(waha.startSession).toHaveBeenCalledTimes(1);
   });
 
-  it('SUPERADMIN sin override + start → 400 y NO llama startSession', async () => {
+  it('SUPERADMIN sin impersonation activa + start → 400 y NO llama startSession', async () => {
+    // Post-ADR 0014: sin JWT impersonado el SUPERADMIN no puede iniciar la
+    // sesión de WhatsApp de ninguna clínica.
     await expect(controller.start(superadmin)).rejects.toBeInstanceOf(
       BadRequestException,
     );
@@ -271,7 +274,9 @@ describe('WhatsappPanelController — POST /start + POST /logout', () => {
     expect(waha.logoutSession).toHaveBeenCalledTimes(1);
   });
 
-  it('SUPERADMIN sin override + logout → 400 y NO llama logoutSession', async () => {
+  it('SUPERADMIN sin impersonation activa + logout → 400 y NO llama logoutSession', async () => {
+    // Post-ADR 0014: sin JWT impersonado el SUPERADMIN no puede cerrar la
+    // sesión de WhatsApp de ninguna clínica.
     await expect(controller.logout(superadmin)).rejects.toBeInstanceOf(
       BadRequestException,
     );

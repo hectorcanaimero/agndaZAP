@@ -5,15 +5,20 @@ import { Role } from '@prisma/client';
 import { AuthUser } from '../decorators/current-user.decorator';
 
 /**
- * Payload del JWT que firmamos en `AuthService.login`.
+ * Payload del JWT que firmamos en `AuthService.login` y también en el flujo
+ * de impersonation (`ImpersonationService.createImpersonationToken`, ver ADR 0014).
  * - `sub` = `user.id` (convención estándar).
- * - `clinicId` puede ser null para SUPERADMIN.
+ * - `clinicId` puede ser null para SUPERADMIN sin impersonar.
  * - `role` viaja siempre para que el `RolesGuard` no tenga que ir a DB.
+ * - `impersonatedBy` sólo está presente en JWTs emitidos por el flujo de
+ *   impersonation. Guarda el userId del SUPERADMIN original para poder
+ *   auditarlo aun cuando el token opera como CLINIC_ADMIN.
  */
 export interface JwtPayload {
   sub: string;
   clinicId: string | null;
   role: Role;
+  impersonatedBy?: string;
   iat?: number;
   exp?: number;
 }
@@ -62,6 +67,10 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       userId: payload.sub,
       clinicId: payload.clinicId,
       role: payload.role,
+      // Sólo se propaga si el token viene del flujo de impersonation
+      // (ADR 0014). En login normal queda `undefined` y el `AuthUser`
+      // no lleva la marca — cero riesgo de false-positive en auditoría.
+      impersonatedBy: payload.impersonatedBy,
     };
   }
 }

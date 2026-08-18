@@ -1,9 +1,13 @@
 import { Module } from '@nestjs/common';
+import { AdminModule } from './admin/admin.module';
 import { LlmRouterModule } from './common/llm/llm-router.module';
+import { LoggerModule } from './common/logger/logger.module';
+import { SentryAppModule } from './common/sentry/sentry.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { SchedulingModule } from './scheduling/scheduling.module';
 import { RemindersModule } from './reminders/reminders.module';
+import { FollowUpsModule } from './follow-ups/follow-ups.module';
 import { BotModule } from './bot/bot.module';
 import { PublicModule } from './public/public.module';
 import { AuthModule } from './auth/auth.module';
@@ -12,10 +16,16 @@ import { ProfessionalsModule } from './professionals/professionals.module';
 import { BusinessHoursModule } from './business-hours/business-hours.module';
 import { TimeOffModule } from './time-off/time-off.module';
 import { AppointmentsModule } from './appointments/appointments.module';
+import { ClinicsModule } from './clinics/clinics.module';
 import { ConversationsModule } from './conversations/conversations.module';
+import { PatientsModule } from './patients/patients.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { FaqModule } from './faq/faq.module';
+import { FeedbackModule } from './feedback/feedback.module';
 import { HealthModule } from './health/health.module';
+import { LeadsModule } from './leads/leads.module';
+import { InvitationsModule } from './invitations/invitations.module';
+import { MailModule } from './mail/mail.module';
 
 /**
  * Raíz de la app. La validación global (ValidationPipe) se aplica en main.ts.
@@ -29,11 +39,14 @@ import { HealthModule } from './health/health.module';
  */
 @Module({
   imports: [
+    LoggerModule,
+    SentryAppModule,
     PrismaModule,
     LlmRouterModule,
     WhatsappModule,
     SchedulingModule,
     RemindersModule,
+    FollowUpsModule,
     BotModule,
     PublicModule,
     AuthModule,
@@ -42,10 +55,17 @@ import { HealthModule } from './health/health.module';
     BusinessHoursModule,
     TimeOffModule,
     AppointmentsModule,
+    ClinicsModule,
     ConversationsModule,
+    PatientsModule,
     DashboardModule,
     FaqModule,
+    FeedbackModule,
     HealthModule,
+    LeadsModule,
+    MailModule,
+    InvitationsModule,
+    AdminModule,
   ],
 })
 export class AppModule {}
