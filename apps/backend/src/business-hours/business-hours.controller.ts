@@ -18,6 +18,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { tenantWhere, type AuthUser } from '../auth/tenant-context.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateBusinessHourDto } from './dto/create-business-hour.dto';
+import { ListBusinessHoursQueryDto } from './dto/list-business-hours.dto';
 import { UpdateBusinessHourDto } from './dto/update-business-hour.dto';
 
 /**
@@ -75,13 +76,28 @@ export class BusinessHoursController {
   @Get()
   async list(
     @CurrentUser() user: AuthUser,
-    @Query('professionalId') professionalId?: string,
+    @Query() q: ListBusinessHoursQueryDto,
   ) {
+    const scope = tenantWhere(user);
+    if (!q.professionalId) {
+      return this.prisma.businessHour.findMany({
+        where: scope,
+        orderBy: [{ weekday: 'asc' }, { startMinutes: 'asc' }],
+      });
+    }
+
+    await this.assertProfessionalInClinic(scope.clinicId, q.professionalId);
+
+    // Horario efectivo: si el profesional tiene horario propio, se usa ese;
+    // si no tiene ninguno, hereda el horario de clínica (professionalId=null).
+    const ownHours = await this.prisma.businessHour.findMany({
+      where: { ...scope, professionalId: q.professionalId },
+      orderBy: [{ weekday: 'asc' }, { startMinutes: 'asc' }],
+    });
+    if (ownHours.length > 0) return ownHours;
+
     return this.prisma.businessHour.findMany({
-      where: {
-        ...tenantWhere(user),
-        ...(professionalId ? { professionalId } : {}),
-      },
+      where: { ...scope, professionalId: null },
       orderBy: [{ weekday: 'asc' }, { startMinutes: 'asc' }],
     });
   }

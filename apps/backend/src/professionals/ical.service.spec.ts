@@ -91,6 +91,7 @@ describe('IcalService', () => {
     it('genera VEVENT por cada appointment activo', async () => {
       prisma.professional.findUnique.mockResolvedValue({
         id: 'prof-1',
+        clinicId: 'clinic-A',
         name: 'Dra. Ríos',
         clinic: { name: 'Clínica A', timezone: 'America/Caracas' },
       });
@@ -118,17 +119,20 @@ describe('IcalService', () => {
     it('excluye CANCELADA y NO_SHOW del where', async () => {
       prisma.professional.findUnique.mockResolvedValue({
         id: 'prof-1',
+        clinicId: 'clinic-A',
         name: 'Dra. Ríos',
         clinic: { name: 'Clínica A', timezone: 'America/Caracas' },
       });
       await svc.buildFeed('prof-1');
       const call = prisma.appointment.findMany.mock.calls[0][0];
+      expect(call.where.clinicId).toBe('clinic-A');
       expect(call.where.status.notIn).toEqual(['CANCELADA', 'NO_SHOW']);
     });
 
     it('mapea PENDIENTE/EN_RIESGO → TENTATIVE, CONFIRMADA/ATENDIDA → CONFIRMED', async () => {
       prisma.professional.findUnique.mockResolvedValue({
         id: 'prof-1',
+        clinicId: 'clinic-A',
         name: 'Dra. Ríos',
         clinic: { name: 'Clínica A', timezone: 'America/Caracas' },
       });
@@ -151,6 +155,7 @@ describe('IcalService', () => {
     it('escapa correctamente , ; \\ y newlines en SUMMARY/DESCRIPTION', async () => {
       prisma.professional.findUnique.mockResolvedValue({
         id: 'prof-1',
+        clinicId: 'clinic-A',
         name: 'Dra. Ríos',
         clinic: { name: 'Clínica; A, con "chars"', timezone: 'UTC' },
       });
@@ -175,6 +180,7 @@ describe('IcalService', () => {
     it('tolera Patient.name null (schema permite)', async () => {
       prisma.professional.findUnique.mockResolvedValue({
         id: 'prof-1',
+        clinicId: 'clinic-A',
         name: 'Dra. Ríos',
         clinic: { name: 'Clínica A', timezone: 'UTC' },
       });
@@ -198,6 +204,7 @@ describe('IcalService', () => {
     it('usa CRLF entre líneas (RFC 5545)', async () => {
       prisma.professional.findUnique.mockResolvedValue({
         id: 'prof-1',
+        clinicId: 'clinic-A',
         name: 'Dra. Ríos',
         clinic: { name: 'Clínica A', timezone: 'UTC' },
       });

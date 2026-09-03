@@ -7,6 +7,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { Public } from '../auth/decorators/public.decorator';
+import { IcalFeedQueryDto } from './dto/ical-feed-query.dto';
 import { IcalService } from './ical.service';
 
 /**
@@ -31,9 +32,9 @@ export class ProfessionalsIcalController {
   @Header('Cache-Control', 'private, max-age=60')
   async feed(
     @Param('id') id: string,
-    @Query('token') token?: string,
+    @Query() q: IcalFeedQueryDto,
   ): Promise<string> {
-    if (!this.ical.verifyToken(id, token)) {
+    if (!this.ical.verifyToken(id, q.token)) {
       // Sin filtrar por qué falló — no dar señal a un attacker de si el ID
       // existe o si el token está mal formado.
       throw new ForbiddenException('token inválido');
