@@ -98,7 +98,17 @@ export function RateLimit(
       const pipeline = this.redis.pipeline();
       pipeline.incr(key);
       pipeline.expire(key, 60);
-      const results = await pipeline.exec();
+
+      let results: Awaited<ReturnType<typeof pipeline.exec>>;
+      try {
+        results = await pipeline.exec();
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        this.logger.error(
+          `rate-limit Redis error para key=${key1}: ${message}`,
+        );
+        return true;
+      }
 
       if (!results) {
         // Redis down: fail-open sería inseguro (podríamos ser DDoS'd). Fail-closed

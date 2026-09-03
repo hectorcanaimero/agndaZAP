@@ -5,6 +5,7 @@ import { KnowledgeService } from '../knowledge/knowledge.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RemindersService } from '../reminders/reminders.service';
 import { AvailabilityService } from '../scheduling/availability.service';
+import { SchedulingSessionService } from '../scheduling/scheduling-session.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { WahaService } from '../whatsapp/waha.service';
 import { BotService } from './bot.service';
@@ -34,6 +35,7 @@ describe('BotService — FSM de agendamiento', () => {
   let intent: Deep<IntentService>;
   let availability: Deep<AvailabilityService>;
   let scheduling: Deep<SchedulingService>;
+  let schedulingSessions: Deep<SchedulingSessionService>;
   let knowledge: Deep<KnowledgeService>;
   /**
    * Fake Redis stateful: mantiene contadores in-memory por key para poder
@@ -154,6 +156,15 @@ describe('BotService — FSM de agendamiento', () => {
         endAt: tomorrow1030.toJSDate(),
       }),
     };
+    // Default: create devuelve un token predecible para asserts de URL.
+    // Tests que ejerciten un flujo distinto pueden sobrescribir.
+    schedulingSessions = {
+      create: jest
+        .fn()
+        .mockResolvedValue({ token: 'tok-abc', expiresInSeconds: 1800 }),
+      resolve: jest.fn().mockResolvedValue(null),
+      consume: jest.fn().mockResolvedValue(null),
+    };
     knowledge = {
       answer: jest.fn().mockResolvedValue(null),
     };
@@ -176,6 +187,7 @@ describe('BotService — FSM de agendamiento', () => {
       intent as unknown as IntentService,
       availability as unknown as AvailabilityService,
       scheduling as unknown as SchedulingService,
+      schedulingSessions as unknown as SchedulingSessionService,
       knowledge as unknown as KnowledgeService,
       redis as any,
     );
@@ -856,6 +868,54 @@ describe('BotService — FSM de agendamiento', () => {
       const msg = waha.sendText.mock.calls.at(-1)![2];
       expect(msg).toContain('Clínica A'); // {clinicName} en el default
       expect(intent.detect).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('buildSchedulingLink (escalation a form web)', () => {
+    beforeEach(() => {
+      process.env.WEB_BASE_URL = 'https://showly.us';
+    });
+
+    it('genera token via SchedulingSessionService y arma la URL con locale + slug + ?t=', async () => {
+      const url = await bot.buildSchedulingLink(
+        {
+          id: 'convo-1',
+          phone: '+584141234567',
+          lid: null,
+          contactName: 'Ana',
+        } as any,
+        { id: 'clinic-A', slug: 'clinica-a', locale: 'es' } as any,
+      );
+
+      expect(schedulingSessions.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          conversationId: 'convo-1',
+          clinicId: 'clinic-A',
+          clinicSlug: 'clinica-a',
+          phone: '+584141234567',
+          name: 'Ana',
+        }),
+      );
+      expect(url).toBe('https://showly.us/es/agendar/clinica-a?t=tok-abc');
+    });
+
+    it('normaliza WEB_BASE_URL con trailing slash', async () => {
+      process.env.WEB_BASE_URL = 'https://showly.us///';
+      const url = await bot.buildSchedulingLink(
+        { id: 'c', phone: null, lid: 'xyz', contactName: null } as any,
+        { id: 'clinic-A', slug: 'clinica-a', locale: 'pt' } as any,
+      );
+      expect(url).toBe('https://showly.us/pt/agendar/clinica-a?t=tok-abc');
+    });
+
+    it('propaga phone=null y lid al service (caso @lid)', async () => {
+      await bot.buildSchedulingLink(
+        { id: 'c', phone: null, lid: 'xyz', contactName: null } as any,
+        { id: 'clinic-A', slug: 'clinica-a', locale: 'es' } as any,
+      );
+      expect(schedulingSessions.create).toHaveBeenCalledWith(
+        expect.objectContaining({ phone: null, lid: 'xyz', name: null }),
+      );
     });
   });
 });

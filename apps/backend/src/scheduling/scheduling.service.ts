@@ -5,13 +5,19 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Appointment, Prisma } from '@prisma/client';
+import {
+  Appointment,
+  AppointmentSource as PrismaAppointmentSource,
+  Prisma,
+} from '@prisma/client';
 import { DateTime } from 'luxon';
 import { PrismaService } from '../prisma/prisma.service';
 import { RemindersService } from '../reminders/reminders.service';
 import { AvailabilityService } from './availability.service';
 
-export type AppointmentSource = 'BOT' | 'PUBLIC';
+// Re-export para que el resto del backend consuma el mismo type que la DB.
+// BOT_WEB representa el flujo "bot mandó link web y el paciente completó allá".
+export type AppointmentSource = PrismaAppointmentSource;
 
 export interface CreateAppointmentInput {
   clinicId: string;
@@ -22,6 +28,14 @@ export interface CreateAppointmentInput {
   startAtISO: string;
   notes?: string;
   source: AppointmentSource;
+  /**
+   * Conversation de WhatsApp de origen. Se guarda cuando `source === 'BOT_WEB'`
+   * para atar la cita al chat (permite notificar cambios de estado por WA sin
+   * volver a resolver el chat a partir del phone). Ignorado si source es BOT o
+   * PUBLIC — en BOT no lo necesitamos (la conversación ya se ata via patient
+   * en el FSM), en PUBLIC no existe conversación.
+   */
+  conversationId?: string;
 }
 
 /**
@@ -53,6 +67,7 @@ export class SchedulingService {
       startAtISO,
       notes,
       source,
+      conversationId,
     } = input;
 
     // 1) Cargamos clínica + servicio + profesional filtrando SIEMPRE por clinicId.
@@ -171,6 +186,12 @@ export class SchedulingService {
             notes: notes ?? null,
             confirmedAt:
               initialStatus === 'CONFIRMADA' ? DateTime.now().toJSDate() : null,
+            source,
+            // Solo persistimos conversationId cuando source === BOT_WEB.
+            // Silenciosamente lo ignoramos en otros casos para evitar FK
+            // spurios si un caller lo pasa por accidente.
+            conversationId:
+              source === 'BOT_WEB' && conversationId ? conversationId : null,
           },
         });
       });

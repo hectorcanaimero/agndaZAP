@@ -5,7 +5,7 @@ import {
   Injectable,
   Logger,
 } from '@nestjs/common';
-import { Clinic, Conversation, Service } from '@prisma/client';
+import { Clinic, Conversation, Prisma, Service } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import Redis from 'ioredis';
 import { DateTime } from 'luxon';
@@ -15,6 +15,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { REDIS_CLIENT } from '../public/rate-limit.guard';
 import { RemindersService } from '../reminders/reminders.service';
 import { AvailabilityService, Slot } from '../scheduling/availability.service';
+import { SchedulingSessionService } from '../scheduling/scheduling-session.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { WahaService } from '../whatsapp/waha.service';
 import { Intent, IntentService } from './intent.service';
@@ -49,6 +50,9 @@ interface FlowData {
   feedbackScore?: number;
 }
 
+type ReminderReplyAction = 'YES' | 'CANCEL' | 'RESCHEDULE';
+type FlowConfirmAction = ReminderReplyAction | 'NO';
+
 /**
  * Orquestador del bot. Combina:
  *  - reglas deterministas (confirmaciones por palabra clave — barato y confiable),
@@ -76,9 +80,45 @@ export class BotService {
     private readonly intent: IntentService,
     private readonly availability: AvailabilityService,
     private readonly scheduling: SchedulingService,
+    private readonly schedulingSessions: SchedulingSessionService,
     private readonly knowledge: KnowledgeService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
+
+  /**
+   * Genera un link de agendamiento web atado a esta conversación WA y lo
+   * devuelve como URL absoluta lista para mandar por WhatsApp.
+   *
+   * Uso: cuando el bot decide escalar a la web (típicamente porque llegó por
+   * `@lid` y no tenemos phone, o porque la FSM se enredó y preferimos que el
+   * paciente use el form gráfico). El token expira en 30 min (default del
+   * SchedulingSessionService) — suficiente para completar el flujo sin
+   * dejarlo abierto indefinidamente.
+   *
+   * URL shape: `{WEB_BASE_URL}/{locale}/agendar/{slug}?t={token}`.
+   *   - `WEB_BASE_URL` viene de env; en prod típicamente `https://showly.us`.
+   *     Sin trailing slash. Default `http://localhost:3000` para dev.
+   *   - `locale` sale del Clinic (soporte i18n en la URL).
+   *
+   * Devuelve la URL. El caller decide cómo redactarla en el mensaje WA.
+   */
+  async buildSchedulingLink(
+    convo: Pick<Conversation, 'id' | 'phone' | 'lid' | 'contactName'>,
+    clinic: Pick<Clinic, 'id' | 'slug' | 'locale'>,
+  ): Promise<string> {
+    const { token } = await this.schedulingSessions.create({
+      conversationId: convo.id,
+      clinicId: clinic.id,
+      clinicSlug: clinic.slug,
+      phone: convo.phone,
+      lid: convo.lid,
+      name: convo.contactName,
+    });
+    const baseUrl = (
+      process.env.WEB_BASE_URL ?? 'http://localhost:3000'
+    ).replace(/\/+$/, '');
+    return `${baseUrl}/${clinic.locale}/agendar/${clinic.slug}?t=${token}`;
+  }
 
   /**
    * Hash corto del `chatId` para poder loguear sin filtrar PII (el chatId
@@ -307,54 +347,19 @@ export class BotService {
     // Si un humano tomó la conversación, el bot no responde.
     if (convo.state === 'HUMAN') return;
 
-    const normalized = text.trim().toLowerCase();
-
-    // "cancelar" en cualquier momento aborta la FSM y resetea (regla del SPEC).
-    // Excepción: si NO hay FSM activa, "cancelar" cae al flujo de cancelar cita.
-    if (
-      convo.flowStep &&
-      ['cancelar', 'cancela', 'abortar', 'salir'].includes(normalized)
-    ) {
-      await this.resetFlow(convo.id);
-      await this.reply(
-        clinic.wahaSession,
-        chatId,
-        convo.id,
-        'Listo, dejé el agendamiento en pausa. Cuando quieras, escribime "agendar" para retomar.',
-      );
-      return;
-    }
+    const normalized = this.normalizeMessage(text);
 
     // Escape universal a humano: desde CUALQUIER paso (con o sin FSM) el paciente
     // puede pedir hablar con una persona y salimos del bot inmediatamente.
     // Palabras: humano, persona, operador, asesor, representante, attendant, o
     // la frase "hablar con". Reseteamos FSM y marcamos NEEDS_HUMAN para la bandeja.
     if (this.isHumanEscape(normalized)) {
-      await this.prisma.conversation.update({
-        where: { id: convo.id },
-        data: {
-          state: 'NEEDS_HUMAN',
-          flowStep: null,
-          flowData: undefined,
-        },
-      });
+      await this.markNeedsHuman(convo.id);
       await this.reply(
         clinic.wahaSession,
         chatId,
         convo.id,
         this.resolveBotMessage(clinic, 'handoff'),
-      );
-      return;
-    }
-
-    // 0.5) Saludo — antes de meterse con confirmaciones/intent. Responde
-    // el `botGreeting` (o default). Cortés y barato: no gasta LLM.
-    if (BotService.GREETING_REGEX.test(normalized)) {
-      await this.reply(
-        clinic.wahaSession,
-        chatId,
-        convo.id,
-        this.resolveBotMessage(clinic, 'greeting'),
       );
       return;
     }
@@ -365,51 +370,31 @@ export class BotService {
       return;
     }
 
-    // 2) Confirmaciones deterministas (recordatorios) — solo si NO hay FSM.
-    // Requiere phone conocido (buscamos Patient por phone). Si el contacto
-    // llegó con LID (phone=null) no podemos correlacionar → skip.
-    if (
-      phone &&
-      ['sí', 'si', 'confirmo', 'confirmar', 'ok', 'dale'].includes(normalized)
-    ) {
-      const appt = await this.findUpcomingAppointment(clinicId, phone);
-      if (appt) {
-        await this.reminders.confirmAppointment(appt.id);
-        await this.reply(
-          clinic.wahaSession,
-          chatId,
-          convo.id,
-          '¡Listo! Tu cita quedó confirmada. Te esperamos.',
-        );
-        return;
-      }
+    // 1.5) Saludo — solo si NO hay FSM activa. Cortés y barato: no gasta LLM.
+    if (BotService.GREETING_REGEX.test(normalized)) {
+      await this.reply(
+        clinic.wahaSession,
+        chatId,
+        convo.id,
+        this.resolveBotMessage(clinic, 'greeting'),
+      );
+      return;
     }
-    if (phone && ['cancelar', 'cancela'].includes(normalized)) {
-      const appt = await this.findUpcomingAppointment(clinicId, phone);
-      if (appt) {
-        await this.prisma.appointment.update({
-          where: { id: appt.id },
-          data: { status: 'CANCELADA', canceledAt: DateTime.now().toJSDate() },
-        });
-        await this.reminders.cancelForAppointment(appt.id);
-        await this.reply(
-          clinic.wahaSession,
-          chatId,
-          convo.id,
-          'Tu cita fue cancelada. Cuando quieras, escribime para reagendar.',
-        );
-        return;
-      }
+
+    // 2) Confirmaciones deterministas (recordatorios) — solo si NO hay FSM.
+    // Deben resolverse ANTES de invocar el LLM: el recordatorio pide responder
+    // SÍ / REAGENDAR / CANCELAR, y esas palabras no pueden depender del modelo.
+    const reminderAction = this.parseReminderReply(normalized);
+    if (reminderAction) {
+      await this.handleReminderReply(clinic, convo, reminderAction, phone);
+      return;
     }
 
     // 3) Detección de intención con LLM.
     const intent = await this.intent.detect(text, clinic.locale);
     switch (intent) {
       case Intent.HABLAR_HUMANO:
-        await this.prisma.conversation.update({
-          where: { id: convo.id },
-          data: { state: 'NEEDS_HUMAN' },
-        });
+        await this.markNeedsHuman(convo.id);
         await this.reply(
           clinic.wahaSession,
           chatId,
@@ -419,8 +404,29 @@ export class BotService {
         break;
 
       case Intent.AGENDAR:
-      case Intent.REPROGRAMAR:
         await this.startFlow(clinic, convo);
+        break;
+
+      case Intent.REPROGRAMAR:
+        await this.handleReminderReply(clinic, convo, 'RESCHEDULE', phone);
+        break;
+
+      case Intent.CANCELAR:
+        await this.reply(
+          clinic.wahaSession,
+          chatId,
+          convo.id,
+          'Para cancelar tu próxima cita, respondé *CANCELAR*. No voy a cancelarla sin esa confirmación explícita.',
+        );
+        break;
+
+      case Intent.CONFIRMAR:
+        await this.reply(
+          clinic.wahaSession,
+          chatId,
+          convo.id,
+          'Para confirmar tu próxima cita, respondé *SÍ*.',
+        );
         break;
 
       case Intent.PREGUNTA_FAQ: {
@@ -441,10 +447,7 @@ export class BotService {
             result.answer,
           );
         } else {
-          await this.prisma.conversation.update({
-            where: { id: convo.id },
-            data: { state: 'NEEDS_HUMAN' },
-          });
+          await this.markNeedsHuman(convo.id);
           await this.reply(
             clinic.wahaSession,
             chatId,
@@ -520,6 +523,25 @@ export class BotService {
   ): Promise<void> {
     const step = convo.flowStep as FlowStep;
     const data = ((convo.flowData as unknown) as FlowData) ?? {};
+
+    // "cancelar" en cualquier paso de la FSM de agendamiento aborta y resetea.
+    // En CONFIRM lo procesa `handleConfirm` para distinguir "no", "cancelar" y
+    // "reagendar" como respuestas explícitas al resumen de la cita.
+    if (
+      step !== 'CONFIRM' &&
+      step !== 'AWAITING_NPS_SCORE' &&
+      step !== 'AWAITING_NPS_COMMENT' &&
+      this.isFlowAbort(normalized)
+    ) {
+      await this.resetFlow(convo.id);
+      await this.reply(
+        clinic.wahaSession,
+        convo.chatId,
+        convo.id,
+        'Listo, dejé el agendamiento en pausa. Cuando quieras, escribime "agendar" para retomar.',
+      );
+      return;
+    }
 
     switch (step) {
       case 'ASK_SERVICE':
@@ -892,11 +914,9 @@ export class BotService {
     normalized: string,
     _originalText: string,
   ): Promise<void> {
-    const yes = ['sí', 'si', 'confirmo', 'confirmar', 'ok', 'dale'].includes(normalized);
-    const no = ['no', 'cancelar'].includes(normalized);
-    const reschedule = ['reagendar', 'reprogramar'].includes(normalized);
+    const action = this.parseFlowConfirmReply(normalized);
 
-    if (!yes && !no && !reschedule) {
+    if (!action) {
       await this.reply(
         clinic.wahaSession,
         convo.chatId,
@@ -910,12 +930,12 @@ export class BotService {
     // con la lista fresca de horarios preservando serviceId, professionalId y
     // patientName. Reduce fricción — el paciente cambió de opinión sobre la
     // hora, no sobre agendar.
-    if (reschedule) {
+    if (action === 'RESCHEDULE') {
       await this.reofferSlotsAfterConflict(clinic, convo, data);
       return;
     }
 
-    if (no) {
+    if (action === 'NO' || action === 'CANCEL') {
       await this.resetFlow(convo.id);
       await this.reply(
         clinic.wahaSession,
@@ -937,15 +957,20 @@ export class BotService {
       return;
     }
 
-    // Sin phone conocido no podemos crear el Patient. TODO: agregar ASK_PHONE
-    // al FSM para conversaciones que llegaron con LID.
+    // Sin phone (Conversation llegó por `@lid`) no podemos crear el Patient
+    // por acá. En vez de rebotar al paciente, escalamos al form web: mandamos
+    // un link firmado con TTL 30 min y reseteamos la FSM. Cuando el paciente
+    // completa el form, `POST /public/:slug/appointments` consume el token y
+    // ata la cita a esta Conversation via `conversationId` (source=BOT_WEB).
+    // Ver ADR 0015.
     if (!convo.phone) {
+      const link = await this.buildSchedulingLink(convo, clinic);
       await this.resetFlow(convo.id);
       await this.reply(
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        'Para confirmar tu cita necesito tu número de teléfono. Por favor escribíme al número directo de la clínica desde tu contacto.',
+        `Para terminar de agendar necesito tu número de teléfono. Completá tu cita acá — el link vence en 30 minutos:\n\n${link}`,
       );
       return;
     }
@@ -1145,6 +1170,142 @@ export class BotService {
 
   // ─────────────────────────── Helpers ───────────────────────────
 
+  private normalizeMessage(text: string): string {
+    return text
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .replace(/[¡!¿?.,;:]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private parseReminderReply(normalized: string): ReminderReplyAction | null {
+    if (
+      this.startsWithAny(normalized, [
+        'si',
+        'confirmo',
+        'confirmar',
+        'ok',
+        'dale',
+      ])
+    ) {
+      return 'YES';
+    }
+    if (
+      this.startsWithAny(normalized, [
+        'cancelar',
+        'cancela',
+        'cancelo',
+        'anular',
+      ])
+    ) {
+      return 'CANCEL';
+    }
+    if (this.startsWithAny(normalized, ['reagendar', 'reprogramar'])) {
+      return 'RESCHEDULE';
+    }
+    return null;
+  }
+
+  private parseFlowConfirmReply(normalized: string): FlowConfirmAction | null {
+    if (this.startsWithAny(normalized, ['no'])) return 'NO';
+    return this.parseReminderReply(normalized);
+  }
+
+  private isFlowAbort(normalized: string): boolean {
+    return this.startsWithAny(normalized, [
+      'cancelar',
+      'cancela',
+      'cancelo',
+      'abortar',
+      'salir',
+    ]);
+  }
+
+  private startsWithAny(normalized: string, keywords: string[]): boolean {
+    return keywords.some((keyword) => {
+      const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`^${escaped}(?:\\b|$)`, 'u').test(normalized);
+    });
+  }
+
+  private async handleReminderReply(
+    clinic: Clinic,
+    convo: Conversation,
+    action: ReminderReplyAction,
+    phone: string | null,
+  ): Promise<void> {
+    if (!phone) {
+      await this.reply(
+        clinic.wahaSession,
+        convo.chatId,
+        convo.id,
+        'No pude asociar este chat a una cita. Te derivo con recepción para ayudarte.',
+      );
+      await this.markNeedsHuman(convo.id);
+      return;
+    }
+
+    const appt = await this.findUpcomingAppointment(clinic.id, phone);
+    if (!appt) {
+      await this.reply(
+        clinic.wahaSession,
+        convo.chatId,
+        convo.id,
+        'No encontré una cita próxima asociada a este número. Si necesitás ayuda, escribí "hablar con una persona".',
+      );
+      return;
+    }
+
+    if (action === 'YES') {
+      await this.reminders.confirmAppointment(appt.id);
+      await this.reply(
+        clinic.wahaSession,
+        convo.chatId,
+        convo.id,
+        '¡Listo! Tu cita quedó confirmada. Te esperamos.',
+      );
+      return;
+    }
+
+    if (action === 'CANCEL') {
+      await this.prisma.appointment.update({
+        where: { id: appt.id },
+        data: { status: 'CANCELADA', canceledAt: DateTime.now().toJSDate() },
+      });
+      await this.reminders.cancelForAppointment(appt.id);
+      await this.reply(
+        clinic.wahaSession,
+        convo.chatId,
+        convo.id,
+        'Tu cita fue cancelada. Cuando quieras, escribime para reagendar.',
+      );
+      return;
+    }
+
+    await this.reminders.cancelForAppointment(appt.id);
+    await this.markNeedsHuman(convo.id);
+    await this.reply(
+      clinic.wahaSession,
+      convo.chatId,
+      convo.id,
+      'Te derivo con recepción para reagendar esa cita. No voy a moverla hasta que confirmes el nuevo horario.',
+    );
+  }
+
+  private async markNeedsHuman(convoId: string): Promise<void> {
+    await this.prisma.conversation.update({
+      where: { id: convoId },
+      data: {
+        state: 'NEEDS_HUMAN',
+        flowStep: null,
+        flowData: Prisma.JsonNull,
+      },
+    });
+  }
+
   /**
    * Resuelve la elección del usuario: primero intenta como número (índice
    * 1-based, tolera "1.", "opción 2", etc.), después por match parcial en el
@@ -1323,7 +1484,7 @@ export class BotService {
   private async resetFlow(convoId: string): Promise<void> {
     await this.prisma.conversation.update({
       where: { id: convoId },
-      data: { flowStep: null, flowData: undefined },
+      data: { flowStep: null, flowData: Prisma.JsonNull },
     });
   }
 

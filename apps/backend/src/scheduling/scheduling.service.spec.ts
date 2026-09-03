@@ -205,6 +205,9 @@ describe('SchedulingService.createAppointment', () => {
         source: 'PUBLIC',
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.service.findFirst).toHaveBeenCalledWith({
+      where: { id: 'svc-of-clinic-B', clinicId: 'clinic-A', active: true },
+    });
     expect(prisma.appointment.create).not.toHaveBeenCalled();
     expect(reminders.scheduleForAppointment).not.toHaveBeenCalled();
   });

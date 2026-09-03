@@ -44,12 +44,30 @@ interface Professional {
   serviceIds: string[];
 }
 
+/**
+ * Prefill del form cuando el paciente llegó desde el link WA `?t=<token>`.
+ *
+ * - `token`: viaja tal cual al POST para que el backend consuma la sesión y
+ *   ate la cita a la Conversation origen.
+ * - `phoneEditable`: `false` (default) → el input phone queda readonly con
+ *   el valor pre-cargado. Evita que el paciente cambie el número y rompa el
+ *   linkeo WA↔cita. `true` cuando el bot no conocía el teléfono (Conversation
+ *   llegó como `@lid`) — el input queda editable como required normal.
+ */
+export interface SchedulePrefill {
+  token: string;
+  name: string;
+  phone: string;
+  phoneEditable: boolean;
+}
+
 interface ScheduleFormProps {
   clinicSlug: string;
   timezone: string;
   services: Service[];
   professionals: Professional[];
   locale: string;
+  prefill?: SchedulePrefill;
 }
 
 /**
@@ -233,10 +251,16 @@ function SectionHeader({
  * confirmación real del server antes del redirect a /gracias.
  */
 export function ScheduleForm(props: ScheduleFormProps) {
-  const { clinicSlug, timezone, services, professionals, locale } = props;
+  const { clinicSlug, timezone, services, professionals, locale, prefill } =
+    props;
   const t = useTranslations('form');
   const router = useRouter();
   const qc = useQueryClient();
+
+  // El teléfono va readonly solo cuando el prefill vino con phone conocido
+  // (`phoneEditable === false`). En el caso @lid el phone viene vacío y
+  // `phoneEditable === true` → input editable como required normal.
+  const phoneReadOnly = Boolean(prefill && !prefill.phoneEditable);
 
   const {
     register,
@@ -247,8 +271,8 @@ export function ScheduleForm(props: ScheduleFormProps) {
   } = useForm<ScheduleFormValues>({
     resolver: zodResolver(scheduleSchema),
     defaultValues: {
-      name: '',
-      phone: '',
+      name: prefill?.name ?? '',
+      phone: prefill?.phone ?? '',
       notes: '',
       serviceId: '',
       professionalId: '',
@@ -403,6 +427,8 @@ export function ScheduleForm(props: ScheduleFormProps) {
       professionalId: values.professionalId,
       startAtISO: values.startAtISO,
       honeypot: values.honeypot,
+      // Token del link WA (undefined si el paciente entró por link público).
+      token: prefill?.token,
     });
 
     if (result.ok) {
@@ -673,9 +699,22 @@ export function ScheduleForm(props: ScheduleFormProps) {
             type="tel"
             autoComplete="tel"
             placeholder={t('placeholders.phone')}
+            readOnly={phoneReadOnly}
+            aria-readonly={phoneReadOnly}
+            // `readOnly` no cambia el color por default — bajamos opacidad y
+            // cursor para señalizar visualmente que no es editable. Se sigue
+            // pudiendo copiar/paste (a diferencia de `disabled`, que además
+            // sacaría el valor del submit).
+            className={
+              phoneReadOnly
+                ? 'bg-gray-50 text-gray-600 cursor-not-allowed'
+                : undefined
+            }
             {...register('phone')}
           />
-          <p className="text-xs text-gray-500">{t('hints.phone')}</p>
+          <p className="text-xs text-gray-500">
+            {phoneReadOnly ? t('hints.phoneFromWhatsapp') : t('hints.phone')}
+          </p>
           {errors.phone ? (
             <p className="text-sm text-red-600">{t('errors.phoneInvalid')}</p>
           ) : null}

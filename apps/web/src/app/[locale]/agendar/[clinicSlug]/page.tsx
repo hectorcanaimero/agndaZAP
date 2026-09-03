@@ -1,9 +1,9 @@
 import { CalendarClock, MapPin, Sparkles } from 'lucide-react';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { Card, CardContent } from '@/components/ui/card';
-import { fetchClinic } from '@/lib/api';
-import { ScheduleForm } from './ScheduleForm';
+import { fetchClinic, fetchSchedulingSession } from '@/lib/api';
+import { ScheduleForm, type SchedulePrefill } from './ScheduleForm';
 
 /**
  * Página pública SSR de agendamiento.
@@ -21,8 +21,10 @@ import { ScheduleForm } from './ScheduleForm';
  */
 export default async function AgendarPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string; clinicSlug: string }>;
+  searchParams: Promise<{ t?: string | string[] }>;
 }) {
   const { locale, clinicSlug } = await params;
   setRequestLocale(locale);
@@ -30,6 +32,36 @@ export default async function AgendarPage({
   const clinic = await fetchClinic(clinicSlug);
   if (!clinic) {
     notFound();
+  }
+
+  // Prefill desde el link WA: `?t=<token>`. Si el token existe, hidratamos
+  // en el server (evita flash de form vacío) y pasamos como `prefill` al
+  // client. Si el token es para otra clínica, redirigimos al slug correcto —
+  // el paciente pinchó desde WA, no queremos pedirle "elegí clínica" acá.
+  // Si expiró/inválido, seguimos sin prefill: el usuario ve el form normal
+  // y (opcional en el futuro) mostramos un banner "tu link expiró".
+  const search = await searchParams;
+  const tokenParam = search.t;
+  const token = Array.isArray(tokenParam) ? tokenParam[0] : tokenParam;
+  let prefill: SchedulePrefill | undefined;
+  if (token) {
+    try {
+      const session = await fetchSchedulingSession(token);
+      if (session) {
+        if (session.clinicSlug !== clinicSlug) {
+          redirect(`/${locale}/agendar/${session.clinicSlug}?t=${token}`);
+        }
+        prefill = {
+          token,
+          name: session.name ?? '',
+          phone: session.phone ?? '',
+          phoneEditable: session.phoneEditable,
+        };
+      }
+    } catch {
+      // Fail-open: si el backend está caído o la sesión falla, mostramos el
+      // form vacío en vez de tirar 500. El paciente puede completar manual.
+    }
   }
 
   const t = await getTranslations('page');
@@ -120,6 +152,7 @@ export default async function AgendarPage({
                   services={clinic.services}
                   professionals={clinic.professionals}
                   locale={locale}
+                  prefill={prefill}
                 />
               </CardContent>
             </Card>
