@@ -13,6 +13,11 @@ FROM node:20-alpine AS build
 # pnpm via corepack — el mismo pin que el repo (pnpm 9.0.0).
 RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
 
+# Coolify pasa NODE_ENV=production como --build-arg, lo cual hace que pnpm
+# salte devDependencies (nest, typescript, etc) y rompe el build.
+# Desactivamos explícitamente NODE_ENV durante el build stage.
+ENV NODE_ENV=
+
 WORKDIR /repo
 
 # Copiar sólo los manifests primero — cache-friendly.
