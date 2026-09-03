@@ -562,7 +562,7 @@
       "description": "**Severidad**: P0 · **Origen**: F1.2.T1 · **Artefacto**: `SPEC.md` §2\n\nEl motor de disponibilidad devuelve la *unión* del horario del profesional con\nel de la clínica en vez del override. Tras el `findMany`, si existe al menos un\n`BusinessHour` con `professionalId`, descartar todos los de `professionalId ===\nnull`. Añadir test de regresión: un profesional con horario propio NO recibe\nslots fuera de su horario (no hereda los de la clínica).",
       "model": "opencode/deepseek-v4-pro",
       "reason": "Correctitud del core de agendamiento; edge cases de override/herencia.",
-      "status": "backlog",
+      "status": "done",
       "dependencies": [],
       "estimateHours": 2.0,
       "files": [
