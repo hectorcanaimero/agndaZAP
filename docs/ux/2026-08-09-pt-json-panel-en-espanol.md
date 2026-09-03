@@ -5,7 +5,7 @@ priority: P0
 axis: i18n
 subagent_type: general-purpose
 skill: copywriting
-status: pending
+status: done
 created: 2026-08-09
 tags:
   - ux
@@ -179,3 +179,19 @@ Restricciones:
 Al terminar: reporte con `jq -r 'paths(scalars) | join(".")' es.json pt.json | diff` limpio +
 build de web verde.
 ```
+
+## Auditoría F1.5.T1 — cierre verificado (2026-08-22)
+
+Estado: **cerrado**. Evidencia focalizada:
+
+- `apps/web/messages/pt.json` mantiene paridad exacta de keys con `es.json` (`missing_in_pt=0`, `extra_in_pt=0`).
+- Grep scoped a `login.*` y `panel.*` no encontró español Rioplatense para: `Iniciá`, `Ingresá`, `Elegí`, `Cerrá`, `Probá`, `vos`, `Lunes`, `Miércoles`, `vacío`, `guardado`.
+- Weekdays pt-BR verificados: Domingo, Segunda, Terça, Quarta, Quinta, Sexta, Sábado.
+- `panel.agenda.statusRaceRefresh` verificado como `Esse status já foi alterado — atualizando.`
+- `panel.faq.hints.content` verificado como `Você pode usar markdown (negrito, listas, links, etc.).`
+
+Verificaciones F1.5.T1:
+
+- Script Python focalizado validó grep de español sólo en `login.*`/`panel.*` y paridad de paths escalares es/pt.
+- `pnpm i18n:check` se ejecuta como verificación focalizada, sin build.
+- `pnpm build` queda explícitamente **no ejecutado** por instrucción de F1.5.T1.

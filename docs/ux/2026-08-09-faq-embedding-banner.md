@@ -171,3 +171,12 @@ Restricciones:
 Al terminar: reporte con archivos modificados + tests + build + confirmación de que la
 response NO trae el vector.
 ```
+
+## Auditoría F1.5.T1 — revalidación P0 (2026-08-22)
+
+Estado: **sigue cerrado**. El documento ya estaba en `status: done`; F1.5.T1 lo revalidó como parte del barrido P0. La pantalla `apps/web/src/app/[locale]/panel/faq/FaqClient.tsx` conserva estados empty visibles, bloqueo de doble submit vía `saveMutation.isPending`, `ConfirmDialog` para delete y banner/badges de embedding documentados en este spec.
+
+Verificaciones F1.5.T1:
+
+- `rg "ConfirmDialog|notIndexed|role=\"status|disabled={busy}" apps/web/src/app/[locale]/panel/faq/FaqClient.tsx` queda como verificación focalizada del cierre funcional.
+- `pnpm build` queda explícitamente **no ejecutado** por instrucción de F1.5.T1.

@@ -15,8 +15,7 @@ básica.
 **Mínimo recomendado**:
 
 - **CPU**: 2 vCPU (x86_64).
-- **RAM**: 4 GB (WAHA usa Chromium, ~1-1.5 GB idle; el resto para
-  postgres + redis + backend + web + swap).
+- **RAM**: 4 GB (WAHA corre con NOWEB/Baileys en compose, bastante más liviano que WEBJS/Chromium; el resto para postgres + redis + backend + web + swap).
 - **Disco**: 20 GB SSD (postgres data + WAHA session + Docker images).
 - **Sistema**: Ubuntu 22.04 LTS o Debian 12 (probado). Alpine también
   funciona pero requiere ajustes de bash.
@@ -102,6 +101,7 @@ Ya está en la raíz del repo. Diferencias clave vs `docker-compose.yml` (dev):
 - **`restart: unless-stopped`** en todos los servicios.
 - **Backend + web** con Dockerfiles multi-stage (context = raíz).
 - **Caddy** como reverse proxy → TLS Let's Encrypt automático.
+- **Healthchecks**: backend usa `/api/health/live` con `start_period: 60s`; web usa `/api/health`; WAHA usa `/health` con header `X-Api-Key`.
 
 ---
 
@@ -123,6 +123,8 @@ JWT_SECRET=$(openssl rand -base64 48)
 # ── WAHA ───────────────────────────────────────────────
 WAHA_API_KEY=$(openssl rand -hex 24)
 WEBHOOK_TOKEN=$(openssl rand -hex 32)
+WEBHOOK_HMAC_SECRET=$(openssl rand -base64 48)
+WAHA_HEALTH_INTERVAL_MIN=5
 WAHA_DASHBOARD_USERNAME=admin
 WAHA_DASHBOARD_PASSWORD=$(openssl rand -base64 24)
 WHATSAPP_SWAGGER_USERNAME=admin
@@ -133,16 +135,29 @@ WHATSAPP_SWAGGER_PASSWORD=$(openssl rand -base64 24)
 # sigue seguro. Generá CADA uno con su propio `openssl rand -base64 24`.
 
 # ── LLM ────────────────────────────────────────────────
+LLM_PROVIDER_ORDER=deepseek,opencode,gemini
 DEEPSEEK_API_KEY=sk-...                # de platform.deepseek.com
 GEMINI_API_KEY=...                      # de aistudio.google.com
 OPENAI_API_KEY=sk-...                   # (opcional) para embeddings FAQ
+# Opcional si usás OpenCode como provider del router LLM:
+OPENCODE_API_KEY=...
+OPENCODE_BASE_URL=https://.../v1
+OPENCODE_PLAN=...
 
-# ── Proxy y CORS ───────────────────────────────────────
+# ── Proxy, CORS, iCal y mail ───────────────────────────
 TRUST_PROXY=true                        # SIEMPRE true detrás de Caddy
 CORS_ORIGINS=https://panel.tudominio.com,https://agenda.tudominio.com
+ICAL_SECRET=$(openssl rand -base64 48)
+RESEND_API_KEY=re_...
+EMAIL_FROM="Showly <no-reply@tudominio.com>"
+APP_BASE_URL=https://panel.tudominio.com
 
-# ── Web build-time ─────────────────────────────────────
+# ── Web build-time/runtime ─────────────────────────────
 NEXT_PUBLIC_API_URL=https://api.tudominio.com
+NEXT_PUBLIC_SENTRY_DSN=https://...
+NEXT_PUBLIC_SENTRY_ENABLED=true
+SENTRY_RELEASE=git-<sha>
+NEXT_PUBLIC_SENTRY_RELEASE=git-<sha>
 ```
 
 **Reglas duras**:
@@ -382,14 +397,9 @@ Idem para `web`. Este check es manual por ahora; automatizarlo en CI post-piloto
 
 **Base (piloto)**:
 
-- **`GET /api/health`** — endpoint público (sin auth) que responde 200
-  con `{ ok, db, redis, timestamp }`. Chequea Postgres (`SELECT 1`) y
-  Redis (`PING`). Responde 200 con `ok: false` cuando hay problemas —
-  el orquestador decide qué es "unhealthy". Consumido por:
-  - Docker healthcheck (agregar a `docker-compose.prod.yml` — cuando se
-    documente el override).
-  - Uptime Robot / BetterUptime externo: pegar cada 5 min a
-    `https://api.tudominio.com/api/health`, alertar si `ok !== true`.
+- **`GET /api/health/live`** — liveness público (sin auth) para Docker healthcheck del backend. No chequea dependencias; evita reiniciar backend por un blip temporal de WAHA/Redis. En `docker-compose.prod.yml` tiene `start_period: 60s`.
+- **`GET /api/health`** — health completo público que responde 200 con `{ ok, db, redis, waha, timestamp, checks }`. Chequea Postgres (`SELECT 1`), Redis (`PING`) y WAHA (`/health` con `X-Api-Key`). Responde 200 con `ok: false` cuando hay problemas; BetterStack/Uptime debe alertar si `ok !== true`.
+- **Web `GET /api/health`** — healthcheck del container `web`, con `Cache-Control: no-store`.
 - `docker compose logs -f backend web` — tail de logs. Sin agregador
   externo por ahora.
 - `docker stats` — CPU/RAM en tiempo real.
@@ -537,8 +547,7 @@ Documentado en [[adr/0004-pii-y-compliance]] y [[adr/0005-auth-mvp-y-deuda]]:
 
 - **Backups off-site automatizados**: rclone → B2 post-piloto.
 - **Alerting WAHA disconnect** → Slack.
-- ~~**Health check endpoint del backend**~~ ✅ **Listo** — `GET /api/health`
-  público responde `{ ok, db, redis, timestamp }`. Ver sección 11.
+- ~~**Health check endpoint del backend**~~ ✅ **Listo** — `GET /api/health/live` para liveness Docker y `GET /api/health` para db+redis+waha. Ver sección 11.
 - **Grafana + Prometheus** para métricas de containers.
 - **Sentry** para errores del backend (opcional — hoy los logs
   estructurados de NestJS + `docker logs` cubren MVP).

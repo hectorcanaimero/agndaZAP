@@ -16,7 +16,10 @@ resultados observados vs esperados.
 
 ## 0. Pre-check
 
-- [ ] `docker compose ps` muestra `db`, `redis`, `waha`, `backend` como `Up`.
+- [ ] `docker compose ps` muestra `db`, `redis`, `waha` (y `backend` si lo
+      levantás dentro del compose) como `Up`. Si corrés el backend en el host
+      (`pnpm dev:backend`), no va a aparecer acá — es normal, validá con
+      `curl -s http://localhost:4000/api/health` que responda.
 - [ ] `curl -s http://localhost:4000/api/dashboard/metrics -o /dev/null -w "%{http_code}"` → **401** (sin token, ok).
 - [ ] `curl -s http://localhost:3002/es/agendar/demo -o /dev/null -w "%{http_code}"` → **200** (web arriba, ruta pública responde).
 - [ ] Seed refrescado en los últimos 24h. Correr si no:
@@ -25,6 +28,21 @@ resultados observados vs esperados.
       ```
 - [ ] Verificar credenciales dev disponibles: `admin@demo.dev / demo1234`,
       `super@showly.dev / super1234`.
+- [ ] **LLM del bot**: los pasos que dependen de intención (`quiero una cita`,
+      `¿cuáles son los horarios?`, handoff por intención) requieren al menos una
+      key LLM en la env del backend (`DEEPSEEK_API_KEY`, `GEMINI_API_KEY` u
+      `OPENCODE_API_KEY`+`OPENCODE_BASE_URL`+`OPENCODE_PLAN`). Sin ninguna key,
+      `intent.detect` degrada a `otro` y la FSM nunca arranca. Verificar:
+      ```bash
+      # sin key → "todos los LLM fallaron" al primer POST de intención
+      grep -E "DEEPSEEK_API_KEY|GEMINI_API_KEY|OPENCODE_API_KEY" .env
+      ```
+- [ ] Webhook: si `WEBHOOK_HMAC_SECRET` está seteada en la env, **gana HMAC** y
+      el header `x-webhook-token` ya no alcanza (403). Para el smoke dejar
+      `WEBHOOK_HMAC_SECRET` vacía (default de `.env.example`) o computar el HMAC.
+      `ALLOW_WEBHOOK_WITHOUT_TOKEN=true` es otra opción solo en dev.
+- [ ] (Opcional, acelera el smoke) `BOT_TYPING_ENABLED=false` elimina el delay de
+      "escribiendo…" por mensaje del bot (ahorra ~1-4s por respuesta).
 - [ ] Sesión WAHA `demo-session` en estado `WORKING`:
       ```bash
       curl -s -H "X-Api-Key: $WAHA_API_KEY" \
@@ -38,15 +56,17 @@ resultados observados vs esperados.
 
 - [ ] Navegar a `http://localhost:3002/es/login`.
 - [ ] Login con `admin@demo.dev` / `demo1234`.
-- [ ] Redirect a `/es/panel` (dashboard).
+- [ ] Redirect a `/es/panel/dashboard` (el índice `/es/panel` redirige ahí).
 - [ ] Cards visibles:
   - Tasa de no-show (esperado ~20%, del seed).
   - Distribución por estado (ATENDIDA=22, CANCELADA=6, NO_SHOW=6).
-  - Confirmaciones enviadas > 0.
+  - KPI "Confirmación" (tasa de confirmación — el dashboard NO muestra un
+    conteo de "confirmaciones enviadas"; si querés ver pendientes de
+    confirmación, mirá el panel `pendingConfirmation`).
   - Trend con 14 barras (últimos 14 días).
 
 - [ ] Navegar a `/es/panel/agenda` — deben aparecer citas del seed.
-- [ ] Navegar a `/es/panel/bandeja` — deben aparecer 2 conversaciones
+- [ ] Navegar a `/es/panel/conversaciones` — deben aparecer 2 conversaciones
       seed (una BOT, una NEEDS_HUMAN).
 
 ---
@@ -59,14 +79,22 @@ webhook. Necesitamos el `WEBHOOK_TOKEN` en la env (dev vale
 
 Variables:
 
+> **IMPORTANTE**: el bot responde a `$CHAT_ID` vía `sendText` de WAHA real.
+> Si `from` no es un número WhatsApp válido (registrado), `sendText` falla y el
+> POST al webhook devuelve **500**. Por eso `PHONE` tiene que ser un E.164 real
+> de prueba (el mismo que usás en los Escenarios 4/5), no un ID inventado.
+
 ```bash
-export CHAT_ID="smoke-$(date +%s)@c.us"
-export PHONE="+58414${RANDOM}${RANDOM}"
+export PHONE="+584141234567"          # ← tu número E.164 de prueba (real)
+export CHAT_ID="${PHONE#+}@c.us"
 export TOKEN=$(curl -s -X POST http://localhost:4000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@demo.dev","password":"demo1234"}' | \
   python3 -c "import json,sys; print(json.load(sys.stdin)['accessToken'])")
 ```
+
+(El `TOKEN` hoy no se usa en los comandos del smoke — quedó de una versión
+anterior 100% por API. Se puede ignorar.)
 
 Helper para postear un mensaje entrante:
 
@@ -120,8 +148,13 @@ Verificación:
       ```bash
       docker exec showly-redis-1 redis-cli --scan --pattern 'bull:reminders:*' | head -20
       ```
-      Esperado: al menos 2 keys `reminder-<id>` + 1 `risk-<apptId>` (si
-      la cita está a >6h).
+      Esperado (depende de cuánto falta para el slot elegido):
+      - Jobs `reminder-*`: **2** si el slot está a **>24h** (offsets 24h + 3h),
+        **1** (sólo el de 3h) si está a ≤24h — los recordatorios en el pasado no
+        se programan.
+      - Job `risk-<apptId>`: **1 sólo si** el slot está a **>6h** (umbral
+        `confirmThresholdH`, default 6). Si el slot elegido es hoy/menos de 6h,
+        no hay job de riesgo.
 
 ---
 
@@ -163,10 +196,11 @@ Verificación:
   - Checkbox consent.
   - Honeypot invisible.
 
-- [ ] Elegir servicio → los slots se actualizan.
-- [ ] Elegir profesional (o dejarlo en "cualquiera").
-- [ ] Elegir fecha → slots del día se listan.
-- [ ] Elegir slot.
+- [ ] Elegir servicio → luego **elegir profesional** (los slots recién se cargan
+      con servicio Y profesional seleccionados).
+- [ ] Elegir profesional — **obligatorio** (el form no tiene opción
+      "cualquiera": `professionalId` es requerido por zod y el backend).
+- [ ] Elegir slot → los slots se listan agrupados por día.
 - [ ] Completar nombre + teléfono E.164 válido (ej. `+584141234567`).
 - [ ] Marcar consent.
 - [ ] Submit.
@@ -179,8 +213,10 @@ Bonus checks:
 - [ ] Intentar submitear el form con teléfono inválido (ej. `123`) →
       validación de zod bloquea.
 - [ ] Intentar submitear con nombre vacío → validación bloquea.
-- [ ] Enviar 6 requests seguidas rápidas al POST →
-      la 6ta devuelve **429** con header `Retry-After: 60`.
+- [ ] Enviar 6 requests rápidas al POST **dentro de la misma ventana de 60s**
+      (contando el submit exitoso de arriba si fue hace <1 min) →
+      la que supera el límite devuelve **429** con header `Retry-After: 60`
+      (el límite es 5/min por IP+slug).
 
 ---
 
@@ -191,12 +227,28 @@ usarlo como paciente de test).
 
 - [ ] Desde el panel, crear cita para dentro de **~4 horas** para tu
       teléfono. Estado inicial: PENDIENTE.
-- [ ] Verificar en Redis que hay 2 jobs (`reminder-*`) y 1 job
-      (`risk-*`).
+- [ ] Verificar en Redis: **1 job `reminder-*`** (sólo el offset de 3h — el de
+      24h cae en el pasado y no se programa) y **ningún job `risk-*`** (el job
+      de riesgo se programa sólo si la cita está a **>6h**, umbral
+      `confirmThresholdH`). Si querés ver 2 `reminder-*` + 1 `risk-*`, creá la
+      cita a **~25h** y saltá el paso del mensaje (o forzá el job, ver abajo).
 - [ ] Esperar hasta que la cita esté a 3h (o menos). Job dispara el
       recordatorio.
 - [ ] Recibir mensaje en tu WhatsApp: "Recordatorio de tu cita..."
 - [ ] Responder `sí` desde WhatsApp.
+
+> **OJO — prefijo del teléfono**: el webhook deriva el `phone` del chatId sin
+> `+` (`584141234567`) mientras que el panel guarda el paciente con `+`
+> (`+584141234567`). Si la cita del panel se creó con `+`, el bot NO encuentra
+> el paciente al responder `sí` y no confirma. Workaround para el smoke: crear
+> la cita del Escenario 1 con el mismo `PHONE` (el bot guarda el paciente sin
+> `+`, que es lo que matchea la respuesta) o pedir por API con el número sin
+> `+`. **Corrección de código pendiente** (rompe el flujo real
+> página-pública + recordatorio + confirmación): normalizar el `phone` en un
+> solo punto — recomendado en `BotService.findUpcomingAppointment` y en el
+> upsert de `SchedulingService.createAppointment` (o derivar `+` en
+> `webhook.controller.ts`).
+
 - [ ] Verificar que la cita en el panel pasa a `CONFIRMADA` (refresh
       manual).
 - [ ] Verificar en DB:
@@ -206,9 +258,16 @@ usarlo como paciente de test).
       Esperado: `status=CONFIRMADA`, `confirmedAt` con timestamp reciente.
 - [ ] Verificar que el `risk-*` fue eliminado de Redis.
 
-**Alternativa sin esperar**: forzar el job `check-risk` a correr
-adelantando el tiempo. Editar el `reminder.fireAt` a ahora en la DB y
-esperar el próximo tick del worker BullMQ.
+**Alternativa sin esperar** (editar `reminder.fireAt` en la DB **NO alcanza**:
+el delay ya quedó fijo en la ZSET `bull:reminders:delayed` de BullMQ). Para
+disparar el job `send-reminder` antes, mové el job de delayed al pasado y el
+scheduler lo promueve en el próximo tick (~500ms):
+
+```bash
+RID=$(docker exec showly-db-1 psql -U showly -d showly -tAc \
+  "SELECT id FROM \"Reminder\" WHERE \"appointmentId\"='<APPT_ID>' AND status='SCHEDULED' LIMIT 1")
+docker exec showly-redis-1 redis-cli ZADD "bull:reminders:delayed" 1 "reminder-$RID"
+```
 
 ---
 
@@ -221,7 +280,7 @@ esperar el próximo tick del worker BullMQ.
       SELECT state FROM "Conversation" WHERE "chatId"='<CHAT_ID>';
       ```
       Esperado: `NEEDS_HUMAN`.
-- [ ] En el panel `/es/panel/bandeja`, la conversación aparece resaltada
+- [ ] En el panel `/es/panel/conversaciones`, la conversación aparece resaltada
       arriba.
 - [ ] Click en la conversación → botón "Tomar conversación".
 - [ ] Estado pasa a `HUMAN`. Chat input habilitado.
@@ -257,7 +316,7 @@ esperar el próximo tick del worker BullMQ.
 
 - [ ] `send_msg "¿cuáles son los horarios?"` → bot NO responde con la
       FAQ (embeddings no calculados). Handoff.
-- [ ] En logs del backend debería aparecer: `KnowledgeService: OPENAI_API_KEY faltante`.
+- [ ] En logs del backend debería aparecer: `faq answer: OPENAI_API_KEY no configurada, handoff clinicId=...`
 - [ ] Después de setear la key, correr:
       ```bash
       pnpm --filter @showly/backend prisma:reindex-faq
@@ -272,7 +331,7 @@ esperar el próximo tick del worker BullMQ.
 |---|-----------|----------|-----------|-----------|
 | 0 | Pre-check infra + web | Todo Up, seed OK | ⬜ | ⬜ |
 | 1 | Login panel | Dashboard con datos del seed | ⬜ | ⬜ |
-| 2 | Bot agenda por WA (webhook) | Cita PENDIENTE + 2 reminders + 1 risk en Redis | ⬜ | ⬜ |
+| 2 | Bot agenda por WA (webhook) | Cita PENDIENTE + jobs `reminder-*`/`risk-*` según distancia del slot (ver §2) | ⬜ | ⬜ |
 | 3 | Panel cancela cita | CANCELADA + jobs eliminados + reminders CANCELED | ⬜ | ⬜ |
 | 4 | Público agenda desde /agendar/demo | Cita creada, aparece en panel, rate-limit ok | ⬜ | ⬜ |
 | 5 | Recordatorio 3h + confirmación | Mensaje llega, `sí` → CONFIRMADA | ⬜ | ⬜ |
@@ -298,10 +357,13 @@ Después del smoke, si vas a mostrar a la clínica en poco tiempo:
       "
       ```
       (los reminders bajan en cascada).
-- [ ] Cerrar las conversaciones de test:
+- [ ] Cerrar las conversaciones de test (reemplazar `<TU_CHAT_ID>` por el
+      `$CHAT_ID` usado en los Escenarios 1/5/6):
       ```sql
       DELETE FROM "Conversation"
-      WHERE "chatId" LIKE 'smoke-%' OR "chatId" LIKE 'seedv1-%';
+      WHERE "chatId" LIKE 'smoke-%'
+         OR "chatId" LIKE 'seedv1-%'
+         OR "chatId" = '<TU_CHAT_ID>';
       ```
       (los messages bajan en cascada).
 - [ ] Re-correr el seed para dejar el dashboard con la data histórica
@@ -327,6 +389,30 @@ ADRs:
   están programados con los offsets viejos). Sólo aplica a citas futuras.
 - Página de "gracias" pierde el nombre del paciente si el usuario abre en
   ventana nueva antes del redirect (sessionStorage es por-tab).
+- El bot necesita al menos una LLM key (`DEEPSEEK_API_KEY`, `GEMINI_API_KEY`
+  u `OPENCODE_*`) para detectar intención. Sin key, `intent.detect` degrada a
+  `otro` y "quiero una cita" responde el fallback genérico (la FSM nunca
+  arranca). No es un bug — es una dependencia de config.
+
+---
+
+## 11. Bugs detectados (SÍ reportar)
+
+- **Inconsistencia de prefijo en `phone`** — rompe la confirmación por
+  WhatsApp de citas creadas desde el panel/página pública. El webhook deriva
+  `phone` del chatId SIN `+` (`webhook.controller.ts:142-145`) mientras que
+  panel y página pública normalizan CON `+`. Consecuencia: el bot no encuentra
+  al paciente en `BotService.findUpcomingAppointment` y "sí" no confirma la
+  cita. Fix recomendado: normalizar en un solo punto (ej. en
+  `SchedulingService.createAppointment` o derivando `+` en el webhook).
+  Impacto: **Escenario 4 (Recordatorio + confirmación) falla tal como está
+  documentado** si la cita se crea desde el panel.
+- **Webhook simulado con `from` falso** (Escenario 1/6): si el `chatId` no es
+  un número WhatsApp real, `WahaService.sendText` falla y el POST devuelve
+  500 (el `reply()` del bot no trapea el error). El smoke ahora usa un número
+  real, pero el backend no debería reventar el webhook por un fallo de envío
+  — el mensaje OUT debería persistirse igual. Evaluar en la fase de
+  finalización.
 
 Referencias: [[onboarding-clinica]], [[runbook-panel]], [[PRD]] §8,
 [[SPEC]] §3.

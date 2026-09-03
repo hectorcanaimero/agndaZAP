@@ -5,7 +5,7 @@ priority: P0
 axis: States
 subagent_type: general-purpose
 skill: frontend-design
-status: pending
+status: done
 created: 2026-08-09
 tags:
   - ux
@@ -220,3 +220,21 @@ Restricciones:
 Al terminar: reporte con archivos + build + verificación axe + resultado DevTools Network
 (1 sola request por submit).
 ```
+
+## Auditoría F1.5.T1 — cierre verificado (2026-08-22)
+
+Estado: **cerrado**. Aunque este spec vive fuera del panel, F1.5.T1 pidió verificar explícitamente el cierre de P0 en `docs/ux/*`; se auditó sin editar paths fuera del alcance. Evidencia focalizada:
+
+- `apps/web/src/app/[locale]/agendar/[clinicSlug]/ScheduleForm.tsx:132-149` renderiza skeleton de slots con `role="status"`, `aria-live="polite"` y `aria-busy="true"`.
+- `ScheduleForm.tsx:389-395` evita doble submit con guard sobre `isSubmitting || submitMutation.isPending`.
+- `ScheduleForm.tsx:439-452` maneja 409, refetchea slots y mueve foco al primer `[data-slot]`.
+- `ScheduleForm.tsx:563-596` muestra loading/empty/error visibles y CTAs para próxima semana/cambiar profesional.
+- `ScheduleForm.tsx:613-629` deshabilita slots durante submit y usa `bg-brand-600 text-white` con comentario de contraste AA.
+- `ScheduleForm.tsx:729-739` expone `submitError` con `role="alert"` y `aria-live="assertive"`.
+- `ScheduleForm.tsx:306` usa `todayStartInTZ(timezone)` para anclar la disponibilidad a la TZ de la clínica.
+
+Verificaciones F1.5.T1:
+
+- `rg "submitLock|role=\"alert|aria-live=\"assertive|Skeleton|todayStartInTZ|data-slot|bg-brand-600" apps/web/src/app/[locale]/agendar/[clinicSlug]/ScheduleForm.tsx` confirmó los marcadores críticos.
+- No se editó `ScheduleForm.tsx` por estar fuera del alcance permitido de F1.5.T1.
+- `pnpm build` queda explícitamente **no ejecutado** por instrucción de F1.5.T1.

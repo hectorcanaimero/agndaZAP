@@ -52,6 +52,10 @@ Las clínicas y consultorios pequeños/medianos en LATAM pierden entre **20% y 3
 - Dashboard: tasa de no-show, citas por estado, confirmaciones, tendencia.
 
 ### App Flutter (profesional/dueño)
+> **ESTADO (2026-08-22): NO implementada** — `apps/mobile` es solo un stub
+> (`README.md`). Es un gap P0 frente a este PRD (con mitigación P1 para el
+> piloto vía panel web responsive). Alcance pendiente documentado en
+> `apps/mobile/README.md` (auditoría F1.6.T1). Se posterga a una fase posterior.
 - Login.
 - Agenda del día/semana (solo lectura + confirmar/bloquear).
 - Notificación push cuando hay cita nueva o cancelación.
@@ -128,5 +132,5 @@ Las clínicas y consultorios pequeños/medianos en LATAM pierden entre **20% y 3
 - **Fase 1 (core agendamiento):** servicios/profesionales/horarios, motor de disponibilidad, flujo de agendar por WhatsApp.
 - **Fase 2 (anti no-show):** motor de recordatorios + confirmaciones + estados + alertas.
 - **Fase 3 (panel):** agenda visual, bandeja de conversaciones, dashboard, FAQ.
-- **Fase 4 (app Flutter):** agenda del profesional + push.
+- **Fase 4 (app Flutter):** agenda del profesional + push. **Pendiente** — `apps/mobile` es un stub; ver auditoría F1.6.T1 en `apps/mobile/README.md`.
 - **Fase 5 (piloto):** onboarding de 1 clínica real + build in public.

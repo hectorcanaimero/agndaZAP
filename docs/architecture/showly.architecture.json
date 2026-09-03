@@ -1,0 +1,416 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Showly — Arquitectura de sistema",
+    "subtitle": "Agendamiento por WhatsApp + recordatorios anti no-show · Multi-tenant SaaS",
+    "output": "current.html",
+    "quality_profile": "standard",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "happy-path",
+        "label": "Happy path: agendar por WhatsApp",
+        "focus": ["paciente-wa", "waha", "webhook", "conversation", "bot", "scheduling", "reminders", "db"],
+        "note": "Flujo principal: paciente agenda por WhatsApp → bot FSM → crear cita + recordatorios"
+      },
+      {
+        "id": "public-booking",
+        "label": "Agendamiento público web",
+        "focus": ["paciente-web", "public-page", "public-api", "scheduling", "db"],
+        "note": "Flujo alternativo: paciente agenda por web → mismo SchedulingService + recordatorios"
+      },
+      {
+        "id": "admin-ops",
+        "label": "Operación SaaS",
+        "focus": ["superadmin", "admin-panel", "admin-api", "db"],
+        "note": "SUPERADMIN gestiona tenants, métricas cross-tenant, impersonation, auditoría"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "paciente-wa",
+      "type": "external",
+      "label": "Paciente",
+      "sublabel": "WhatsApp",
+      "pos": [40, 60]
+    },
+    {
+      "id": "waha",
+      "type": "cloud",
+      "label": "WAHA",
+      "sublabel": "Docker · Baileys",
+      "tag": "NO oficial",
+      "pos": [40, 180]
+    },
+    {
+      "id": "webhook",
+      "type": "backend",
+      "label": "WhatsApp",
+      "sublabel": "Webhook",
+      "tag": "HMAC",
+      "pos": [40, 340]
+    },
+    {
+      "id": "conversation",
+      "type": "backend",
+      "label": "Conversation",
+      "sublabel": "Estado chat",
+      "pos": [190, 340]
+    },
+    {
+      "id": "bot",
+      "type": "backend",
+      "label": "Bot",
+      "sublabel": "FSM + LLM",
+      "pos": [340, 340]
+    },
+    {
+      "id": "paciente-web",
+      "type": "external",
+      "label": "Paciente",
+      "sublabel": "Browser web",
+      "pos": [220, 60]
+    },
+    {
+      "id": "public-page",
+      "type": "frontend",
+      "label": "Página pública",
+      "sublabel": "/agendar/[slug]",
+      "tag": "Next.js SSR",
+      "pos": [220, 180]
+    },
+    {
+      "id": "public-api",
+      "type": "backend",
+      "label": "Public API",
+      "sublabel": "rate-limit",
+      "pos": [40, 460]
+    },
+    {
+      "id": "scheduling",
+      "type": "backend",
+      "label": "Scheduling",
+      "sublabel": "Disponibilidad",
+      "tag": "Core",
+      "pos": [520, 340]
+    },
+    {
+      "id": "reminders",
+      "type": "backend",
+      "label": "Reminders",
+      "sublabel": "Anti no-show",
+      "tag": "BullMQ",
+      "pos": [670, 340]
+    },
+    {
+      "id": "knowledge",
+      "type": "backend",
+      "label": "Knowledge",
+      "sublabel": "RAG FAQ",
+      "tag": "pgvector",
+      "pos": [490, 460]
+    },
+    {
+      "id": "recepcion",
+      "type": "external",
+      "label": "Recepción",
+      "sublabel": "CLINIC_ADMIN",
+      "pos": [900, 60]
+    },
+    {
+      "id": "panel-web",
+      "type": "frontend",
+      "label": "Panel Web",
+      "sublabel": "Next.js 15",
+      "pos": [900, 180]
+    },
+    {
+      "id": "auth",
+      "type": "security",
+      "label": "Auth + Clinics",
+      "sublabel": "JWT + RBAC",
+      "tag": "Multi-tenant",
+      "pos": [900, 340]
+    },
+    {
+      "id": "superadmin",
+      "type": "external",
+      "label": "SUPERADMIN",
+      "sublabel": "Operador SaaS",
+      "pos": [1100, 60]
+    },
+    {
+      "id": "admin-panel",
+      "type": "frontend",
+      "label": "Admin Panel",
+      "sublabel": "/admin/*",
+      "pos": [1100, 180]
+    },
+    {
+      "id": "admin-api",
+      "type": "backend",
+      "label": "Admin API",
+      "sublabel": "Impersonation",
+      "tag": "SUPERADMIN",
+      "pos": [1100, 340]
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "15 + pgvector",
+      "tag": "Multi-tenant",
+      "pos": [520, 550]
+    },
+    {
+      "id": "redis",
+      "type": "messagebus",
+      "label": "Redis",
+      "sublabel": "BullMQ",
+      "pos": [670, 550]
+    },
+    {
+      "id": "llm",
+      "type": "cloud",
+      "label": "LLM",
+      "sublabel": "DeepSeek/Gemini",
+      "pos": [340, 460]
+    },
+    {
+      "id": "observability",
+      "type": "cloud",
+      "label": "Observability",
+      "sublabel": "Axiom + Sentry",
+      "tag": "Pino logger",
+      "pos": [900, 550]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Backend NestJS — Multi-tenant core",
+      "wraps": [
+        "webhook",
+        "conversation",
+        "bot",
+        "public-api",
+        "scheduling",
+        "reminders",
+        "knowledge",
+        "auth",
+        "admin-api"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "wa-to-waha",
+      "from": "paciente-wa",
+      "to": "waha",
+      "variant": "emphasis"
+    },
+    {
+      "id": "waha-to-webhook",
+      "from": "waha",
+      "to": "webhook",
+      "label": "webhook",
+      "variant": "emphasis",
+      "labelDy": 44
+    },
+    {
+      "id": "webhook-to-conversation",
+      "from": "webhook",
+      "to": "conversation",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "conversation-to-bot",
+      "from": "conversation",
+      "to": "bot",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "bot-to-scheduling",
+      "from": "bot",
+      "to": "scheduling",
+      "label": "crear cita",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelDy": -20
+    },
+    {
+      "id": "scheduling-to-reminders",
+      "from": "scheduling",
+      "to": "reminders",
+      "label": "jobs",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelDy": -20
+    },
+    {
+      "id": "bot-to-knowledge",
+      "from": "bot",
+      "to": "knowledge",
+      "label": "FAQ",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDx": -30
+    },
+    {
+      "id": "bot-to-llm",
+      "from": "bot",
+      "to": "llm",
+      "label": "intent",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    },
+    {
+      "id": "web-to-public",
+      "from": "paciente-web",
+      "to": "public-page",
+      "variant": "emphasis"
+    },
+    {
+      "id": "public-to-api",
+      "from": "public-page",
+      "to": "public-api",
+      "variant": "emphasis",
+      "fromSide": "left",
+      "toSide": "top",
+      "route": "orthogonal-v"
+    },
+    {
+      "id": "public-api-to-scheduling",
+      "from": "public-api",
+      "to": "scheduling",
+      "label": "crear cita",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left",
+      "route": "orthogonal-h",
+      "labelDy": 20
+    },
+    {
+      "id": "recepcion-to-panel",
+      "from": "recepcion",
+      "to": "panel-web"
+    },
+    {
+      "id": "panel-to-auth",
+      "from": "panel-web",
+      "to": "auth",
+      "label": "API",
+      "labelDy": 44
+    },
+    {
+      "id": "superadmin-to-admin",
+      "from": "superadmin",
+      "to": "admin-panel"
+    },
+    {
+      "id": "admin-to-api",
+      "from": "admin-panel",
+      "to": "admin-api",
+      "labelDy": -20
+    },
+    {
+      "id": "scheduling-to-db",
+      "from": "scheduling",
+      "to": "db",
+      "label": "Prisma",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    },
+    {
+      "id": "reminders-to-redis",
+      "from": "reminders",
+      "to": "redis",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "knowledge-to-db",
+      "from": "knowledge",
+      "to": "db",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDx": 30
+    },
+    {
+      "id": "auth-to-db",
+      "from": "auth",
+      "to": "db",
+      "fromSide": "bottom",
+      "toSide": "right",
+      "route": "orthogonal-v"
+    },
+    {
+      "id": "admin-to-db",
+      "from": "admin-api",
+      "to": "db",
+      "fromSide": "bottom",
+      "toSide": "right",
+      "route": "orthogonal-v"
+    },
+    {
+      "id": "backend-to-obs",
+      "from": "auth",
+      "to": "observability",
+      "label": "logs",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Stack tecnológico",
+      "items": [
+        "Backend: NestJS 10 + Prisma 5 + TypeScript strict",
+        "DB: PostgreSQL 15 + pgvector (embeddings)",
+        "Jobs: Redis 7 + BullMQ (recordatorios)",
+        "Frontend: Next.js 15 + Tailwind + shadcn/ui + next-intl (es/pt)",
+        "WhatsApp: WAHA (Docker, no oficial, engine Baileys)",
+        "LLM: Router multi-provider (DeepSeek primario, Gemini fallback)",
+        "Deploy: Docker Compose + Coolify (Hetzner)"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Multi-tenancy",
+      "items": [
+        "clinicId en toda entidad y en el JWT",
+        "RBAC: SUPERADMIN | CLINIC_ADMIN | PROFESSIONAL",
+        "Cada clínica: sesión WAHA propia + TZ + config recordatorios",
+        "Clinic.status: ACTIVE | SUSPENDED | ARCHIVED (bloquea login)",
+        "Constraint DB: slot único por (clinicId, professionalId, startAt)",
+        "Query guard inyecta clinicId del token (zero-trust)"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Seguridad y compliance",
+      "items": [
+        "Datos de salud: solo nombre + teléfono + motivo (PII mínimo)",
+        "PII redactor en logs (common/logger/pii-redactor.ts)",
+        "Webhook WAHA: HMAC + token (ADR 0017)",
+        "Rate-limit: bot (presupuesto LLM) + endpoint público anti-spam",
+        "Cookies: SameSite=Strict, HttpOnly, Secure",
+        "AdminAudit: trail completo de impersonation + mutaciones SaaS",
+        "TLS en todos los endpoints (HTTPS obligatorio)"
+      ]
+    }
+  ]
+}
