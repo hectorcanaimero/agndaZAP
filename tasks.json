@@ -1,0 +1,1110 @@
+{
+  "meta": {
+    "project": "showly",
+    "generatedAt": "2026-08-22",
+    "note": "Skeleton created by `orch init`. Add tasks by editing this file directly OR by writing specs under specs/ and running `orch atomize --file specs/YOUR-SPEC.md --apply`.",
+    "default_premium_model": "opencode/deepseek-v4-pro",
+    "default_standard_model": "opencode/gpt-5.5-codex",
+    "default_cheap_model": "opencode-go/gemini-3.0-flash"
+  },
+  "phases": [
+    {
+      "id": 0,
+      "name": "F0 — Foundation"
+    },
+    {
+      "id": 1,
+      "name": "F1 — Auditoría de finalización (pre-lanzamiento 40 clínicas)"
+    },
+    {
+      "id": 2,
+      "name": "F2 — Finalización (cierre de findings F1)"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "F1.1.T1",
+      "phase": 1,
+      "title": "Gap analysis backend vs PRD/SPEC/ARCH",
+      "description": "Mapear cada feature, contrato de API y regla de negocio de `PRD.md` §3,\n`SPEC.md` §1-§2 y `ARCHITECTURE.md` contra los módulos reales de\n`apps/backend/src`. Producir tabla gap: implementado / parcial / missing /\nstub, con el módulo y archivo correspondiente.",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "Lectura y cruce de docs contra ~24 módulos NestJS; GPT-5.5 equilibra precisión y costo.",
+      "status": "done",
+      "dependencies": [],
+      "estimateHours": 6.0,
+      "files": [
+        "docs/PRD.md",
+        "docs/SPEC.md",
+        "docs/ARCHITECTURE.md",
+        "apps/backend/src"
+      ],
+      "specRef": "f1-auditoria-finalizacion.md#F1.1.T1",
+      "comments": []
+    },
+    {
+      "id": "F1.1.T2",
+      "phase": 1,
+      "title": "Gap analysis frontend vs PRD §3",
+      "description": "Mapear panel admin, página pública `/agendar/[clinicSlug]`, landing, `/admin/*`\ne invitación (`/invite/[token]`) contra lo prometido en `PRD.md` §3 (panel web\ny flujo público). Verificar qué pantallas existen, cuáles son placeholder y\ncuáles faltan.",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "Recorrido de la estructura `app/` de Next.js + componentes; GPT-5.5.",
+      "status": "done",
+      "dependencies": [
+        "F1.1.T1"
+      ],
+      "estimateHours": 5.0,
+      "files": [
+        "apps/web/src/app",
+        "apps/web/src/components",
+        "docs/PRD.md"
+      ],
+      "specRef": "f1-auditoria-finalizacion.md#F1.1.T2",
+      "comments": []
+    },
+    {
+      "id": "F1.1.T3",
+      "phase": 1,
+      "title": "Reconciliar SPEC.md con los sprints post-08-18",
+      "description": "`SPEC.md` quedó desactualizado: no documenta SUPERADMIN/`/admin/*`, leads,\nfeedback, follow-ups, invitations, i18n es/pt, observabilidad ni webhook HMAC\n(ver `docs/adr/0014`–`0017` y `docs/specs/*`). Producir un diff concreto de lo\nque hay que agregar/corregir en `SPEC.md` (y en `ARCHITECTURE.md` si aplica),\nlisto para una futura task de edición.",
+      "model": "opencode/deepseek-v4-pro",
+      "reason": "Síntesis de contratos con juicio de arquitectura; premium justificado.",
+      "status": "done",
+      "dependencies": [
+        "F1.1.T1"
+      ],
+      "estimateHours": 3.0,
+      "files": [
+        "docs/SPEC.md",
+        "docs/ARCHITECTURE.md",
+        "docs/adr/0014-superadmin-como-operador-saas.md",
+        "docs/adr/0015-pino-axiom-sentry.md",
+        "docs/adr/0016-admin-audit-impersonation-trail.md",
+        "docs/adr/0017-webhook-hmac-cookie-hardening.md",
+        "docs/specs"
+      ],
+      "specRef": "f1-auditoria-finalizacion.md#F1.1.T3",
+      "comments": []
+    },
+    {
+      "id": "F1.2.T1",
+      "phase": 1,
+      "title": "Audit motor de disponibilidad",
+      "description": "Auditar `scheduling/availability.service.ts` y `scheduling.service.ts` contra\nlas reglas de `SPEC.md` §2 \"Disponibilidad\": slot válido (BusinessHour,\nsolapamiento con citas activas, TimeOff, futuro en TZ), paso `durationMin +\nbufferMin`, y cálculo SIEMPRE en Luxon con la TZ de la clínica. Detectar usos\nde `Date` naive.",
+      "model": "opencode/gemini-3.1-pro",
+      "reason": "Lógica de negocio densa con edge cases de TZ; GPT-5.5.",
+      "status": "done",
+      "dependencies": [
+        "F1.1.T1"
+      ],
+      "estimateHours": 4.0,
+      "files": [
+        "apps/backend/src/scheduling/availability.service.ts",
+        "apps/backend/src/scheduling/scheduling.service.ts",
+        "docs/SPEC.md"
+      ],
+      "specRef": "f1-auditoria-finalizacion.md#F1.2.T1",
+      "comments": []
+    },
+    {
+      "id": "F1.2.T2",
+      "phase": 1,
+      "title": "Audit creación atómica + transiciones de cita",
+      "description": "Auditar `appointments/appointment-status.util.ts`, creación en\n`appointments`/`scheduling` y el constraint `@@unique([professionalId,\nstartAt])` en `schema.prisma`. Verificar transiciones permitidas (SPEC §2),\nrechazo 422 de transiciones inválidas, estado inicial según `autoConfirm`, y\nque la creación valide atómicamente el slot libre.",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "Verificación de invariantes de negocio + constraint; GPT-5.5.",
+      "status": "done",
+      "dependencies": [
+        "F1.1.T1"
+      ],
+      "estimateHours": 4.0,
+      "files": [
+        "apps/backend/src/appointments/appointment-status.util.ts",
+        "apps/backend/src/appointments/appointments.controller.ts",
+        "apps/backend/prisma/schema.prisma",
+        "docs/SPEC.md"
+      ],
+      "specRef": "f1-auditoria-finalizacion.md#F1.2.T2",
+      "comments": []
+    },
+    {
+      "id": "F1.2.T3",
+      "phase": 1,
+      "title": "Audit CRUDs de catálogo y agenda (tenant scoping + validación)",
+      "description": "Auditar `services`, `professionals`, `business-hours`, `time-off`,\n`appointments` y `patients`: validación con class-validator en DTOs, y que\ncada query filtre por `clinicId` (sin fuga cross-tenant). Revisar que el\nprofesional tenga horario propio o herede el de la clínica.",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "Revisión transversal de CRUDs + tenant scoping; GPT-5.5.",
+      "status": "done",
+      "dependencies": [
+        "F1.1.T1"
+      ],
+      "estimateHours": 5.0,
+      "files": [
+        "apps/backend/src/services",
+        "apps/backend/src/professionals",
+        "apps/backend/src/business-hours",
+        "apps/backend/src/time-off",
+        "apps/backend/src/appointments",
+        "apps/backend/src/patients"
+      ],
+      "specRef": "f1-auditoria-finalizacion.md#F1.2.T3",
+      "comments": []
+    },
+    {
+      "id": "F1.3.T1",
+      "phase": 1,
+      "title": "Audit motor de recordatorios",
+      "description": "Auditar `reminders/reminders.service.ts` y `reminders.processor.ts` contra\n`SPEC.md` §2 \"Recordatorios\": jobs por offset futuro (pasados se omiten),\n`jobId` determinista (`reminder:{id}`, `risk:{apptId}`), confirmar cancela\ncheck-risk, cancelar/reprogramar elimina jobs, y umbral EN_RIESGO + alerta a\nrecepción.",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "Idempotencia y ciclo de vida de jobs BullMQ; GPT-5.5.",
+      "status": "done",
+      "dependencies": [
+        "F1.1.T1"
+      ],
+      "estimateHours": 4.0,
+      "files": [
+        "apps/backend/src/reminders/reminders.service.ts",
+        "apps/backend/src/reminders/reminders.processor.ts",
+        "docs/SPEC.md"
+      ],
+      "specRef": "f1-auditoria-finalizacion.md#F1.3.T1",
+      "comments": []
+    },
+    {
+      "id": "F1.3.T2",
+      "phase": 1,
+      "title": "Audit FSM del bot + determinismo de confirmaciones",
+      "description": "Auditar `bot/bot.service.ts` y `bot/intent.service.ts`: pasos\n`ASK_SERVICE → ASK_PROFESSIONAL → ASK_SLOT → CONFIRM`, resolución determinista\nde confirmaciones (`sí`/`cancelar`/`reagendar`) ANTES del LLM, nunca crear/cancelar\nsin confirmación explícita, `Conversation.state = HUMAN` silencia al bot, y\nestado retomable vía `flowStep`/`flowData`.",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "FSM con estados + interacción LLM; GPT-5.5.",
+      "status": "done",
+      "dependencies": [
+        "F1.1.T1"
+      ],
+      "estimateHours": 5.0,
+      "files": [
+        "apps/backend/src/bot/bot.service.ts",
+        "apps/backend/src/bot/intent.service.ts",
+        "docs/SPEC.md"
+      ],
+      "specRef": "f1-auditoria-finalizacion.md#F1.3.T2",
+      "comments": []
+    },
+    {
+      "id": "F1.3.T3",
+      "phase": 1,
+      "title": "Audit feedback + follow-ups + leads",
+      "description": "Auditar `feedback`, `follow-ups` y `leads` (ADR 0012 feedback post-atención, y\nel sprint de marketing/leads). Verificar que estén wireados en el flujo del\nbot y que los jobs de follow-up se programen/cancelen coherentemente con las\ncitas. Es una revisión mecánica de completitud.",
+      "model": "opencode-go/deepseek-v4-flash",
+      "reason": "Revisión de completitud sin lógica compleja; DeepSeek V4 Flash alcanza.",
+      "status": "done",
+      "dependencies": [
+        "F1.3.T2"
+      ],
+      "estimateHours": 2.0,
+      "files": [
+        "apps/backend/src/feedback",
+        "apps/backend/src/follow-ups",
+        "apps/backend/src/leads",
+        "docs/adr/0012-feedback-post-atencion.md"
+      ],
+      "specRef": "f1-auditoria-finalizacion.md#F1.3.T3",
+      "comments": []
+    },
+    {
+      "id": "F1.4.T1",
+      "phase": 1,
+      "title": "Audit aislamiento multi-tenant",
+      "description": "Auditar que TODA query de negocio filtre por `clinicId` (vía `TenantContext` o\ndecorador), que guards de JWT + roles protejan cada ruta, y que la página\npública valide `slug` correctamente. Buscar activamente fugas cross-tenant\n(acceso a dato de otro tenant por ID directo).",
+      "model": "opencode/deepseek-v4-pro",
+      "reason": "Riesgo de fuga de PHI entre tenants; DeepSeek V4 Pro para el análisis crítico.",
+      "status": "done",
+      "dependencies": [
+        "F1.1.T1"
+      ],
+      "estimateHours": 6.0,
+      "files": [
+        "apps/backend/src/auth",
+        "apps/backend/src/common",
+        "apps/backend/src/public",
+        "apps/backend/src/clinics",
+        "docs/adr/0005-auth-mvp-y-deuda.md"
+      ],
+      "specRef": "f1-auditoria-finalizacion.md#F1.4.T1",
+      "comments": []
+    },
+    {
+      "id": "F1.4.T2",
+      "phase": 1,
+      "title": "Audit webhook + WAHA + rate limiting",
+      "description": "Auditar `whatsapp/webhook-auth.util.ts`, `webhook.controller.ts`,\n`public/rate-limit.guard.ts` y el rate-limit del bot (ADR 0007): verificación\nHMAC + token, rechazo 403, idempotencia de eventos, y que el rate-limit\nproteja el presupuesto de LLM y el endpoint público anti-spam.",
+      "model": "opencode/deepseek-v4-pro",
+      "reason": "Superficie de ataque expuesta a internet; DeepSeek V4 Pro.",
+      "status": "done",
+      "dependencies": [
+        "F1.1.T1"
+      ],
+      "estimateHours": 4.0,
+      "files": [
+        "apps/backend/src/whatsapp/webhook-auth.util.ts",
+        "apps/backend/src/whatsapp/webhook.controller.ts",
+        "apps/backend/src/public/rate-limit.guard.ts",
+        "docs/adr/0007-rate-limit-bot.md",
+        "docs/adr/0017-webhook-hmac-cookie-hardening.md"
+      ],
+      "specRef": "f1-auditoria-finalizacion.md#F1.4.T2",
+      "comments": []
+    },
+    {
+      "id": "F1.4.T3",
+      "phase": 1,
+      "title": "Audit PII/PHI + logging + cookies",
+      "description": "Auditar `common/logger/pii-redactor.ts`, config de cookies (`Strict`, HttpOnly,\nSecure), consentimiento básico del paciente, y exposición de PHI en logs o\nrespuestas. Contra `docs/adr/0004-pii-y-compliance.md` y la deuda de cookies de\n`docs/adr/0017`.",
+      "model": "opencode/deepseek-v4-pro",
+      "reason": "Compliance de datos de salud; DeepSeek V4 Pro.",
+      "status": "done",
+      "dependencies": [
+        "F1.1.T1"
+      ],
+      "estimateHours": 4.0,
+      "files": [
+        "apps/backend/src/common/logger",
+        "apps/backend/src/auth",
+        "docs/adr/0004-pii-y-compliance.md",
+        "docs/adr/0017-webhook-hmac-cookie-hardening.md"
+      ],
+      "specRef": "f1-auditoria-finalizacion.md#F1.4.T3",
+      "comments": []
+    },
+    {
+      "id": "F1.4.T4",
+      "phase": 1,
+      "title": "Audit SUPERADMIN + impersonation + AdminAudit",
+      "description": "Auditar `admin/*` (impersonation con JWT temporal de 30 min, métricas\ncross-tenant, suspensión/reactivación de clínicas) y el trail estructurado de\n`AdminAudit` (ADR 0014 y 0016). Verificar que toda mutación bajo impersonation\nquede auditada y que un token de impersonation no pueda usarse fuera de su\ncontexto/temporalidad.",
+      "model": "opencode/deepseek-v4-pro",
+      "reason": "Poder de operador SaaS con riesgo de abuso; DeepSeek V4 Pro.",
+      "status": "done",
+      "dependencies": [
+        "F1.1.T1"
+      ],
+      "estimateHours": 5.0,
+      "files": [
+        "apps/backend/src/admin",
+        "docs/adr/0014-superadmin-como-operador-saas.md",
+        "docs/adr/0016-admin-audit-impersonation-trail.md"
+      ],
+      "specRef": "f1-auditoria-finalizacion.md#F1.4.T4",
+      "comments": []
+    },
+    {
+      "id": "F1.5.T1",
+      "phase": 1,
+      "title": "Audit estados de UI + flujos del panel",
+      "description": "Auditar el panel: estados loading/error/empty visibles, protección contra\ndoble submit, `ConfirmDialog` en vez de `confirm()` nativo, reply-lock y\nstaleness en conversaciones, y foco en modales. Verificar explícitamente el\ncierre de los P0 de `docs/ux/*`.",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "UI con estados complejos; GPT-5.5.",
+      "status": "done",
+      "dependencies": [
+        "F1.1.T2"
+      ],
+      "estimateHours": 6.0,
+      "files": [
+        "apps/web/src/components",
+        "apps/web/src/app/[locale]/panel",
+        "docs/ux"
+      ],
+      "specRef": "f1-auditoria-finalizacion.md#F1.5.T1",
+      "comments": []
+    },
+    {
+      "id": "F1.5.T2",
+      "phase": 1,
+      "title": "Audit a11y + responsive + i18n es/pt",
+      "description": "Auditar accesibilidad (focus trap, contrastes, labels, targets táctiles),\ncomportamiento responsive (tablas → cards en mobile, drawer de navegación) y\ncobertura i18n es/pt. Verificar que no haya claves hardcodeadas en español ni\nmissing keys en `messages/*.json`.",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "A11y + i18n requieren criterio; GPT-5.5.",
+      "status": "done",
+      "dependencies": [
+        "F1.1.T2"
+      ],
+      "estimateHours": 5.0,
+      "files": [
+        "apps/web/src/app",
+        "apps/web/src/i18n",
+        "apps/web/messages"
+      ],
+      "specRef": "f1-auditoria-finalizacion.md#F1.5.T2",
+      "comments": []
+    },
+    {
+      "id": "F1.5.T3",
+      "phase": 1,
+      "title": "Audit página pública + endpoint público",
+      "description": "Auditar `app/[locale]/agendar/[clinicSlug]` y `apps/backend/src/public`:\ncarga SSR por slug, formulario con consentimiento, selección de\nservicio/profesional/slot, POST sin auth con rate-limit y anti-spam (Redis), y\nque cree cita + recordatorios igual que el bot (sin duplicar lógica).",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "Flujo SSR + endpoint expuesto; GPT-5.5.",
+      "status": "done",
+      "dependencies": [
+        "F1.1.T2"
+      ],
+      "estimateHours": 5.0,
+      "files": [
+        "apps/web/src/app/[locale]/agendar",
+        "apps/backend/src/public",
+        "docs/adr/0003-rate-limit-casero-vs-throttler.md"
+      ],
+      "specRef": "f1-auditoria-finalizacion.md#F1.5.T3",
+      "comments": []
+    },
+    {
+      "id": "F1.5.T4",
+      "phase": 1,
+      "title": "Audit /admin + flujo de invitación + onboarding",
+      "description": "Auditar `app/[locale]/admin/*` y el flujo `invite/[token]` + wizard de\nonboarding first-time (notas 2026-08-11): crear clínica, invitar admin, aceptar\ninvitación, escanear QR WAHA. Revisión de completitud del flujo.",
+      "model": "opencode-go/deepseek-v4-flash",
+      "reason": "Recorrido de flujo sin lógica densa; DeepSeek V4 Flash alcanza.",
+      "status": "done",
+      "dependencies": [
+        "F1.5.T1"
+      ],
+      "estimateHours": 3.0,
+      "files": [
+        "apps/web/src/app/[locale]/admin",
+        "apps/web/src/app/[locale]/invite",
+        "docs/onboarding-clinica.md"
+      ],
+      "specRef": "f1-auditoria-finalizacion.md#F1.5.T4",
+      "comments": []
+    },
+    {
+      "id": "F1.6.T1",
+      "phase": 1,
+      "title": "Audit app Flutter vs PRD Fase 4",
+      "description": "Confirmar el estado real de `apps/mobile` (hoy solo contiene `README.md`). Si\nestá vacía/stub, documentarlo como gap P0/P1 con el alcance que falta (login,\nagenda del profesional, confirmar/bloquear, push) para una futura fase.",
+      "model": "opencode-go/deepseek-v4-flash",
+      "reason": "Verificación de existencia; DeepSeek V4 Flash alcanza.",
+      "status": "done",
+      "dependencies": [
+        "F1.1.T1"
+      ],
+      "estimateHours": 1.0,
+      "files": [
+        "apps/mobile",
+        "docs/PRD.md"
+      ],
+      "specRef": "f1-auditoria-finalizacion.md#F1.6.T1",
+      "comments": []
+    },
+    {
+      "id": "F1.6.T2",
+      "phase": 1,
+      "title": "Audit infra + deploy + parity de env",
+      "description": "Auditar `docker-compose.yml`, `docker-compose.prod.yml`,\n`docker-compose.coolify.yml`, Caddy, y la parity entre `.env.example` y las\nvariables que el código realmente lee. Verificar healthchecks de containers y\n`start_period` del backend. Contra `docs/runbook-lanzamiento.md` y\n`docs/deploy.md`.",
+      "model": "opencode/gemini-3.1-pro",
+      "reason": "Config infra con riesgo de deploy roto; GPT-5.5.",
+      "status": "done",
+      "dependencies": [
+        "F1.1.T1"
+      ],
+      "estimateHours": 4.0,
+      "files": [
+        "docker-compose.yml",
+        "docker-compose.prod.yml",
+        "docker-compose.coolify.yml",
+        ".env.example",
+        "docs/runbook-lanzamiento.md",
+        "docs/deploy.md"
+      ],
+      "specRef": "f1-auditoria-finalizacion.md#F1.6.T2",
+      "comments": []
+    },
+    {
+      "id": "F1.6.T3",
+      "phase": 1,
+      "title": "Audit observabilidad + health checks",
+      "description": "Auditar pipeline Pino + Axiom + Sentry (`common/logger`, `common/sentry`,\n`health`), endpoint `/api/health/live` y checks WAHA, y que el redactor de PII\nno rompa logs estructurados. Contra `docs/adr/0015` y `docs/specs/2026-08-18`\ny `2026-08-19`.",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "Observabilidad cross-cutting; GPT-5.5.",
+      "status": "done",
+      "dependencies": [
+        "F1.1.T1"
+      ],
+      "estimateHours": 4.0,
+      "files": [
+        "apps/backend/src/common/logger",
+        "apps/backend/src/common/sentry",
+        "apps/backend/src/health",
+        "apps/web/src/app/api/health",
+        "docs/adr/0015-pino-axiom-sentry.md"
+      ],
+      "specRef": "f1-auditoria-finalizacion.md#F1.6.T3",
+      "comments": []
+    },
+    {
+      "id": "F1.7.T1",
+      "phase": 1,
+      "title": "Inventario de cobertura de tests backend",
+      "description": "Generar inventario de tests `.spec.ts` por módulo (qué hay, qué falta) y\ncruzar contra las reglas de negocio críticas de `SPEC.md` §2: disponibilidad,\ntransiciones, recordatorios, bot, tenant isolation. Listar módulos sin tests.",
+      "model": "opencode-go/deepseek-v4-flash",
+      "reason": "Inventario mecánico; DeepSeek V4 Flash alcanza.",
+      "status": "done",
+      "dependencies": [
+        "F1.1.T1"
+      ],
+      "estimateHours": 2.0,
+      "files": [
+        "apps/backend/src"
+      ],
+      "specRef": "f1-auditoria-finalizacion.md#F1.7.T1",
+      "comments": []
+    },
+    {
+      "id": "F1.7.T2",
+      "phase": 1,
+      "title": "Audit de calidad de tests vs escenarios Gherkin",
+      "description": "Mapear los escenarios Gherkin de `SPEC.md` §3 contra los tests existentes\n(`scheduling.service.spec.ts`, `appointment-status.util.spec.ts`,\n`bot.service.spec.ts`, etc.). Detectar escenarios sin cobertura y verificar\nque exista al menos un test que falle ante fuga cross-tenant.",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "Cruce de escenarios con criterio; GPT-5.5.",
+      "status": "done",
+      "dependencies": [
+        "F1.7.T1"
+      ],
+      "estimateHours": 4.0,
+      "files": [
+        "apps/backend/src",
+        "docs/SPEC.md"
+      ],
+      "specRef": "f1-auditoria-finalizacion.md#F1.7.T2",
+      "comments": []
+    },
+    {
+      "id": "F1.7.T3",
+      "phase": 1,
+      "title": "Validar smoke E2E contra la app actual",
+      "description": "Revisar `docs/smoke-e2e.md` contra la app real y detectar pasos rotos,\nendpoints renombrados o escenarios obsoletos. Producir la lista de correcciones\nnecesarias para que el checklist sea ejecutable antes del canary.",
+      "model": "opencode-go/deepseek-v4-flash",
+      "reason": "Verificación de checklist; DeepSeek V4 Flash alcanza.",
+      "status": "done",
+      "dependencies": [
+        "F1.1.T1"
+      ],
+      "estimateHours": 2.0,
+      "files": [
+        "docs/smoke-e2e.md",
+        "apps/backend/src",
+        "apps/web/src/app"
+      ],
+      "specRef": "f1-auditoria-finalizacion.md#F1.7.T3",
+      "comments": []
+    },
+    {
+      "id": "F1.8.T1",
+      "phase": 1,
+      "title": "Consolidar findings en reporte priorizado",
+      "description": "Leer los reportes de `docs/auditoria/` (F1.1–F1.7), deduplicar, y consolidar\nen un único reporte `docs/auditoria/RESUMEN-finalizacion.md` ordenado por\nseveridad (P0 → P1 → P2) con mapeo a artefacto y recomendación. Incluir un\njuicio global de \"go / no-go\" para el canary de 40 clínicas.",
+      "model": "opencode/deepseek-v4-pro",
+      "reason": "Síntesis estratégica de muchos inputs; DeepSeek V4 Pro.",
+      "status": "done",
+      "dependencies": [
+        "F1.1.T1",
+        "F1.1.T2",
+        "F1.1.T3",
+        "F1.2.T1",
+        "F1.2.T2",
+        "F1.2.T3",
+        "F1.3.T1",
+        "F1.3.T2",
+        "F1.3.T3",
+        "F1.4.T1",
+        "F1.4.T2",
+        "F1.4.T3",
+        "F1.4.T4",
+        "F1.5.T1",
+        "F1.5.T2",
+        "F1.5.T3",
+        "F1.5.T4",
+        "F1.6.T1",
+        "F1.6.T2",
+        "F1.6.T3",
+        "F1.7.T1",
+        "F1.7.T2",
+        "F1.7.T3"
+      ],
+      "estimateHours": 4.0,
+      "files": [
+        "docs/auditoria"
+      ],
+      "specRef": "f1-auditoria-finalizacion.md#F1.8.T1",
+      "comments": []
+    },
+    {
+      "id": "F1.8.T2",
+      "phase": 1,
+      "title": "Derivar spec de finalización (F2) desde los findings",
+      "description": "A partir de `docs/auditoria/RESUMEN-finalizacion.md`, escribir\n`specs/f2-finalizacion.md` en formato atomizer (fase → paquete → task) con las\ntareas concretas para cerrar los P0/P1 y la deuda P2 priorizada. Cada task debe\nheredar severidad, artefacto y paths del finding origen. NO ejecutar código:\nsolo producir el spec.",
+      "model": "opencode/deepseek-v4-pro",
+      "reason": "Traducción findings→spec requiere juicio; DeepSeek V4 Pro.",
+      "status": "done",
+      "dependencies": [
+        "F1.8.T1"
+      ],
+      "estimateHours": 5.0,
+      "files": [
+        "docs/auditoria/RESUMEN-finalizacion.md",
+        "specs/f2-finalizacion.md"
+      ],
+      "specRef": "f1-auditoria-finalizacion.md#F1.8.T2",
+      "comments": []
+    },
+    {
+      "id": "F2.1.T1",
+      "phase": 2,
+      "title": "Fix herencia de `BusinessHour` (override, no unión)",
+      "description": "**Severidad**: P0 · **Origen**: F1.2.T1 · **Artefacto**: `SPEC.md` §2\n\nEl motor de disponibilidad devuelve la *unión* del horario del profesional con\nel de la clínica en vez del override. Tras el `findMany`, si existe al menos un\n`BusinessHour` con `professionalId`, descartar todos los de `professionalId ===\nnull`. Añadir test de regresión: un profesional con horario propio NO recibe\nslots fuera de su horario (no hereda los de la clínica).",
+      "model": "opencode/deepseek-v4-pro",
+      "reason": "Correctitud del core de agendamiento; edge cases de override/herencia.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 2.0,
+      "files": [
+        "apps/backend/src/scheduling/availability.service.ts",
+        "apps/backend/src/scheduling/availability.service.spec.ts"
+      ],
+      "specRef": "f2-finalizacion.md#F2.1.T1",
+      "comments": []
+    },
+    {
+      "id": "F2.1.T2",
+      "phase": 2,
+      "title": "Declarar `ARG`/`ENV` de Sentry en `apps/web/Dockerfile`",
+      "description": "**Severidad**: P0 · **Origen**: F1.6.T2 · **Artefacto**: ADR 0015\n\nLos compose definen `NEXT_PUBLIC_SENTRY_*`, `SENTRY_ORG`, `SENTRY_AUTH_TOKEN` en\n`args:`, pero el Dockerfile de Next.js solo declara `ARG NEXT_PUBLIC_API_URL` e\nignora el resto → Sentry deshabilitado en cliente y sin upload de source maps.\nDeclarar los `ARG`/`ENV` correspondientes en el stage `build` para que el DSN se\nembeeba y los source maps se suban.",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "Fix de config de build acotado; no requiere juicio de negocio.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 1.0,
+      "files": [
+        "apps/web/Dockerfile",
+        "docker-compose.prod.yml",
+        "docker-compose.coolify.yml"
+      ],
+      "specRef": "f2-finalizacion.md#F2.1.T2",
+      "comments": []
+    },
+    {
+      "id": "F2.2.T1",
+      "phase": 2,
+      "title": "Normalizar teléfono a E.164 en un único punto",
+      "description": "**Severidad**: P1 · **Origen**: F1.7.T3 · **Artefacto**: `SPEC.md` §2\n\nEl webhook guarda `phone` sin `+` (`bareId`) mientras panel/página pública\nnormalizan a E.164 con `+`; `findUpcomingAppointment` matchea por\n`clinicId_phone` y no encuentra al paciente → confirmación/recordatorio no liga\ncon la cita. Normalizar a E.164 en un único punto (ingreso del webhook o al\nmatchear) y test de regresión con ambos prefijos.",
+      "model": "opencode/deepseek-v4-pro",
+      "reason": "Integridad del vínculo paciente-cita; afecta dos flujos de entrada.",
+      "status": "backlog",
+      "dependencies": [
+        "F2.2.T4"
+      ],
+      "estimateHours": 2.0,
+      "files": [
+        "apps/backend/src/whatsapp/webhook.controller.ts",
+        "apps/backend/src/bot/bot.service.ts",
+        "apps/backend/src/whatsapp/webhook.controller.spec.ts"
+      ],
+      "specRef": "f2-finalizacion.md#F2.2.T1",
+      "comments": []
+    },
+    {
+      "id": "F2.2.T2",
+      "phase": 2,
+      "title": "Respetar `bufferMin` en las citas ya ocupadas",
+      "description": "**Severidad**: P1 · **Origen**: F1.2.T1 · **Artefacto**: `SPEC.md` §2\n\nEl motor suma `durationMin + bufferMin` al iterar slots libres, pero ignora el\n`bufferMin` de las citas ocupadas al evaluar solapamientos. Añadir `include: {\nservice: { select: { bufferMin } } }` en la query `taken` y extender el intervalo\nocupado con `plus({ minutes: service.bufferMin })`.",
+      "model": "opencode/deepseek-v4-pro",
+      "reason": "Solapamiento del tiempo de limpieza físico; lógica de negocio densa.",
+      "status": "backlog",
+      "dependencies": [
+        "F2.1.T1"
+      ],
+      "estimateHours": 2.0,
+      "files": [
+        "apps/backend/src/scheduling/availability.service.ts",
+        "apps/backend/src/scheduling/availability.service.spec.ts"
+      ],
+      "specRef": "f2-finalizacion.md#F2.2.T2",
+      "comments": []
+    },
+    {
+      "id": "F2.2.T3",
+      "phase": 2,
+      "title": "Filtrar `Clinic.status` en los endpoints públicos",
+      "description": "**Severidad**: P1 · **Origen**: F1.4.T1 · **Artefacto**: ADR 0014\n\n`getClinic`/`getAvailability`/`createAppointment` resuelven por `slug` con\n`findUnique({ where: { slug } })` sin filtrar `status` → clínica suspendida\nsigue visible y reservable. Filtrar `status: 'ACTIVE'` (404/410 en\nSUSPENDED/ARCHIVED) en los 3 endpoints. Cross-ref: verificar que la sesión WAHA\nde una clínica suspendida deje de responder.",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "Filtro de 3 endpoints + verificación de palanca del operador SaaS.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 1.5,
+      "files": [
+        "apps/backend/src/public/public.controller.ts",
+        "apps/backend/prisma/schema.prisma"
+      ],
+      "specRef": "f2-finalizacion.md#F2.2.T3",
+      "comments": []
+    },
+    {
+      "id": "F2.2.T4",
+      "phase": 2,
+      "title": "Idempotencia de eventos en el webhook WAHA",
+      "description": "**Severidad**: P1 · **Origen**: F1.4.T2 · **Artefacto**: ADR 0007 · ADR 0017\n\nEl controller descarta el `id` del evento de WAHA; un redelivery se procesa dos\nveces (doble LLM + re-procesado FSM). Dedup idempotente ANTES de\n`bot.handleIncoming`: `Message.wahaEventId @@unique` o `SETNX\nwebhook:event:{id}` con TTL 24h.",
+      "model": "opencode/deepseek-v4-pro",
+      "reason": "Protege el presupuesto de LLM (ADR 0007) y el bloat de `Message`.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 2.0,
+      "files": [
+        "apps/backend/src/whatsapp/webhook.controller.ts",
+        "apps/backend/src/whatsapp/webhook.controller.spec.ts",
+        "apps/backend/prisma/schema.prisma"
+      ],
+      "specRef": "f2-finalizacion.md#F2.2.T4",
+      "comments": []
+    },
+    {
+      "id": "F2.2.T5",
+      "phase": 2,
+      "title": "Fail-fast de secretos de webhook en `main.ts`",
+      "description": "**Severidad**: P1 · **Origen**: F1.4.T2 · **Artefacto**: ADR 0017\n\n`main.ts` valida en prod `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `SENTRY_DSN`…\npero no `WEBHOOK_HMAC_SECRET`/`WEBHOOK_TOKEN` → el webhook queda fail-closed\n(403) sin señal temprana. Agregar fail-fast \"al menos uno de\n`WEBHOOK_HMAC_SECRET`/`WEBHOOK_TOKEN`\" (OR).",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "Validación de arranque acotada; sin lógica de negocio.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 0.5,
+      "files": [
+        "apps/backend/src/main.ts"
+      ],
+      "specRef": "f2-finalizacion.md#F2.2.T5",
+      "comments": []
+    },
+    {
+      "id": "F2.2.T6",
+      "phase": 2,
+      "title": "Consent de IA de terceros en el copy del paciente (es/pt)",
+      "description": "**Severidad**: P1 · **Origen**: F1.4.T3 · **Artefacto**: ADR 0004 §7\n\nADR 0004 §7 exige consent explícito para IA de terceros (OpenAI/DeepSeek/Google);\nel form solo dice \"Autorizo el uso de mis datos para gestionar la cita\" y el\ngreeting del bot no menciona IA/terceros. Agregar el copy del ADR §7 al checkbox\ndel form (es/pt) y al primer mensaje del bot. El mecanismo `ConsentEvent` es\ndeuda P2 aparte (ver F2.5.T5).",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "Copy de compliance + i18n es/pt; sin lógica compleja.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 1.0,
+      "files": [
+        "apps/web/messages/es.json",
+        "apps/web/messages/pt.json",
+        "apps/backend/src/bot/bot.service.ts"
+      ],
+      "specRef": "f2-finalizacion.md#F2.2.T6",
+      "comments": []
+    },
+    {
+      "id": "F2.2.T7",
+      "phase": 2,
+      "title": "No loggear PHI en `WahaService.sendText`",
+      "description": "**Severidad**: P1 · **Origen**: F1.4.T3 · **Artefacto**: ADR 0004 §5\n\nAnte `!res.ok`, `sendText` loggea el `body` completo de la respuesta de error de\nWAHA, que puede incluir el texto saliente (nombre, hora, motivo). Loggear solo\n`res.status` + error genérico. Fix de 2 líneas.",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "Fix puntual de compliance; el redactor no cubre el string del mensaje.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 0.5,
+      "files": [
+        "apps/backend/src/whatsapp/waha.service.ts"
+      ],
+      "specRef": "f2-finalizacion.md#F2.2.T7",
+      "comments": []
+    },
+    {
+      "id": "F2.2.T8",
+      "phase": 2,
+      "title": "Re-validar `Clinic.status` en el JWT de impersonation",
+      "description": "**Severidad**: P1 · **Origen**: F1.4.T4 · **Artefacto**: ADR 0014 · ADR 0016\n\nEl gate \"clínica ACTIVE\" se aplica solo al emitir el token y en `login()`. Si el\nsuper suspende una clínica ya impersonada, el token sigue operando ~30 min. En\n`JwtStrategy.validate` (o guard), re-chequear `status === 'ACTIVE'` cuando haya\n`clinicId` + `impersonatedBy` (cacheable en Redis por `clinicId`).",
+      "model": "opencode/deepseek-v4-pro",
+      "reason": "Corta una sesión de impersonation ya activa; seguridad del operador.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 1.5,
+      "files": [
+        "apps/backend/src/auth/jwt.strategy.ts",
+        "apps/backend/src/admin/impersonation.service.ts",
+        "apps/backend/src/common/tenant-context.util.ts"
+      ],
+      "specRef": "f2-finalizacion.md#F2.2.T8",
+      "comments": []
+    },
+    {
+      "id": "F2.3.T1",
+      "phase": 2,
+      "title": "Aplicar el diff de `SPEC.md` + `ARCHITECTURE.md` (F1.1.T3)",
+      "description": "**Severidad**: P1 · **Origen**: F1.1.T3 · **Artefacto**: ADRs 0014–0017\n\nSPEC no documenta Admin SaaS/impersonation, endpoints reales de clínicas,\nwebhook HMAC-first, Invitations, Feedback/follow-ups, Leads ni\nobservabilidad/health. Aplicar el diff concreto ya redactado en\n`docs/auditoria/F1.1.T3.md` §\"Diff concreto\" (11 cambios en SPEC.md + 2-3 en\nARCHITECTURE.md) como INSERTAR/REEMPLAZAR.",
+      "model": "opencode/deepseek-v4-pro",
+      "reason": "Contrato consumido por el equipo; requiere juicio de edición.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 3.0,
+      "files": [
+        "docs/SPEC.md",
+        "docs/ARCHITECTURE.md",
+        "docs/auditoria/F1.1.T3.md"
+      ],
+      "specRef": "f2-finalizacion.md#F2.3.T1",
+      "comments": []
+    },
+    {
+      "id": "F2.3.T2",
+      "phase": 2,
+      "title": "Mergear o posponer formalmente el wizard de onboarding",
+      "description": "**Severidad**: P1 · **Origen**: F1.5.T4 · **Artefacto**: `docs/notas/2026-08-11-onboarding-wizard.md`\n\nEl wizard first-time está implementado completo (migration, `PATCH\n/clinics/me/onboarding`, middleware, 5 steps, Stepper, i18n `onboarding.*`) pero\ntodo vive en `feature/onboarding-wizard`, no en `main`/`staged`. Mergear la rama\nsobre `staged` (rebase + review) o documentar la postergación formal con\ndecisión de producto.",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "Rebase + review de una feature terminada; sin codear desde cero.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 2.0,
+      "files": [
+        "apps/backend/prisma/schema.prisma",
+        "apps/web/src/middleware.ts",
+        "docs/notas/2026-08-11-onboarding-wizard.md",
+        "docs/onboarding-clinica.md"
+      ],
+      "specRef": "f2-finalizacion.md#F2.3.T2",
+      "comments": []
+    },
+    {
+      "id": "F2.3.T3",
+      "phase": 2,
+      "title": "Crear `docs/deploy-coolify.md`",
+      "description": "**Severidad**: P1 · **Origen**: F1.6.T2 · **Artefacto**: `docker-compose.coolify.yml`\n\n`docker-compose.coolify.yml:19` instruye leer `docs/deploy-coolify.md` (mapeo de\ndominios Coolify), pero el archivo no existe. Crear el runbook operativo\n(incluido cómo emular el IP Allowlist de WAHA) o remover el compose si Coolify\nno es opción soportada.",
+      "model": "opencode-go/deepseek-v4-flash",
+      "reason": "Documentación operativa; sin lógica de negocio.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 1.0,
+      "files": [
+        "docs/deploy-coolify.md",
+        "docker-compose.coolify.yml",
+        "docs/deploy.md"
+      ],
+      "specRef": "f2-finalizacion.md#F2.3.T3",
+      "comments": []
+    },
+    {
+      "id": "F2.4.T1",
+      "phase": 2,
+      "title": "Tests de `availability` + `reminders` + `follow-ups` (huecos Gherkin)",
+      "description": "**Severidad**: P2 · **Origen**: F1.7.T1 · F1.7.T2 · **Artefacto**: `SPEC.md` §2/§3\n\n`availability.service.ts` sin spec propio; módulo `reminders/` (service +\nprocessor) sin tests; `follow-ups`/`feedback`/`leads` sin tests. Cubrir los\nhuecos Gherkin de `SPEC.md` §3 (`reminders`, `availability`, `NEEDS_HUMAN`) y\nañadir un test que falle ante fuga cross-tenant.",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "Gaps críticos de cobertura sobre lógica de negocio; volumen alto.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 4.0,
+      "files": [
+        "apps/backend/src/scheduling/availability.service.spec.ts",
+        "apps/backend/src/reminders",
+        "apps/backend/src/follow-ups",
+        "docs/SPEC.md"
+      ],
+      "specRef": "f2-finalizacion.md#F2.4.T1",
+      "comments": []
+    },
+    {
+      "id": "F2.4.T2",
+      "phase": 2,
+      "title": "Endpoint de mutación de leads (`PATCH /api/leads/:id`)",
+      "description": "**Severidad**: P2 · **Origen**: F1.3.T3 · **Artefacto**: `docs/adr/0012-feedback-post-atencion.md`\n\nEl funnel de leads solo captura y lista; no hay endpoint de mutación. Añadir\n`PATCH /api/leads/:id` con validación class-validator y tenant scoping por\n`clinicId`.",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "Cierra el funnel de leads; CRUD + DTOs estándar.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 2.0,
+      "files": [
+        "apps/backend/src/leads"
+      ],
+      "specRef": "f2-finalizacion.md#F2.4.T2",
+      "comments": []
+    },
+    {
+      "id": "F2.4.T3",
+      "phase": 2,
+      "title": "Reenviar invitación (`POST /admin/invitations/:userId/resend`)",
+      "description": "**Severidad**: P2 · **Origen**: F1.5.T4 · **Artefacto**: ADR 0014\n\nNo hay endpoint/UI de \"reenviar invitación\" para admins que pierden el correo.\nAñadir `POST /admin/invitations/:userId/resend` (re-emisión de token + envío) y\nsu disparador en la UI.",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "Flujo de invitación incompleto; endpoint + UI acotados.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 1.5,
+      "files": [
+        "apps/backend/src/admin",
+        "apps/web/src/app/[locale]/admin"
+      ],
+      "specRef": "f2-finalizacion.md#F2.4.T3",
+      "comments": []
+    },
+    {
+      "id": "F2.4.T4",
+      "phase": 2,
+      "title": "Estandarizar TOCTOU a `updateMany`/`deleteMany`",
+      "description": "**Severidad**: P2 · **Origen**: F1.2.T3 · **Artefacto**: `apps/backend/src`\n\nPatrón `findFirst(scope)` → `update/delete({ where: { id } })` inconsistente.\nNo explotable con UUIDs, pero estandarizar a `updateMany`/`deleteMany` (como\nFAQ) para que el scope viaje en la misma query.",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "Refactor de consistencia multi-tenant; sin cambio de comportamiento.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 2.0,
+      "files": [
+        "apps/backend/src"
+      ],
+      "specRef": "f2-finalizacion.md#F2.4.T4",
+      "comments": []
+    },
+    {
+      "id": "F2.4.T5",
+      "phase": 2,
+      "title": "Cookies `HttpOnly` + `Secure` (escritura y borrado)",
+      "description": "**Severidad**: P2 · **Origen**: F1.4.T3 · **Artefacto**: ADR 0017 §2\n\nCookies no-HttpOnly (deuda ADR 0017 §2) y borrado de cookie sin flag `Secure`\n(mismatch con la escritura). Añadir `HttpOnly` en la escritura y `Secure` en el\nborrado para mantener `SameSite=Strict` + `Secure` coherentes.",
+      "model": "opencode-go/deepseek-v4-flash",
+      "reason": "Config de cookies acotada; hardening de sesión.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 1.0,
+      "files": [
+        "apps/backend/src/auth/auth.ts"
+      ],
+      "specRef": "f2-finalizacion.md#F2.4.T5",
+      "comments": []
+    },
+    {
+      "id": "F2.5.T1",
+      "phase": 2,
+      "title": "Validar `serviceId`/`professionalId` contra `clinicId` en `getSlots`",
+      "description": "**Severidad**: P2 · **Origen**: F1.2.T1 · **Artefacto**: `availability.service.ts`\n\nSide-channel de ocupación cross-tenant por ID directo. `findFirst({ id,\nclinicId })` + `clinicId` en el `where` de `taken` (mitiga el path del panel\n`GET /appointments/slots` y la defensa interna).",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "Cierra el side-channel cross-tenant restante.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 1.5,
+      "files": [
+        "apps/backend/src/scheduling/availability.service.ts"
+      ],
+      "specRef": "f2-finalizacion.md#F2.5.T1",
+      "comments": []
+    },
+    {
+      "id": "F2.5.T2",
+      "phase": 2,
+      "title": "Hardening de `webhook-auth.util.ts`",
+      "description": "**Severidad**: P2 · **Origen**: F1.4.T2 · **Artefacto**: ADR 0017\n\nTres hallazgos en un archivo: (a) SPEC dice 401, el código devuelve 403\n(inconsistencia documental); (b) token compartido comparado con `!==` (no\ntiming-safe → usar `timingSafeEqual`); (c) `Buffer.from(received, 'hex')` en\ntry/catch es código muerto.",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "Tres fixes acotados sobre el mismo util de auth.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 1.5,
+      "files": [
+        "apps/backend/src/whatsapp/webhook-auth.util.ts",
+        "docs/SPEC.md"
+      ],
+      "specRef": "f2-finalizacion.md#F2.5.T2",
+      "comments": []
+    },
+    {
+      "id": "F2.5.T3",
+      "phase": 2,
+      "title": "Rate-limit propio del webhook",
+      "description": "**Severidad**: P2 · **Origen**: F1.4.T2 · **Artefacto**: ADR 0007\n\nRequests con `session` desconocida evaden el rate-limit del bot. Añadir\nrate-limit propio al webhook (independiente del rate-limit por `chatId`).",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "Cierra el bypass del presupuesto de LLM.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 1.0,
+      "files": [
+        "apps/backend/src/whatsapp/webhook.controller.ts"
+      ],
+      "specRef": "f2-finalizacion.md#F2.5.T3",
+      "comments": []
+    },
+    {
+      "id": "F2.5.T4",
+      "phase": 2,
+      "title": "Redactor de Pino: cubrir el string del mensaje",
+      "description": "**Severidad**: P2 · **Origen**: F1.4.T3 · **Artefacto**: ADR 0004 §5\n\nEl redactor de Pino solo cubre campos estructurados, no el string del mensaje.\nExtender la cobertura al mensaje interpolado (complementa F2.2.T7).",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "Defensa en profundidad del redactor de PHI.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 2.0,
+      "files": [
+        "apps/backend/src/common/logger/pii-redactor.ts"
+      ],
+      "specRef": "f2-finalizacion.md#F2.5.T4",
+      "comments": []
+    },
+    {
+      "id": "F2.5.T5",
+      "phase": 2,
+      "title": "Deuda ADR 0004: `ConsentEvent` + cifrado at-rest + sanitización PII LLM",
+      "description": "**Severidad**: P2 · **Origen**: F1.4.T3 · **Artefacto**: ADR 0004 §1/§2/§7\n\nTres deudas de compliance: (a) `ConsentEvent` ausente (sin trazabilidad del\nconsent); (b) `notes` sin cifrado at-rest (§1); (c) sanitización de PII\npre-envío al LLM ausente (§7, complementa F2.2.T6 con el gate técnico).",
+      "model": "opencode/deepseek-v4-pro",
+      "reason": "Compliance de datos de salud; toca storage, consent y pipeline LLM.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 4.0,
+      "files": [
+        "apps/backend/src/feedback",
+        "apps/backend/src/patients",
+        "apps/backend/src/bot/knowledge.service.ts",
+        "apps/backend/src/bot/intent.service.ts"
+      ],
+      "specRef": "f2-finalizacion.md#F2.5.T5",
+      "comments": []
+    },
+    {
+      "id": "F2.5.T6",
+      "phase": 2,
+      "title": "Robustez de `AdminAudit`",
+      "description": "**Severidad**: P2 · **Origen**: F1.4.T4 · **Artefacto**: ADR 0016\n\n(a) `reason` de suspensión no llega a `AdminAudit.metadata` (se pierde al\nreactivar); (b) el interceptor solo registra responses exitosos, no mutaciones\nfallidas; (c) `AdminAudit.list` no expone filtro por `impersonatedBy`.",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "Trail de auditoría incompleto para el operador SaaS.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 2.0,
+      "files": [
+        "apps/backend/src/admin"
+      ],
+      "specRef": "f2-finalizacion.md#F2.5.T6",
+      "comments": []
+    },
+    {
+      "id": "F2.5.T7",
+      "phase": 2,
+      "title": "Endpoint `ARCHIVE_CLINIC`",
+      "description": "**Severidad**: P2 · **Origen**: F1.4.T4 · **Artefacto**: ADR 0014\n\n`ARCHIVE_CLINIC`/`ClinicStatus.ARCHIVED` declarados sin endpoint de archivado.\nImplementar el endpoint que complete el ciclo de vida del estado.",
+      "model": "opencode-go/deepseek-v4-flash",
+      "reason": "Endpoint faltante que cierra un estado ya declarado.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 1.0,
+      "files": [
+        "apps/backend/src/admin"
+      ],
+      "specRef": "f2-finalizacion.md#F2.5.T7",
+      "comments": []
+    },
+    {
+      "id": "F2.5.T8",
+      "phase": 2,
+      "title": "Onboarding UI/docs: estado de invitación + docs",
+      "description": "**Severidad**: P2 · **Origen**: F1.5.T4 · **Artefacto**: `docs/onboarding-clinica.md`\n\n(a) detalle de clínica no expone estado de la invitación\n(pendiente/aceptada/expirada); (b) `docs/onboarding-clinica.md` desactualizado\n(aún indica alta manual por SQL); (c) comentario desactualizado en\n`AdminClinicsClient.tsx`.",
+      "model": "opencode-go/deepseek-v4-flash",
+      "reason": "UI + docs de onboarding; sin lógica densa.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 1.5,
+      "files": [
+        "apps/web/src/components/AdminClinicsClient.tsx",
+        "apps/web/src/app/[locale]/admin",
+        "docs/onboarding-clinica.md"
+      ],
+      "specRef": "f2-finalizacion.md#F2.5.T8",
+      "comments": []
+    },
+    {
+      "id": "F2.5.T9",
+      "phase": 2,
+      "title": "Panel: citas relacionadas + ruta huérfana `/panel/leads`",
+      "description": "**Severidad**: P2 · **Origen**: F1.5.T1 · F1.5.T2 · **Artefacto**: `ConversationsClient.tsx`\n\n(a) panel \"citas relacionadas\" es placeholder; (b) ruta huérfana `/panel/leads`\n(dead code, 403 para CLINIC_ADMIN). Implementar el placeholder o retirarlo, y\neliminar/ocultar la ruta muerta.",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "UI panel con componente placeholder y limpieza de dead code.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 2.5,
+      "files": [
+        "apps/web/src/components/ConversationsClient.tsx",
+        "apps/web/src/app/[locale]/panel"
+      ],
+      "specRef": "f2-finalizacion.md#F2.5.T9",
+      "comments": []
+    },
+    {
+      "id": "F2.5.T10",
+      "phase": 2,
+      "title": "`sendText` sin try/catch en `BotService.reply()`",
+      "description": "**Severidad**: P2 · **Origen**: F1.7.T3 · **Artefacto**: `bot.service.ts`\n\n`chatId` inválido → 500 y no persiste el mensaje OUT. Envolver `sendText` en\ntry/catch y persistir el estado OUT de forma coherente ante fallo.",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "Robustez del reply del bot; fix acotado.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 1.0,
+      "files": [
+        "apps/backend/src/bot/bot.service.ts"
+      ],
+      "specRef": "f2-finalizacion.md#F2.5.T10",
+      "comments": []
+    },
+    {
+      "id": "F2.5.T11",
+      "phase": 2,
+      "title": "Follow-up sin conversación previa: persistir el score",
+      "description": "**Severidad**: P2 · **Origen**: F1.3.T3 · **Artefacto**: `follow-ups.processor.ts`\n\nFollow-up a paciente sin conversación previa: se envía el prompt pero se pierde\nel score. Persistir la respuesta del NPS aunque no exista conversación previa.",
+      "model": "opencode/gpt-5.5-codex",
+      "reason": "Pérdida de datos del NPS; fix de persistencia.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 1.5,
+      "files": [
+        "apps/backend/src/follow-ups/follow-ups.processor.ts"
+      ],
+      "specRef": "f2-finalizacion.md#F2.5.T11",
+      "comments": []
+    },
+    {
+      "id": "F2.5.T12",
+      "phase": 2,
+      "title": "Cancelación/reprogramación autónoma del bot (evaluación)",
+      "description": "**Severidad**: P2 · **Origen**: F1.1.T1 · **Artefacto**: `bot.service.ts`\n\nEl bot deriva cancelación/reprogramación a recepción/humano (decisión\nconservadora). Evaluar self-service post-piloto: FSM de cancel/reprogram con\nconfirmación explícita, o documentar la decisión de mantener el handoff.",
+      "model": "opencode/deepseek-v4-pro",
+      "reason": "Cambio de FSM con interacción LLM; decisión de producto + diseño.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 3.0,
+      "files": [
+        "apps/backend/src/bot/bot.service.ts",
+        "apps/backend/src/bot/intent.service.ts"
+      ],
+      "specRef": "f2-finalizacion.md#F2.5.T12",
+      "comments": []
+    },
+    {
+      "id": "F2.5.T13",
+      "phase": 2,
+      "title": "MFA para SUPERADMIN (documentar riesgo aceptado / mitigar)",
+      "description": "**Severidad**: P2 · **Origen**: F1.4.T4 · **Artefacto**: ADR 0014\n\nSin MFA para SUPERADMIN (riesgo aceptado en ADR 0014). Documentar la mitigación\noperativa (VPN/IP allowlist) como ADR o nota, o planificar MFA si el piloto lo\nrequiere.",
+      "model": "opencode-go/deepseek-v4-flash",
+      "reason": "Documentación de riesgo aceptado; sin código salvo decisión contraria.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 1.0,
+      "files": [
+        "docs/adr",
+        "docs/notas"
+      ],
+      "specRef": "f2-finalizacion.md#F2.5.T13",
+      "comments": []
+    },
+    {
+      "id": "F2.6.T1",
+      "phase": 2,
+      "title": "App Flutter del profesional (scoped endpoint + push + app)",
+      "description": "**Severidad**: P0 (mitigado a P1 para el canary) · **Origen**: F1.6.T1 · **Artefacto**: `PRD.md` §3/§9\n\n`apps/mobile` es un stub (`README.md`). Antes de codear: decidir proveedor de\npush (FCM/Expo/OneSignal) y exponer un scoped endpoint `PATCH` confirmar/bloquear\npara `PROFESSIONAL`. Recién después implementar login, agenda del profesional,\nconfirmar/bloquear y push. El panel web responsive cubre la operación hasta\nentonces.",
+      "model": "opencode/deepseek-v4-pro",
+      "reason": "Fase 4 completa; requiere diseño de contrato + app Flutter.",
+      "status": "backlog",
+      "dependencies": [],
+      "estimateHours": 8.0,
+      "files": [
+        "apps/mobile",
+        "apps/backend/src/appointments",
+        "docs/PRD.md"
+      ],
+      "specRef": "f2-finalizacion.md#F2.6.T1",
+      "comments": []
+    }
+  ]
+}
