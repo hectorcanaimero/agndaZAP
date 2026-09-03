@@ -11,6 +11,10 @@ FROM node:20-alpine AS build
 
 RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
 
+# Coolify pasa NODE_ENV=production como --build-arg, lo cual hace que pnpm
+# salte devDependencies y rompe el build. Desactivamos NODE_ENV en build stage.
+ENV NODE_ENV=
+
 WORKDIR /repo
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
