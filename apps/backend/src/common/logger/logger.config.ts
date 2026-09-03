@@ -4,6 +4,57 @@ import type { Params } from 'nestjs-pino';
 import { PII_REDACT_OPTIONS } from './pii-redactor';
 import { requestContext } from './request-context';
 
+type RequestWithObservability = IncomingMessage & {
+  id?: string;
+  originalUrl?: string;
+  baseUrl?: string;
+  route?: { path?: string };
+  user?: {
+    userId?: string;
+    clinicId?: string;
+    impersonatedBy?: string;
+  };
+};
+
+type PinoHttpLogObject = {
+  res?: ServerResponse;
+  err?: Error;
+  latencyMs?: number;
+};
+
+function routeFromRequest(req: RequestWithObservability): string {
+  const routePath = req.route?.path;
+  if (routePath) {
+    const baseUrl = req.baseUrl ?? '';
+    return `${baseUrl}${routePath}` || routePath;
+  }
+
+  const rawUrl = req.originalUrl ?? req.url ?? '/';
+  return rawUrl.split('?')[0] || '/';
+}
+
+function requestFields(req: RequestWithObservability, res: ServerResponse) {
+  const fields: Record<string, string | number> = {
+    requestId: String(req.id ?? ''),
+    route: routeFromRequest(req),
+    method: req.method ?? 'UNKNOWN',
+    status: res.statusCode,
+  };
+
+  if (req.user?.clinicId) fields.clinicId = req.user.clinicId;
+  if (req.user?.userId) fields.userId = req.user.userId;
+  if (req.user?.impersonatedBy) {
+    fields.impersonatedBy = req.user.impersonatedBy;
+  }
+
+  return fields;
+}
+
+function healthPath(url: string | undefined): boolean {
+  const path = (url ?? '').split('?')[0];
+  return path === '/api/health' || path === '/api/health/live';
+}
+
 // Config de nestjs-pino. La factory se llama en tiempo de bootstrap para
 // leer envs frescas (Docker inyecta después del build).
 //
@@ -124,12 +175,31 @@ export function pinoConfig(): Params {
         return 'info';
       },
 
-      customSuccessMessage: (req, res) => {
-        return `${req.method ?? '?'} ${req.url ?? '/'} ${res.statusCode}`;
+      customAttributeKeys: {
+        responseTime: 'latencyMs',
+      },
+
+      customSuccessObject: (req, res, value: PinoHttpLogObject) => ({
+        ...value,
+        ...requestFields(req as RequestWithObservability, res),
+      }),
+
+      customErrorObject: (req, res, err, value: PinoHttpLogObject) => ({
+        ...value,
+        ...requestFields(req as RequestWithObservability, res),
+        err,
+      }),
+
+      customSuccessMessage: (req) => {
+        return `${req.method ?? '?'} ${routeFromRequest(
+          req as RequestWithObservability,
+        )}`;
       },
 
       customErrorMessage: (req, res, err) => {
-        return `${req.method ?? '?'} ${req.url ?? '/'} ${res.statusCode} ${err.message}`;
+        return `${req.method ?? '?'} ${routeFromRequest(
+          req as RequestWithObservability,
+        )} ${res.statusCode} ${err.message}`;
       },
 
       // No loguear el body del request por default — puede tener PII.
@@ -137,7 +207,7 @@ export function pinoConfig(): Params {
       autoLogging: {
         ignore: (req) => {
           // Silencia health checks para no saturar Axiom.
-          return req.url === '/api/health' || req.url === '/api/health/live';
+          return healthPath(req.url);
         },
       },
 

@@ -89,6 +89,67 @@ describe('PII redactor', () => {
     expect(entry.appointmentId).toBe('a-1');
   });
 
+
+  it('redacta PII en req.body sin romper el objeto estructurado', () => {
+    const { log, readLast } = createTestLogger();
+    log.info(
+      {
+        req: {
+          body: {
+            name: 'Juan Pérez',
+            email: 'juan@example.com',
+            phone: '+5491122334455',
+            serviceId: 'svc-1',
+          },
+        },
+      },
+      'patient request',
+    );
+    const entry = readLast();
+    const req = entry.req as { body: Record<string, string> };
+    expect(req.body.name).toBe(PII_REDACT_CENSOR);
+    expect(req.body.email).toBe(PII_REDACT_CENSOR);
+    expect(req.body.phone).toBe(PII_REDACT_CENSOR);
+    expect(req.body.serviceId).toBe('svc-1');
+  });
+
+  it('redacta PII en arrays comunes conservando IDs para diagnóstico', () => {
+    const { log, readLast } = createTestLogger();
+    log.info(
+      {
+        patients: [
+          {
+            patientId: 'patient-1',
+            name: 'Ana',
+            phone: '+5491199988877',
+          },
+        ],
+        req: {
+          body: {
+            patients: [
+              {
+                patientId: 'patient-2',
+                email: 'ana@example.com',
+                notes: 'alergia',
+              },
+            ],
+          },
+        },
+      },
+      'bulk patients',
+    );
+    const entry = readLast() as {
+      patients: Array<Record<string, string>>;
+      req: { body: { patients: Array<Record<string, string>> } };
+    };
+    expect(entry.patients[0].patientId).toBe('patient-1');
+    expect(entry.patients[0].name).toBe(PII_REDACT_CENSOR);
+    expect(entry.patients[0].phone).toBe(PII_REDACT_CENSOR);
+    expect(entry.req.body.patients[0].patientId).toBe('patient-2');
+    expect(entry.req.body.patients[0].email).toBe(PII_REDACT_CENSOR);
+    expect(entry.req.body.patients[0].notes).toBe(PII_REDACT_CENSOR);
+  });
+
   it('NO redacta identificadores (patientId, clinicId, userId)', () => {
     const { log, readLast } = createTestLogger();
     log.info(

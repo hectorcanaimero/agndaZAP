@@ -27,7 +27,10 @@ export function GET(): NextResponse {
       timestamp: new Date().toISOString(),
       // Build ID inyectado en build time (opcional). Útil para verificar
       // que el deploy real está sirviendo el commit correcto.
-      buildId: process.env.NEXT_PUBLIC_SENTRY_RELEASE ?? 'dev',
+      buildId:
+        process.env.NEXT_PUBLIC_BUILD_ID ??
+        process.env.NODE_ENV ??
+        'development',
     },
     {
       status: 200,
