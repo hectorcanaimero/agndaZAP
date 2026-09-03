@@ -579,7 +579,7 @@
       "description": "**Severidad**: P0 · **Origen**: F1.6.T2 · **Artefacto**: ADR 0015\n\nLos compose definen `NEXT_PUBLIC_SENTRY_*`, `SENTRY_ORG`, `SENTRY_AUTH_TOKEN` en\n`args:`, pero el Dockerfile de Next.js solo declara `ARG NEXT_PUBLIC_API_URL` e\nignora el resto → Sentry deshabilitado en cliente y sin upload de source maps.\nDeclarar los `ARG`/`ENV` correspondientes en el stage `build` para que el DSN se\nembeeba y los source maps se suban.",
       "model": "opencode/gpt-5.5-codex",
       "reason": "Fix de config de build acotado; no requiere juicio de negocio.",
-      "status": "backlog",
+      "status": "done",
       "dependencies": [],
       "estimateHours": 1.0,
       "files": [

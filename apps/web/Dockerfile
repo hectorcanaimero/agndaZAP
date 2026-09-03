@@ -32,6 +32,35 @@ ARG NEXT_PUBLIC_API_URL
 RUN test -n "$NEXT_PUBLIC_API_URL" || (echo "NEXT_PUBLIC_API_URL requerido en build (pasar --build-arg NEXT_PUBLIC_API_URL=https://api.tudominio.com)" && exit 1)
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 
+# Sentry client-side + upload de source maps (F2.1.T2).
+#
+# `NEXT_PUBLIC_SENTRY_*` deben ser ENV en el stage build para que Next.js las
+# embeba en el bundle del cliente. Sin esto, aunque el compose las mande en
+# `args:`, no llegan al bundle → Sentry queda deshabilitado en el navegador.
+#
+# `SENTRY_ORG`, `SENTRY_PROJECT` y `SENTRY_AUTH_TOKEN` los consume el plugin
+# webpack de `@sentry/nextjs` durante `pnpm build` para subir los source maps
+# a Sentry. Los seteamos como ENV en el stage build; NO se propagan al runtime
+# image porque el stage runtime es un `FROM` fresh que no hereda envs del build.
+ARG SENTRY_ORG
+ARG SENTRY_PROJECT
+ARG SENTRY_AUTH_TOKEN
+ARG NEXT_PUBLIC_SENTRY_DSN
+ARG NEXT_PUBLIC_SENTRY_ENABLED
+ARG NEXT_PUBLIC_SENTRY_ENVIRONMENT
+ARG NEXT_PUBLIC_SENTRY_RELEASE
+ARG NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE
+ARG SENTRY_TUNNEL_ROUTE
+ENV SENTRY_ORG=${SENTRY_ORG}
+ENV SENTRY_PROJECT=${SENTRY_PROJECT}
+ENV SENTRY_AUTH_TOKEN=${SENTRY_AUTH_TOKEN}
+ENV NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN}
+ENV NEXT_PUBLIC_SENTRY_ENABLED=${NEXT_PUBLIC_SENTRY_ENABLED}
+ENV NEXT_PUBLIC_SENTRY_ENVIRONMENT=${NEXT_PUBLIC_SENTRY_ENVIRONMENT}
+ENV NEXT_PUBLIC_SENTRY_RELEASE=${NEXT_PUBLIC_SENTRY_RELEASE}
+ENV NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE=${NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE}
+ENV SENTRY_TUNNEL_ROUTE=${SENTRY_TUNNEL_ROUTE}
+
 RUN pnpm build
 
 # ─────────────────────────── Stage 2: runtime ───────────────────────────
