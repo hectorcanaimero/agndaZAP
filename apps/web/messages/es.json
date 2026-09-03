@@ -41,6 +41,7 @@
     },
     "hints": {
       "phone": "Usá el formato internacional: +58, +55, etc.",
+      "phoneFromWhatsapp": "Tomamos tu número desde WhatsApp — dejalo así para que sigamos en contacto por este chat.",
       "selectServiceFirst": "Primero elegí un servicio."
     },
     "errors": {
@@ -112,6 +113,14 @@
         "public": "Página pública para reservas sin fricción"
       },
       "footer": "Multi-tenant · pensada para consultorios que atienden en volumen."
+    },
+    "devCredentials": {
+      "title": "Dev — click para autocompletar",
+      "notes": {
+        "superadmin": "Área /admin (cross-tenant)",
+        "clinicAdmin": "Clínica demo activa",
+        "suspendedClinicAdmin": "Clínica suspendida — login bloqueado"
+      }
     }
   },
   "panel": {
@@ -365,7 +374,8 @@
         "errPhone": "Teléfono inválido. Usá formato internacional (ej: +54 9 11 5555 5555).",
         "errServiceOrProfessional": "Elegí servicio y profesional.",
         "errConsent": "El consentimiento del paciente es obligatorio."
-      }
+      },
+      "dayAriaLabel": "{date} · {count, plural, one {# cita} other {# citas}}"
     },
     "patients": {
       "title": "Pacientes",
@@ -526,7 +536,8 @@
         "empty": "Sin respuestas recientes.",
         "unnamed": "Paciente sin nombre",
         "metaLine": "{professional} · {service}"
-      }
+      },
+      "selectHint": "Seleccioná una respuesta en la lista para ver el detalle."
     },
     "conversations": {
       "title": "Bandeja",
@@ -1235,10 +1246,18 @@
       "eyebrow": "Seguridad y datos",
       "headline": "Los datos de tus pacientes están aislados por clínica.",
       "chips": {
-        "isolation": { "label": "Aislamiento por clínica" },
-        "dedicated": { "label": "WhatsApp dedicado" },
-        "noPii": { "label": "Sin datos personales en logs" },
-        "accessControl": { "label": "Panel protegido por defecto" }
+        "isolation": {
+          "label": "Aislamiento por clínica"
+        },
+        "dedicated": {
+          "label": "WhatsApp dedicado"
+        },
+        "noPii": {
+          "label": "Sin datos personales en logs"
+        },
+        "accessControl": {
+          "label": "Panel protegido por defecto"
+        }
       },
       "ctaLabel": "Cómo protegemos tus datos",
       "ariaMore": "Ver detalles sobre seguridad y protección de datos"
@@ -1393,7 +1412,9 @@
       "leads": "Leads",
       "audit": "Auditoría",
       "logout": "Salir del Admin",
-      "userMenu": "Menú de usuario"
+      "userMenu": "Menú de usuario",
+      "openMenu": "Abrir menú admin",
+      "closeMenu": "Cerrar menú admin"
     },
     "header": {
       "title": "Área SaaS Admin"
@@ -1477,7 +1498,9 @@
       "retry": "Reintentar",
       "count": "{n, plural, =0 {Sin clínicas} =1 {1 clínica} other {# clínicas}}",
       "pagination": {
-        "page": "Página {page} de {total}"
+        "page": "Página {page} de {total}",
+        "prev": "Anterior",
+        "next": "Siguiente"
       },
       "detail": {
         "title": "Detalle de clínica",
@@ -1552,7 +1575,7 @@
         "target": "Recurso",
         "ip": "IP",
         "userAgent": "User-Agent",
-        "metadata": "Metadata"
+        "metadata": "Metadatos"
       },
       "empty": "Sin eventos que mostrar.",
       "loading": "Cargando…",
@@ -1560,7 +1583,9 @@
       "retry": "Reintentar",
       "showMetadata": "Ver metadata",
       "pagination": {
-        "page": "Página {page} de {total}"
+        "page": "Página {page} de {total}",
+        "prev": "Anterior",
+        "next": "Siguiente"
       }
     },
     "overview": {

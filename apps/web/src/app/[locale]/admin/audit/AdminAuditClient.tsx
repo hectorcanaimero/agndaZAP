@@ -178,7 +178,7 @@ export function AdminAuditClient({ locale, initial }: Props) {
           >
             <SelectTrigger
               id="audit-action-filter"
-              className="h-9 w-[220px]"
+              className="min-h-11 w-full sm:w-[220px]"
               aria-label={t('filters.action')}
             >
               <SelectValue />
@@ -211,7 +211,7 @@ export function AdminAuditClient({ locale, initial }: Props) {
             >
               <SelectTrigger
                 id="audit-target-filter"
-                className="h-9 w-[160px]"
+                className="min-h-11 w-full sm:w-[160px]"
                 aria-label={t('filters.targetType')}
               >
                 <SelectValue />
@@ -233,7 +233,7 @@ export function AdminAuditClient({ locale, initial }: Props) {
             type="button"
             variant="ghost"
             size="sm"
-            className="h-8 text-xs"
+            className="min-h-11 text-xs"
             onClick={() => {
               setAction('all');
               setTargetType('all');
@@ -283,7 +283,131 @@ export function AdminAuditClient({ locale, initial }: Props) {
             <p className="text-sm text-muted-foreground">{t('empty')}</p>
           </div>
         ) : (
-          <div className="h-full overflow-auto">
+          <>
+          <div className="h-full overflow-y-auto p-3 md:hidden">
+            <div className="space-y-3">
+              {items.map((row) => {
+                const isExpanded = expandedId === row.id;
+                const metadataId = `audit-metadata-${row.id}`;
+                const target =
+                  row.targetType === 'Clinic' && row.targetId ? (
+                    <Link
+                      href={`/${locale}/admin/clinics/${row.targetId}`}
+                      className="text-brand-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {row.targetType} · {row.targetId.slice(0, 8)}…
+                    </Link>
+                  ) : (
+                    <span>
+                      {row.targetType}
+                      {row.targetId ? ` · ${row.targetId.slice(0, 8)}…` : ''}
+                    </span>
+                  );
+
+                return (
+                  <article
+                    key={row.id}
+                    className="rounded-xl border border-border bg-card p-4 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs tabular-nums text-muted-foreground">
+                          {formatDate(row.createdAt, locale)}
+                        </p>
+                        <div className="mt-2">
+                          <Badge
+                            variant={actionBadgeVariant(row.action)}
+                            className={cn('text-[10px]')}
+                          >
+                            {t(`action.${row.action}`)}
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-xs text-muted-foreground">
+                          {t('table.ip')}
+                        </p>
+                        <p className="font-mono text-xs text-foreground">
+                          {row.ip ?? '—'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <dl className="mt-4 space-y-3 text-sm">
+                      <div>
+                        <dt className="text-xs font-medium text-muted-foreground">
+                          {t('table.actor')}
+                        </dt>
+                        <dd className="mt-1 text-foreground">
+                          {row.actor ? (
+                            <div className="min-w-0">
+                              <p className="truncate">{row.actor.name}</p>
+                              <p className="truncate text-xs text-muted-foreground">
+                                {row.actor.email}
+                              </p>
+                            </div>
+                          ) : (
+                            <span className="font-mono text-xs">
+                              {row.actorUserId.slice(0, 8)}…
+                            </span>
+                          )}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-medium text-muted-foreground">
+                          {t('table.target')}
+                        </dt>
+                        <dd className="mt-1 text-foreground">{target}</dd>
+                      </div>
+                    </dl>
+
+                    {row.metadata && Object.keys(row.metadata).length > 0 ? (
+                      <div className="mt-4">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="min-h-11 w-full justify-between px-3"
+                          aria-expanded={isExpanded}
+                          aria-controls={metadataId}
+                          onClick={() =>
+                            setExpandedId(isExpanded ? null : row.id)
+                          }
+                        >
+                          <span>{t('table.metadata')}</span>
+                          {isExpanded ? (
+                            <ChevronUp
+                              className="h-4 w-4"
+                              aria-hidden="true"
+                            />
+                          ) : (
+                            <ChevronDown
+                              className="h-4 w-4"
+                              aria-hidden="true"
+                            />
+                          )}
+                        </Button>
+                        {isExpanded ? (
+                          <div id={metadataId} className="mt-2">
+                            <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/30 px-3 py-2 text-[11px] leading-relaxed text-foreground">
+                              {JSON.stringify(row.metadata, null, 2)}
+                            </pre>
+                            {row.userAgent ? (
+                              <p className="mt-2 truncate text-[11px] text-muted-foreground">
+                                <span className="font-medium">User-Agent:</span>{' '}
+                                {row.userAgent}
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+          <div className="hidden h-full overflow-auto md:block">
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-card">
                 <TableRow>
@@ -406,6 +530,7 @@ export function AdminAuditClient({ locale, initial }: Props) {
               </TableBody>
             </Table>
           </div>
+          </>
         )}
       </div>
 
@@ -416,8 +541,10 @@ export function AdminAuditClient({ locale, initial }: Props) {
             type="button"
             variant="outline"
             size="sm"
+            aria-label={t('pagination.prev')}
             disabled={!canPrev || isFetching}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="min-h-11 min-w-11"
           >
             <ChevronLeft className="h-4 w-4" aria-hidden="true" />
           </Button>
@@ -425,8 +552,10 @@ export function AdminAuditClient({ locale, initial }: Props) {
             type="button"
             variant="outline"
             size="sm"
+            aria-label={t('pagination.next')}
             disabled={!canNext || isFetching}
             onClick={() => setPage((p) => p + 1)}
+            className="min-h-11 min-w-11"
           >
             <ChevronRight className="h-4 w-4" aria-hidden="true" />
           </Button>

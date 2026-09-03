@@ -923,7 +923,7 @@ function MonthView({
                   ? 'bg-card hover:bg-accent/40'
                   : 'bg-muted/20 text-muted-foreground/70 hover:bg-muted/40',
               )}
-              aria-label={`${d} · ${items.length} citas`}
+              aria-label={t('dayAriaLabel', { date: d, count: items.length })}
             >
               <div className="flex items-center justify-between">
                 <span

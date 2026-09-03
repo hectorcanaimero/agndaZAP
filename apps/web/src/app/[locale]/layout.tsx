@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { NextIntlClientProvider } from 'next-intl';
-import { getMessages, setRequestLocale } from 'next-intl/server';
+import { getMessages, getTranslations, setRequestLocale } from 'next-intl/server';
 import { Inter } from 'next/font/google';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
@@ -19,23 +19,32 @@ const inter = Inter({
   display: 'swap',
 });
 
-export const metadata: Metadata = {
-  title: 'Showly',
-  description: 'Agendá tu cita en un minuto.',
-  icons: {
-    icon: [
-      { url: '/favicon.svg', type: 'image/svg+xml' },
-      { url: '/favicon.ico', sizes: 'any' },
-    ],
-    apple: '/apple-touch-icon.png',
-  },
-  openGraph: {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: 'landing.meta' });
+
+  return {
     title: 'Showly',
-    description: 'Agendá tu cita en un minuto.',
-    images: ['/og-image.png'],
-    type: 'website',
-  },
-};
+    description: t('description'),
+    icons: {
+      icon: [
+        { url: '/favicon.svg', type: 'image/svg+xml' },
+        { url: '/favicon.ico', sizes: 'any' },
+      ],
+      apple: '/apple-touch-icon.png',
+    },
+    openGraph: {
+      title: 'Showly',
+      description: t('description'),
+      images: ['/og-image.png'],
+      type: 'website',
+    },
+  };
+}
 
 export function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }));

@@ -565,8 +565,37 @@ function DashboardPanel({
                 {t('byProfessional.empty')}
               </p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+              <>
+                <div className="space-y-2 sm:hidden">
+                  {rankedProfessionals.map((p) => (
+                    <div
+                      key={p.professionalId}
+                      className="rounded-lg border border-border bg-muted/20 p-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-foreground">
+                            {p.professionalName}
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {t('byProfessional.headers.count')}: {p.count}
+                          </p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="text-xs text-muted-foreground">
+                            {t('byProfessional.headers.average')}
+                          </p>
+                          <p className="font-semibold tabular-nums text-foreground">
+                            {p.average.toFixed(1)}
+                          </p>
+                        </div>
+                      </div>
+                      <StarBar value={p.average} className="mt-3 w-full" />
+                    </div>
+                  ))}
+                </div>
+                <div className="hidden overflow-x-auto sm:block">
+                  <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-left text-xs text-muted-foreground">
                       <th className="pb-2 font-medium">
@@ -603,17 +632,16 @@ function DashboardPanel({
                       </tr>
                     ))}
                   </tbody>
-                </table>
-              </div>
+                  </table>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
 
         {/* Sugerencia: los detalles aparecen al hacer click */}
         <p className="pb-2 text-center text-[11px] text-muted-foreground">
-          {locale === 'pt'
-            ? 'Selecione uma resposta na lista para ver o detalhe.'
-            : 'Seleccioná una respuesta en la lista para ver el detalle.'}
+          {t('selectHint')}
         </p>
       </div>
     </div>

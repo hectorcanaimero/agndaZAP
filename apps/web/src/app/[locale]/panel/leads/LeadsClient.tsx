@@ -172,7 +172,7 @@ export function LeadsClient({ locale, initial }: Props) {
           <Select value={status} onValueChange={onStatusChange}>
             <SelectTrigger
               id="lead-status-filter"
-              className="h-9 w-[180px]"
+              className="min-h-11 w-full sm:w-[180px]"
               aria-label={t('filters.status')}
             >
               <SelectValue />
@@ -225,7 +225,67 @@ export function LeadsClient({ locale, initial }: Props) {
         ) : items.length === 0 ? (
           <EmptyState />
         ) : (
-          <div className="h-full overflow-auto">
+          <>
+          <div className="h-full overflow-y-auto p-3 md:hidden">
+            <div className="space-y-3">
+              {items.map((lead) => (
+                <article
+                  key={lead.id}
+                  className="rounded-xl border border-border bg-card p-4 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h2 className="truncate text-base font-semibold text-foreground">
+                        {lead.name}
+                      </h2>
+                      <a
+                        href={toWaMe(lead.phone)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1 inline-flex min-h-11 items-center text-sm font-medium tabular-nums text-brand-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {lead.phone}
+                      </a>
+                    </div>
+                    <Badge
+                      variant={statusVariant(lead.status)}
+                      className={cn('shrink-0 text-[10px]')}
+                    >
+                      {t(`status.${lead.status}`)}
+                    </Badge>
+                  </div>
+
+                  <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-lg bg-muted/40 p-3">
+                      <dt className="text-xs text-muted-foreground">
+                        {t('table.clinicType')}
+                      </dt>
+                      <dd className="mt-1 truncate text-foreground">
+                        {lead.clinicType ?? '—'}
+                      </dd>
+                    </div>
+                    <div className="rounded-lg bg-muted/40 p-3">
+                      <dt className="text-xs text-muted-foreground">
+                        {t('table.locale')}
+                      </dt>
+                      <dd className="mt-1 uppercase text-foreground">
+                        {lead.locale}
+                      </dd>
+                    </div>
+                    <div className="col-span-2 rounded-lg bg-muted/40 p-3">
+                      <dt className="text-xs text-muted-foreground">
+                        {t('table.createdAt')}
+                      </dt>
+                      <dd className="mt-1 tabular-nums text-foreground">
+                        {formatDate(lead.createdAt, locale)}
+                      </dd>
+                    </div>
+                  </dl>
+                </article>
+              ))}
+            </div>
+          </div>
+          <div className="hidden h-full overflow-auto md:block">
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-card">
                 <TableRow>
@@ -277,6 +337,7 @@ export function LeadsClient({ locale, initial }: Props) {
               </TableBody>
             </Table>
           </div>
+          </>
         )}
       </div>
 
@@ -293,7 +354,7 @@ export function LeadsClient({ locale, initial }: Props) {
               size="sm"
               disabled={!canPrev || isFetching}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="gap-1"
+              className="min-h-11 gap-1"
             >
               <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
               {t('pagination.prev')}
@@ -304,7 +365,7 @@ export function LeadsClient({ locale, initial }: Props) {
               size="sm"
               disabled={!canNext || isFetching}
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className="gap-1"
+              className="min-h-11 gap-1"
             >
               {t('pagination.next')}
               <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
