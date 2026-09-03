@@ -12,7 +12,7 @@
 #    paths absolutos (`/srv/showly/data/*`). Coolify los persiste y respalda.
 #  - `restart: always` en vez de `unless-stopped` (convención Coolify).
 #  - Env vars vienen de Coolify (no `.env.production` en disco). Se cargan
-#    vía `PATCH /applications/{uuid}/envs/bulk`. La interpolación `${VAR}`
+#    vía `PATCH /applications/{uuid}/envs/bulk`. La interpolación de variables de entorno
 #    se resuelve con lo que Coolify inyecta.
 #
 # Orden de services proxyables (importa para `docker_compose_domains`):
@@ -123,18 +123,25 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       TRUST_PROXY: "true"
       CORS_ORIGINS: ${CORS_ORIGINS}
-      BOT_LLM_PROVIDER: ${BOT_LLM_PROVIDER:-deepseek}
-      BOT_LLM_FALLBACK: ${BOT_LLM_FALLBACK:-gemini}
+      ICAL_SECRET: ${ICAL_SECRET}
+      WAHA_HEALTH_INTERVAL_MIN: ${WAHA_HEALTH_INTERVAL_MIN:-5}
+      LLM_PROVIDER_ORDER: ${LLM_PROVIDER_ORDER:-deepseek,opencode,gemini}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      OPENCODE_API_KEY: ${OPENCODE_API_KEY:-}
+      OPENCODE_BASE_URL: ${OPENCODE_BASE_URL:-}
+      OPENCODE_PLAN: ${OPENCODE_PLAN:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      EMAIL_FROM: ${EMAIL_FROM}
+      APP_BASE_URL: ${APP_BASE_URL}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_PRETTY: "false"
       AXIOM_ENABLED: ${AXIOM_ENABLED:-true}
       AXIOM_DATASET_LOGS: ${AXIOM_DATASET_LOGS:-showly-prod}
       AXIOM_TOKEN: ${AXIOM_TOKEN}
       AXIOM_ORG_ID: ${AXIOM_ORG_ID}
-      SENTRY_ENABLED: ${SENTRY_ENABLED:-false}
+      SENTRY_ENABLED: ${SENTRY_ENABLED:-true}
       SENTRY_DSN: ${SENTRY_DSN}
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
       SENTRY_RELEASE: ${SENTRY_RELEASE:-}
@@ -163,6 +170,7 @@ services:
         NEXT_PUBLIC_SENTRY_ENVIRONMENT: ${NEXT_PUBLIC_SENTRY_ENVIRONMENT:-production}
         NEXT_PUBLIC_SENTRY_RELEASE: ${NEXT_PUBLIC_SENTRY_RELEASE:-}
         NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE:-0.1}
+        SENTRY_TUNNEL_ROUTE: ${SENTRY_TUNNEL_ROUTE:-}
     restart: always
     expose:
       - "3002"
@@ -173,9 +181,12 @@ services:
       NODE_ENV: production
       PORT: "3002"
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-      SENTRY_ENABLED: ${SENTRY_ENABLED:-false}
+      SENTRY_ENABLED: ${SENTRY_ENABLED:-true}
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.1}
+      SENTRY_DEBUG: ${SENTRY_DEBUG:-false}
       NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN}
-      NEXT_PUBLIC_SENTRY_ENABLED: ${NEXT_PUBLIC_SENTRY_ENABLED:-false}
+      NEXT_PUBLIC_SENTRY_ENABLED: ${NEXT_PUBLIC_SENTRY_ENABLED:-true}
       NEXT_PUBLIC_SENTRY_ENVIRONMENT: ${NEXT_PUBLIC_SENTRY_ENVIRONMENT:-production}
       NEXT_PUBLIC_SENTRY_RELEASE: ${NEXT_PUBLIC_SENTRY_RELEASE:-}
       NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE:-0.1}

@@ -26,6 +26,11 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
   # WAHA — WhatsApp HTTP API (no oficial). Escanea el QR en http://localhost:3000
   # Engine NOWEB (Baileys): sin Chromium, ~30% más liviano y con arm64 nativo.
@@ -54,29 +59,58 @@ services:
       - waha_sessions:/app/.sessions
 
   backend:
-    build: ./apps/backend
-    # command: sh -c "npx prisma migrate deploy && node dist/main.js"
-    command: sh -c "npx prisma migrate deploy && npm run start:dev"
+    # El Dockerfile del backend espera contexto en la raíz del monorepo
+    # (pnpm-workspace.yaml + packages/shared). No usar ./apps/backend.
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
     depends_on:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql://showly:showly@db:5432/showly
       REDIS_URL: redis://redis:6379
       WAHA_BASE_URL: http://waha:3000
       WAHA_API_KEY: ${WAHA_API_KEY:-dev-waha-key}
       WEBHOOK_TOKEN: ${WEBHOOK_TOKEN:-dev-webhook-token}
+      WEBHOOK_HMAC_SECRET: ${WEBHOOK_HMAC_SECRET:-}
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret}
-      # LLM router (reuso del patrón de Blog Condor)
-      BOT_LLM_PROVIDER: deepseek
-      BOT_LLM_FALLBACK: gemini
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      ICAL_SECRET: ${ICAL_SECRET:-dev-ical-secret}
+      WAHA_HEALTH_INTERVAL_MIN: ${WAHA_HEALTH_INTERVAL_MIN:-5}
+      # LLM router real (ver apps/backend/src/common/llm/llm-router.service.ts).
+      LLM_PROVIDER_ORDER: ${LLM_PROVIDER_ORDER:-deepseek,opencode,gemini}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      OPENCODE_API_KEY: ${OPENCODE_API_KEY:-}
+      OPENCODE_BASE_URL: ${OPENCODE_BASE_URL:-}
+      OPENCODE_PLAN: ${OPENCODE_PLAN:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}  # embeddings FAQ
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-Showly <onboarding@showly.us>}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3002}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      LOG_PRETTY: ${LOG_PRETTY:-true}
+      AXIOM_ENABLED: ${AXIOM_ENABLED:-false}
+      AXIOM_DATASET_LOGS: ${AXIOM_DATASET_LOGS:-showly-prod}
+      AXIOM_TOKEN: ${AXIOM_TOKEN:-}
+      AXIOM_ORG_ID: ${AXIOM_ORG_ID:-}
+      SENTRY_ENABLED: ${SENTRY_ENABLED:-false}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-development}
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.1}
     ports:
       - "4000:4000"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:4000/api/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
 
 volumes:
   db_data:
