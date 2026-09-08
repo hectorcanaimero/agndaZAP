@@ -15,6 +15,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[runbook-lanzamiento|Runbook de lanzamiento]] — playbook pre-canary 40 clínicas (2026-08-18).
 - [[smoke-e2e|Smoke E2E]] — checklist pre-demo.
 - [[deploy|Deploy productivo]] — Hetzner + Docker + Caddy.
+- [[deploy-coolify|Deploy en Coolify]] — proyecto/app, dominios, envs por API y gotchas (2026-09-09).
 
 ## Decisiones de arquitectura (ADR)
 - [[adr/0001-monorepo|0001 — Monorepo pnpm + Flutter]]
