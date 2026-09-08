@@ -135,6 +135,7 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY}
       EMAIL_FROM: ${EMAIL_FROM}
       APP_BASE_URL: ${APP_BASE_URL}
+      WEB_BASE_URL: ${WEB_BASE_URL:-${APP_BASE_URL}}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_PRETTY: "false"
       AXIOM_ENABLED: ${AXIOM_ENABLED:-true}
