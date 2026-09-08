@@ -70,8 +70,8 @@ export class IcalService {
       include: { clinic: { select: { name: true, timezone: true } } },
     });
     if (!prof) {
-      // No filtramos con clinicId acá porque el token ya prueba conocimiento
-      // del ID. Si el profesional fue borrado, devolvemos un feed vacío válido.
+      // El token prueba conocimiento del ID, pero si el profesional ya no existe
+      // devolvemos un feed vacío válido sin revelar detalles.
       return this.emptyFeed('Showly');
     }
 
@@ -81,6 +81,7 @@ export class IcalService {
 
     const appts = await this.prisma.appointment.findMany({
       where: {
+        clinicId: prof.clinicId,
         professionalId,
         status: { notIn: ['CANCELADA', 'NO_SHOW'] },
         startAt: { gte: from, lte: to },

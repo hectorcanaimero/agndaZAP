@@ -16,6 +16,7 @@ describe('HealthController', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let redis: any;
   let controller: HealthController;
+  const logger = { warn: jest.fn() };
   const originalFetch = global.fetch;
 
   beforeEach(() => {
@@ -26,9 +27,11 @@ describe('HealthController', () => {
       ok: true,
       status: 200,
     } as unknown as Response);
+    logger.warn.mockClear();
     controller = new HealthController(
       prisma as unknown as PrismaService,
       redis,
+      logger as never,
     );
   });
 
@@ -72,6 +75,10 @@ describe('HealthController', () => {
       expect(res.waha).toBe(true);
       // En test/dev sí exponemos el mensaje para debug.
       expect(res.checks.redis.error).toBe('connection refused');
+      expect(logger.warn).toHaveBeenCalledWith(
+        { err: expect.any(Error) },
+        'health redis check failed',
+      );
     });
 
     it('db caída: ok=false, db=false', async () => {

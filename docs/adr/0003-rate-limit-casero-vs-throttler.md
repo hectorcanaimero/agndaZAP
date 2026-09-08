@@ -50,6 +50,10 @@ con `@UseGuards(RateLimit(N))` por endpoint.
   loguea a error (documentado inline). Alternativa fail-closed = DoS a nosotros
   mismos.
 - Las claves expiran solas por `EXPIRE 60`; no hace falta housekeeping.
+- La política anti-spam no reemplaza validaciones de dominio: los endpoints
+  públicos siguen validando slug, rango de días y que `serviceId` +
+  `professionalId` sean activos y pertenezcan a la clínica antes de calcular
+  disponibilidad; la creación final reusa `SchedulingService`.
 - Cuando escalemos a políticas más finas (sliding window, per-user además de
   per-IP) probablemente valga la pena revisar la decisión.
 - Cero PII en logs: sólo IP + slug + status (consistente con la regla del CLAUDE.md).

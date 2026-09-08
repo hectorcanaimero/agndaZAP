@@ -137,6 +137,8 @@ export function ConversationsClient({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [reply, setReply] = useState('');
   const [search, setSearch] = useState('');
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const [lastRefreshAt, setLastRefreshAt] = useState(() => Date.now());
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -153,6 +155,10 @@ export function ConversationsClient({
 
   const convos = conversationsQuery.data ?? [];
   const refreshing = conversationsQuery.isFetching;
+  const secondsSinceRefresh = Math.max(
+    0,
+    Math.floor((nowTick - lastRefreshAt) / 1000),
+  );
 
   const filteredConvos = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -340,6 +346,21 @@ export function ConversationsClient({
   const replying = replyMutation.isPending;
 
   useEffect(() => {
+    if (conversationsQuery.isSuccess && !conversationsQuery.isFetching) {
+      setLastRefreshAt(Date.now());
+    }
+  }, [
+    conversationsQuery.dataUpdatedAt,
+    conversationsQuery.isFetching,
+    conversationsQuery.isSuccess,
+  ]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNowTick(Date.now()), 5000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
@@ -409,18 +430,30 @@ export function ConversationsClient({
               ⌘K
             </kbd>
           </div>
-          <div className="flex h-9 items-center px-1">
+          <div
+            className="flex h-9 min-w-[116px] items-center justify-end gap-1.5 px-1 text-[11px] text-muted-foreground"
+            role="status"
+            aria-live="polite"
+          >
             {refreshing ? (
-              <Loader2
-                aria-label={t('refreshing')}
-                className="h-3.5 w-3.5 animate-spin text-muted-foreground"
-              />
+              <>
+                <Loader2
+                  aria-hidden="true"
+                  className="h-3.5 w-3.5 animate-spin"
+                />
+                <span>{t('refreshing')}</span>
+              </>
             ) : (
-              <span
-                aria-hidden="true"
-                title={t('live')}
-                className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.15)]"
-              />
+              <>
+                <span
+                  aria-hidden="true"
+                  title={t('live')}
+                  className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.15)]"
+                />
+                <span>
+                  {t('lastRefresh', { seconds: secondsSinceRefresh })}
+                </span>
+              </>
             )}
           </div>
         </div>
@@ -628,6 +661,9 @@ export function ConversationsClient({
                         size="sm"
                         disabled={replying || !reply.trim()}
                         onClick={sendReply}
+                        aria-describedby={
+                          detail.state !== 'HUMAN' ? 'reply-hint' : undefined
+                        }
                       >
                         {replying ? (
                           <Loader2

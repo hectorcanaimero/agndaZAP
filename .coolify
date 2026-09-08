@@ -2,8 +2,8 @@
 # Loaded by ~/.claude/skills/coolify/assets/coolify-ctx.sh.
 # Contains no secrets — safe to commit.
 
-context: guria
-project: vlwz46jmjzcrg9ftqpqnjqen        # showly project
-server: pgk0ows8kw0kcs8c44ss8ogs          # localhost server
+context: contabo
+project: puxt0xsyiqldrrbh3btybcwb        # showly project
+server: dfurbhvmzdtjto4qhzu7vswo          # localhost server
 environment: production
-app: ikvqihmuo38obfcs1nfww5vw            # showly app (docker compose)
+app: r4fy3vrnxv98x8yw6i9xijif            # showly app (docker compose)

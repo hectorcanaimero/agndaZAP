@@ -1,6 +1,7 @@
-import { Controller, Get, HttpCode, Inject, Logger } from '@nestjs/common';
+import { Controller, Get, HttpCode, Inject } from '@nestjs/common';
 import Redis from 'ioredis';
 import { DateTime } from 'luxon';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Public } from '../auth/decorators/public.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { REDIS_CLIENT } from '../public/rate-limit.guard';
@@ -58,13 +59,15 @@ type LivenessResponse = { ok: true; timestamp: string };
 @Public()
 @Controller('health')
 export class HealthController {
-  private readonly logger = new Logger(HealthController.name);
-  private readonly wahaBaseUrl = process.env.WAHA_BASE_URL ?? 'http://localhost:3000';
+  private readonly wahaBaseUrl =
+    process.env.WAHA_BASE_URL ?? 'http://localhost:3000';
   private readonly wahaApiKey = process.env.WAHA_API_KEY ?? '';
 
   constructor(
     private readonly prisma: PrismaService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    @InjectPinoLogger(HealthController.name)
+    private readonly logger: PinoLogger,
   ) {}
 
   @Get('live')
@@ -108,7 +111,7 @@ export class HealthController {
       return { ok: true, latencyMs: Date.now() - start };
     } catch (err) {
       const msg = (err as Error).message;
-      this.logger.warn(`health db check failed: ${msg}`);
+      this.logger.warn({ err }, 'health db check failed');
       return {
         ok: false,
         latencyMs: Date.now() - start,
@@ -127,7 +130,7 @@ export class HealthController {
       };
     } catch (err) {
       const msg = (err as Error).message;
-      this.logger.warn(`health redis check failed: ${msg}`);
+      this.logger.warn({ err }, 'health redis check failed');
       return {
         ok: false,
         latencyMs: Date.now() - start,
@@ -157,7 +160,7 @@ export class HealthController {
       };
     } catch (err) {
       const msg = (err as Error).message;
-      this.logger.warn(`health waha check failed: ${msg}`);
+      this.logger.warn({ err }, 'health waha check failed');
       return {
         ok: false,
         latencyMs: Date.now() - start,
@@ -166,15 +169,21 @@ export class HealthController {
     }
   }
 
-  private withTimeout<T>(promise: Promise<T>, name: string): Promise<T> {
-    return Promise.race([
-      promise,
-      new Promise<T>((_, reject) =>
-        setTimeout(
-          () => reject(new Error(`${name} check timeout ${CHECK_TIMEOUT_MS}ms`)),
-          CHECK_TIMEOUT_MS,
-        ),
-      ),
-    ]);
+  private async withTimeout<T>(promise: Promise<T>, name: string): Promise<T> {
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<T>((_, reject) => {
+          timer = setTimeout(
+            () =>
+              reject(new Error(`${name} check timeout ${CHECK_TIMEOUT_MS}ms`)),
+            CHECK_TIMEOUT_MS,
+          );
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 }

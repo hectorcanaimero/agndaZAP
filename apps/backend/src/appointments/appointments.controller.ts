@@ -31,6 +31,7 @@ import { CreatePanelAppointmentDto } from './dto/create-appointment.dto';
 import { ListAppointmentsQueryDto } from './dto/list-appointments.dto';
 import { PatchStatusDto } from './dto/patch-status.dto';
 import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
+import { SlotsQueryDto } from './dto/slots-query.dto';
 
 /**
  * Controller de citas para el Panel.
@@ -64,6 +65,47 @@ export class AppointmentsController {
   ) {
     // Ver AuthController: setContext en ctor reemplaza a LoggerModule.forFeature.
     this.logger.setContext(AppointmentsController.name);
+  }
+
+  private async assertSlotResourcesInScope(
+    clinicId: string,
+    serviceId: string,
+    professionalId: string,
+    excludeAppointmentId: string | undefined,
+  ): Promise<void> {
+    const service = await this.prisma.service.findFirst({
+      where: { id: serviceId, clinicId, active: true },
+      select: { id: true },
+    });
+    if (!service) {
+      throw new NotFoundException('servicio no encontrado en esta clínica');
+    }
+
+    const professional = await this.prisma.professional.findFirst({
+      where: { id: professionalId, clinicId, active: true },
+      select: {
+        id: true,
+        services: { where: { id: serviceId }, select: { id: true } },
+      },
+    });
+    if (!professional) {
+      throw new NotFoundException('profesional no encontrado en esta clínica');
+    }
+    if (professional.services.length === 0) {
+      throw new BadRequestException('el profesional no atiende este servicio');
+    }
+
+    if (excludeAppointmentId) {
+      const appointment = await this.prisma.appointment.findFirst({
+        where: { id: excludeAppointmentId, clinicId, professionalId },
+        select: { id: true },
+      });
+      if (!appointment) {
+        throw new BadRequestException(
+          'excludeAppointmentId no pertenece a esta clínica/profesional',
+        );
+      }
+    }
   }
 
   @Get()
@@ -126,7 +168,7 @@ export class AppointmentsController {
    * GET /appointments/mine — usa el rol PROFESSIONAL.
    *
    * Diseño: el JWT del PROFESSIONAL NO trae `professionalId` (ver ADR 0005 §8).
-   * Resolvemos con un `findUnique` sobre `User { professionalId }`. Es 1 query
+   * Resolvemos con un `findFirst` sobre `User { id, clinicId }`. Es 1 query
    * extra pero acotada; se optimiza cuando el JWT incluya `professionalId`.
    *
    * Si el user es CLINIC_ADMIN/SUPERADMIN pegan a este endpoint, cortamos con
@@ -141,10 +183,12 @@ export class AppointmentsController {
   ) {
     // El rol ya está validado por RolesGuard; ForbiddenException es defensivo.
     if (user.role !== 'PROFESSIONAL') {
-      throw new ForbiddenException('sólo profesionales pueden usar este endpoint');
+      throw new ForbiddenException(
+        'sólo profesionales pueden usar este endpoint',
+      );
     }
-    const dbUser = await this.prisma.user.findUnique({
-      where: { id: user.userId },
+    const dbUser = await this.prisma.user.findFirst({
+      where: { id: user.userId, clinicId: user.clinicId },
       select: { professionalId: true, clinicId: true },
     });
     if (!dbUser?.professionalId) {
@@ -183,9 +227,9 @@ export class AppointmentsController {
   /**
    * `GET /slots?serviceId&professionalId&from&days&excludeAppointmentId`
    *
-   * Slot picker interno para el panel (agendar / reagendar). Deliberadamente
-   * NO usa DTO — son 5 query params simples y el ValidationPipe global con
-   * `forbidNonWhitelisted` haría más ruido que el que evita.
+   * Slot picker interno para el panel (agendar / reagendar). Usa DTO para
+   * validar query params y pre-valida servicio/profesional contra tenant antes
+   * de delegar a AvailabilityService.
    *
    * `excludeAppointmentId` se pasa cuando se está reagendando una cita
    * existente: hace que su slot actual no aparezca ocupado (por sí misma).
@@ -197,27 +241,30 @@ export class AppointmentsController {
   @Roles('CLINIC_ADMIN', 'SUPERADMIN')
   async slots(
     @CurrentUser() user: AuthUser,
-    @Query('serviceId') serviceId?: string,
-    @Query('professionalId') professionalId?: string,
-    @Query('from') fromISO?: string,
-    @Query('days') daysRaw?: string,
-    @Query('excludeAppointmentId') excludeAppointmentId?: string,
+    @Query() q: SlotsQueryDto,
   ) {
-    if (!serviceId || !professionalId || !fromISO) {
+    if (!q.serviceId || !q.professionalId || !q.from) {
       throw new BadRequestException(
         'serviceId, professionalId y from son requeridos',
       );
     }
     const scope = tenantWhere(user);
+    await this.assertSlotResourcesInScope(
+      scope.clinicId,
+      q.serviceId,
+      q.professionalId,
+      q.excludeAppointmentId,
+    );
+
     // Clamp para evitar queries pesadas si el frontend pide 365 días.
-    const days = Math.min(30, Math.max(1, Number(daysRaw ?? '7')));
+    const days = Math.min(30, Math.max(1, q.days ?? 7));
     return this.availability.getSlots({
       clinicId: scope.clinicId,
-      serviceId,
-      professionalId,
-      fromISO,
+      serviceId: q.serviceId,
+      professionalId: q.professionalId,
+      fromISO: q.from,
       days,
-      excludeAppointmentId,
+      excludeAppointmentId: q.excludeAppointmentId,
       limit: 200,
     });
   }
@@ -232,8 +279,8 @@ export class AppointmentsController {
     const scope = tenantWhere(user);
     const whereClause: Prisma.AppointmentWhereInput = { id, ...scope };
     if (user.role === 'PROFESSIONAL') {
-      const dbUser = await this.prisma.user.findUnique({
-        where: { id: user.userId },
+      const dbUser = await this.prisma.user.findFirst({
+        where: { id: user.userId, clinicId: user.clinicId },
         select: { professionalId: true },
       });
       if (!dbUser?.professionalId) {

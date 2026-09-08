@@ -19,6 +19,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { tenantWhere, type AuthUser } from '../auth/tenant-context.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTimeOffDto } from './dto/create-time-off.dto';
+import { ListTimeOffQueryDto } from './dto/list-time-off.dto';
 import { UpdateTimeOffDto } from './dto/update-time-off.dto';
 
 /**
@@ -96,12 +97,17 @@ export class TimeOffController {
   @Get()
   async list(
     @CurrentUser() user: AuthUser,
-    @Query('professionalId') professionalId?: string,
+    @Query() q: ListTimeOffQueryDto,
   ) {
+    const scope = tenantWhere(user);
+    if (q.professionalId) {
+      await this.assertProfessionalInClinic(scope.clinicId, q.professionalId);
+    }
+
     return this.prisma.timeOff.findMany({
       where: {
-        ...tenantWhere(user),
-        ...(professionalId ? { professionalId } : {}),
+        ...scope,
+        ...(q.professionalId ? { professionalId: q.professionalId } : {}),
       },
       orderBy: { startAt: 'asc' },
     });

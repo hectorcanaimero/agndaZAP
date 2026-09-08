@@ -1,0 +1,88 @@
+# config.yaml — runtime knobs. Loaded by orch.py at startup.
+# All values copied verbatim from proposal/explore §2 defaults (Batch B seed).
+
+concurrency:
+  # Hard cap on TOTAL in-flight subprocesses across all backends (FR-D-5).
+  global_max: 8
+  # Per-backend caps (FR-D-5). AS-05 verifies claude cap holds.
+  per_provider:
+    claude: 3
+    codex: 2
+    opencode: 3
+  # Per-file cap for the 33 tasks with declared `files[]` (opportunistic).
+  per_file: 1
+
+# Strict-files enforcement is OFF by default; enabled only for phase-10 tasks
+# (design.md OPEN — `git checkout --` can destroy concurrent work otherwise).
+strict_files_phases:
+  - 10
+
+# Multiplier applied to `estimateHours` for the subprocess timeout (FR-D-3).
+# Actual timeout = estimateHours * multiplier * 3600 seconds.
+default_timeout_multiplier: 1.5
+
+# Per-dispatch budget cap passed to `claude --max-budget-usd`.
+budget:
+  per_dispatch_usd: 5.00
+
+# FR-D-4 (design.md §5): wall-clock delay between a failed dispatch and its
+# retry. Uses `time.monotonic()` so it's immune to wall-clock jumps.
+# Fase B: RATE_LIMIT failures get a longer backoff so the provider's rate
+# window has time to reset before the retry hits it again.
+retry:
+  backoff_seconds: 5
+  rate_limit_backoff_seconds: 60
+
+# Fase 3 (multi-proyecto): prefijo aplicado a `Task.spec_ref` para armar la
+# línea `Spec ref (READ FIRST):` del prompt. Cada proyecto puede sobreescribir
+# esto (ej: `sdd/specs`, `docs/specs/`, `specs/`). Default: `specs`.
+spec_root: specs
+
+# Sprint B — pluggable state backend.
+# `state.backend`: "file" (default, JSONL/JSON in state/) or "sqlite".
+# `state.sqlite_path`: absolute path or relative-to-state_dir path to the DB
+# file. Defaults to `<state_dir>/orch.db`. Ignored when backend == "file".
+# `tasks_json_precedence`: how the orchestrator reconciles tasks.json status
+# vs backend status. "deps-only" (default) means the DB owns runtime status;
+# tasks.json is consulted only for the DAG + spec_ref fields. Any other
+# value falls back to the historic file-driven behavior.
+state:
+  backend: sqlite
+  sqlite_path: null
+tasks_json_precedence: deps-only
+
+# Sprint 7 — provider budget guardrails.
+# `budgets_config` is the path (relative to the orchestrator package OR the
+# project root) to a `budgets.yaml` file. Absent/missing file → gate disabled
+# (backwards-compat: everything works exactly like pre-Sprint 7).
+# `budgets_preset` picks which preset inside that file to use. Overridable
+# with `--budgets-preset` on the CLI or `ORCH_BUDGETS_PRESET` env var.
+# `typical_dispatch_tokens` is the estimated tokens spent on ONE dispatch —
+# used at startup for preset sanity: if any provider's `token_budget` is
+# < 2 * typical, orch prints a WARN because dispatches will serialize inside
+# the budget window (see budget.warn_undersized_presets).
+budgets_config: budgets.yaml
+budgets_preset: shared
+typical_dispatch_tokens: 200000
+
+# Sprint E-1 — dogfooding loop (issue #17).
+# `findings.publish_repo` is the default GitHub target for `orch findings publish`.
+# `publish_rate_limit_per_hour` caps the number of publishes in the last rolling
+# hour (0 disables). `label` is created on demand and applied to every published
+# issue. `min_publish_confidence` refuses publish for lower-ranked findings
+# unless the caller passes `--force`.
+findings:
+  publish_repo: "hectorcanaimero/orch"
+  publish_rate_limit_per_hour: 3
+  label: "auto-reported"
+  min_publish_confidence: "medium"
+
+# Sprint E-2 / E-3 — dashboard client (SPA + FastAPI) knobs. All optional.
+# `profile` / `token` gate the middleware (operator|stakeholder|both — see
+# orchestrator/dashboard/dashboard_config.py). `board_url` is a PER-PROJECT
+# ExcaliDash canvas embedded in the Board tab of the SPA (surfaced via
+# GET /api/config, whitelisted so tokens NEVER leak).
+dashboard:
+  profile: both                                                           # operator | stakeholder | both
+  token: "cb0f265377403bf831520d30fedde693"                               # required when profile != operator
+  board_url: "https://draw.z0n.co/editor/4177cfa1-e629-4eb0-a0a8-de925cfaaf7b"                # optional — embed an ExcaliDash canvas in the Board tab

@@ -90,3 +90,39 @@ En dev todo es opt-in con `AXIOM_ENABLED=false` / `SENTRY_ENABLED=false` por def
 - [[../specs/2026-08-18-observabilidad-pino-axiom-sentry|Spec de observabilidad]]
 - [[../plans/2026-08-18-observabilidad-plan|Plan de 21 tasks]]
 - [[../notas/2026-08-19-observabilidad-implementada|Nota de implementación con smoke tests]]
+
+## Auditoría F1.6.T3 — 2026-08-23
+
+Se revalidó el alcance de observabilidad contra las specs del 2026-08-18 y
+2026-08-19:
+
+- El auto-log HTTP de Pino ahora emite campos top-level del contrato operativo:
+  `requestId`, `route`, `method`, `status` y `latencyMs`, además de
+  `clinicId`, `userId` e `impersonatedBy` cuando el request autenticado los
+  trae en `req.user`. El `msg` queda normalizado como `METHOD route`, sin query
+  string, para búsquedas consistentes en Axiom.
+- Los health checks `/api/health` y `/api/health/live` siguen excluidos del
+  auto-log aunque BetterStack agregue query params. Esto evita ruido en Axiom
+  sin silenciar warnings explícitos cuando una dependencia cae.
+- El redactor de PII se amplió para cubrir `req.body.email`, `req.body.phone`,
+  `req.body.name`, notas/motivos y arrays comunes (`patients`, `appointments`,
+  `messages`) sin eliminar IDs diagnósticos como `patientId`, `clinicId` o
+  `appointmentId`.
+- `HealthController` usa logger estructurado vía Pino para warnings de DB,
+  Redis y WAHA, y el timeout helper limpia timers al resolver para no dejar
+  handles abiertos en tests/proceso.
+- El health endpoint de Next reporta `buildId` desde `NEXT_PUBLIC_BUILD_ID` con
+  fallback a `NODE_ENV`, alineado con la spec de uptime.
+
+Verificaciones focalizadas ejecutadas sin build:
+
+```bash
+pnpm --filter @showly/backend test -- \
+  common/logger/pii-redactor.spec.ts \
+  common/logger/logger.config.spec.ts \
+  health/health.controller.spec.ts \
+  common/logger/request-context.interceptor.spec.ts \
+  common/sentry/sentry.filter.spec.ts
+```
+
+Resultado: 5 suites verdes, 39 tests verdes.

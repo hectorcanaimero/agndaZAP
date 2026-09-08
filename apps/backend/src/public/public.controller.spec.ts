@@ -7,6 +7,7 @@ import {
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { AvailabilityService } from '../scheduling/availability.service';
+import { SchedulingSessionService } from '../scheduling/scheduling-session.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePublicAppointmentDto } from './dto/create-public-appointment.dto';
@@ -108,6 +109,7 @@ describe('PublicController', () => {
   let prisma: Deep<PrismaService>;
   let availability: Deep<AvailabilityService>;
   let scheduling: Deep<SchedulingService>;
+  let sessions: Deep<SchedulingSessionService>;
   let controller: PublicController;
 
   beforeEach(() => {
@@ -137,6 +139,15 @@ describe('PublicController', () => {
           ],
         }),
       },
+      service: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'svc-1' }),
+      },
+      professional: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'prof-1',
+          services: [{ id: 'svc-1' }],
+        }),
+      },
     };
     availability = {
       getSlots: jest.fn().mockResolvedValue([]),
@@ -149,10 +160,18 @@ describe('PublicController', () => {
         status: 'PENDIENTE',
       }),
     };
+    sessions = {
+      // Por defecto: sin token, cero interacciones. Tests que ejercitan el
+      // flujo `?t=` sobrescriben esta implementación.
+      consume: jest.fn().mockResolvedValue(null),
+      resolve: jest.fn().mockResolvedValue(null),
+      create: jest.fn(),
+    };
     controller = new PublicController(
       prisma as unknown as PrismaService,
       availability as unknown as AvailabilityService,
       scheduling as unknown as SchedulingService,
+      sessions as unknown as SchedulingSessionService,
     );
   });
 
@@ -257,6 +276,73 @@ describe('PublicController', () => {
         }),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
+
+    describe('con token (link mandado por WA)', () => {
+      const validToken = 'a'.repeat(32);
+
+      it('happy path: consume el token, crea con source=BOT_WEB y ata conversationId', async () => {
+        sessions.consume.mockResolvedValueOnce({
+          conversationId: 'conv-1',
+          clinicId: 'clinic-A',
+          clinicSlug: 'clinica-a',
+          phone: '+584141234567',
+          lid: null,
+          name: 'Ana',
+          createdAtISO: new Date().toISOString(),
+        });
+
+        await controller.createAppointment('clinica-a', {
+          ...dto,
+          token: validToken,
+        });
+
+        expect(sessions.consume).toHaveBeenCalledWith(validToken);
+        expect(scheduling.createAppointment).toHaveBeenCalledWith(
+          expect.objectContaining({
+            source: 'BOT_WEB',
+            conversationId: 'conv-1',
+          }),
+        );
+      });
+
+      it('token inválido/expirado → 400 y NO crea cita', async () => {
+        sessions.consume.mockResolvedValueOnce(null);
+        await expect(
+          controller.createAppointment('clinica-a', {
+            ...dto,
+            token: validToken,
+          }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(scheduling.createAppointment).not.toHaveBeenCalled();
+      });
+
+      it('token de otra clínica → 400 (multi-tenant guard)', async () => {
+        sessions.consume.mockResolvedValueOnce({
+          conversationId: 'conv-1',
+          clinicId: 'clinic-B',
+          clinicSlug: 'clinica-b', // ≠ 'clinica-a' del path
+          phone: '+584141234567',
+          lid: null,
+          name: 'Ana',
+          createdAtISO: new Date().toISOString(),
+        });
+        await expect(
+          controller.createAppointment('clinica-a', {
+            ...dto,
+            token: validToken,
+          }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(scheduling.createAppointment).not.toHaveBeenCalled();
+      });
+
+      it('sin token: mantiene source=PUBLIC y no toca sessions', async () => {
+        await controller.createAppointment('clinica-a', { ...dto });
+        expect(sessions.consume).not.toHaveBeenCalled();
+        expect(scheduling.createAppointment).toHaveBeenCalledWith(
+          expect.objectContaining({ source: 'PUBLIC' }),
+        );
+      });
+    });
   });
 
   describe('GET :slug/availability', () => {
@@ -277,6 +363,63 @@ describe('PublicController', () => {
       await expect(
         controller.getAvailability('clinica-a', '', 'prof-1', '2030-06-01'),
       ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('tira 400 si days no es entero', async () => {
+      await expect(
+        controller.getAvailability(
+          'clinica-a',
+          'svc-1',
+          'prof-1',
+          '2030-06-01',
+          'abc',
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(availability.getSlots).not.toHaveBeenCalled();
+    });
+
+    it('tira 400 si from no es ISO válido', async () => {
+      await expect(
+        controller.getAvailability(
+          'clinica-a',
+          'svc-1',
+          'prof-1',
+          'not-a-date',
+          '7',
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(availability.getSlots).not.toHaveBeenCalled();
+    });
+
+    it('tira 404 si el servicio no pertenece a la clínica', async () => {
+      prisma.service.findFirst.mockResolvedValueOnce(null);
+      await expect(
+        controller.getAvailability(
+          'clinica-a',
+          'svc-otra',
+          'prof-1',
+          '2030-06-01',
+          '7',
+        ),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(availability.getSlots).not.toHaveBeenCalled();
+    });
+
+    it('tira 400 si el profesional no atiende el servicio', async () => {
+      prisma.professional.findFirst.mockResolvedValueOnce({
+        id: 'prof-1',
+        services: [],
+      });
+      await expect(
+        controller.getAvailability(
+          'clinica-a',
+          'svc-1',
+          'prof-1',
+          '2030-06-01',
+          '7',
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(availability.getSlots).not.toHaveBeenCalled();
     });
 
     it('llama a availability.getSlots con clinicId resuelto por slug', async () => {
@@ -402,6 +545,26 @@ describe('RateLimit guard', () => {
         await expect(guard.canActivate(ctx)).resolves.toBe(true);
       }
     }
+  });
+
+  it('si Redis rechaza la operación, hace fail-open y no tira 500', async () => {
+    const redis = {
+      pipeline: () => ({
+        incr: jest.fn().mockReturnThis(),
+        expire: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockRejectedValue(new Error('redis down')),
+      }),
+    };
+
+    const Guard = RateLimit(1);
+    const guard = new Guard(redis as any);
+    const ctx = makeExecutionContext({
+      params: { slug: 'clinica-a' },
+      headers: {},
+      ip: '1.2.3.4',
+    });
+
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
   });
 });
 

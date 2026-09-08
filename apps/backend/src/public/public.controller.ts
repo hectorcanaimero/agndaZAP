@@ -12,8 +12,13 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { DateTime } from 'luxon';
 import { AvailabilityService, Slot } from '../scheduling/availability.service';
-import { SchedulingService } from '../scheduling/scheduling.service';
+import { SchedulingSessionService } from '../scheduling/scheduling-session.service';
+import {
+  AppointmentSource,
+  SchedulingService,
+} from '../scheduling/scheduling.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { Public } from '../auth/decorators/public.decorator';
 import { CreatePublicAppointmentDto } from './dto/create-public-appointment.dto';
@@ -47,7 +52,56 @@ export class PublicController {
     private readonly prisma: PrismaService,
     private readonly availability: AvailabilityService,
     private readonly scheduling: SchedulingService,
+    private readonly sessions: SchedulingSessionService,
   ) {}
+
+  private parseAvailabilityDays(days?: string): number {
+    if (!days) return 7;
+
+    const parsed = Number(days);
+    if (!Number.isInteger(parsed)) {
+      throw new BadRequestException('days debe ser un entero');
+    }
+
+    return Math.max(1, Math.min(30, parsed));
+  }
+
+  private assertValidAvailabilityFrom(from: string): void {
+    const parsed = DateTime.fromISO(from);
+    if (!parsed.isValid) {
+      throw new BadRequestException('from debe ser una fecha ISO 8601 válida');
+    }
+  }
+
+  private async assertBookableSelection(input: {
+    clinicId: string;
+    serviceId: string;
+    professionalId: string;
+  }): Promise<void> {
+    const { clinicId, serviceId, professionalId } = input;
+    const [service, professional] = await Promise.all([
+      this.prisma.service.findFirst({
+        where: { id: serviceId, clinicId, active: true },
+        select: { id: true },
+      }),
+      this.prisma.professional.findFirst({
+        where: { id: professionalId, clinicId, active: true },
+        include: {
+          services: { where: { id: serviceId }, select: { id: true } },
+        },
+      }),
+    ]);
+
+    if (!service) {
+      throw new NotFoundException('servicio no encontrado en esta clínica');
+    }
+    if (!professional) {
+      throw new NotFoundException('profesional no encontrado en esta clínica');
+    }
+    if (professional.services.length === 0) {
+      throw new BadRequestException('el profesional no atiende este servicio');
+    }
+  }
 
   /**
    * Devuelve el snapshot público de la clínica: servicios y profesionales activos
@@ -145,6 +199,7 @@ export class PublicController {
         'serviceId, professionalId y from son obligatorios',
       );
     }
+    this.assertValidAvailabilityFrom(from);
 
     const clinic = await this.prisma.clinic.findUnique({
       where: { slug },
@@ -154,7 +209,13 @@ export class PublicController {
       throw new NotFoundException('clínica no encontrada');
     }
 
-    const parsedDays = days ? Math.max(1, Math.min(30, Number(days))) : 7;
+    await this.assertBookableSelection({
+      clinicId: clinic.id,
+      serviceId,
+      professionalId,
+    });
+
+    const parsedDays = this.parseAvailabilityDays(days);
 
     return this.availability.getSlots({
       clinicId: clinic.id,
@@ -211,12 +272,40 @@ export class PublicController {
       throw new NotFoundException('clínica no encontrada');
     }
 
-    // 3) Normalizamos phone: agregamos `+` si no lo trae (E.164 estricto).
+    // 3) Si vino token, lo consumimos AHORA (single-use). Antes de crear la
+    // cita — así una race condition (doble click) no crea dos citas atadas al
+    // mismo token; la segunda invocación al POST recibe token null y sigue
+    // el flujo público normal (o 400 si el token era el único identificador).
+    //
+    // Validación cross-tenant: el token guarda `clinicSlug` propio, tiene que
+    // coincidir con el `:slug` de la URL. Un token de otra clínica → 400. Esto
+    // corta cualquier intento de reusar un token en el slug equivocado.
+    let source: AppointmentSource = 'PUBLIC';
+    let conversationId: string | undefined;
+    if (dto.token) {
+      const session = await this.sessions.consume(dto.token);
+      if (!session) {
+        throw new BadRequestException(
+          'el link expiró o ya fue usado — pedí uno nuevo por WhatsApp',
+        );
+      }
+      if (session.clinicSlug !== slug) {
+        // Log de seguridad: alguien intentó reusar un token en otra clínica.
+        this.logger.warn(
+          `token/slug mismatch tokenSlug=${session.clinicSlug} urlSlug=${slug}`,
+        );
+        throw new BadRequestException('link inválido para esta clínica');
+      }
+      source = 'BOT_WEB';
+      conversationId = session.conversationId;
+    }
+
+    // 4) Normalizamos phone: agregamos `+` si no lo trae (E.164 estricto).
     const normalizedPhone = dto.phone.startsWith('+')
       ? dto.phone
       : `+${dto.phone}`;
 
-    // 4) Delegamos. SchedulingService tira ConflictException / NotFoundException
+    // 5) Delegamos. SchedulingService tira ConflictException / NotFoundException
     // / BadRequestException con sus mensajes internos; el endpoint público
     // reemplaza el 409 por un texto orientado a paciente ("elegí otro").
     let appointment;
@@ -232,7 +321,8 @@ export class PublicController {
         professionalId: dto.professionalId,
         startAtISO: dto.startAtISO,
         notes: dto.notes,
-        source: 'PUBLIC',
+        source,
+        conversationId,
       });
     } catch (e) {
       if (e instanceof ConflictException) {
@@ -244,9 +334,9 @@ export class PublicController {
       throw e;
     }
 
-    // 5) Log de éxito sin PII.
+    // 6) Log de éxito sin PII. Incluye source para el dashboard.
     this.logger.log(
-      `appointment created slug=${slug} apptId=${appointment.id} status=${appointment.status}`,
+      `appointment created slug=${slug} apptId=${appointment.id} source=${source} status=${appointment.status}`,
     );
 
     // Cero PII en la respuesta: NO devolvemos `patient.{name,phone}`. El frontend

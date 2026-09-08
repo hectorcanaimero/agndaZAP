@@ -14,7 +14,7 @@ Este runbook es la secuencia ejecutable para deployar Showly al piloto real. Cad
 - [ ] Dominios apuntando al server:
   - `<dominio-panel>` → server prod (para el web + `/api/*` del panel)
   - `<dominio-backend>` → server prod (para el API del backend detrás de Caddy)
-- [ ] Caddyfile en `/srv/showly/Caddyfile` configurado para hacer reverse proxy a `backend:4000` y `web:3002`
+- [ ] Caddyfile en `~/showly/Caddyfile` configurado para hacer reverse proxy a `backend:4000`, `web:3002` y `waha:3000` (es el path que monta `docker-compose.prod.yml` como `./Caddyfile`)
 
 ## Bloque 1 · Preparar `.env.production` (30 min)
 
@@ -34,6 +34,9 @@ openssl rand -base64 48
 openssl rand -base64 24  # WAHA_DASHBOARD_PASSWORD
 openssl rand -base64 24  # WHATSAPP_SWAGGER_PASSWORD
 
+# iCal feed secret (rota todos los links iCal si cambia)
+openssl rand -base64 48  # ICAL_SECRET
+
 # Postgres password
 openssl rand -base64 24  # POSTGRES_PASSWORD
 ```
@@ -45,17 +48,21 @@ Checklist `.env.production` completo:
 - [ ] `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`
 - [ ] `REDIS_URL=redis://redis:6379`
 - [ ] `WAHA_API_KEY`, `WAHA_DASHBOARD_USERNAME/PASSWORD`, `WHATSAPP_SWAGGER_USERNAME/PASSWORD`
+- [ ] `WAHA_HEALTH_INTERVAL_MIN=5` (default; subir sólo si el monitor genera ruido)
 - [ ] `WEBHOOK_TOKEN` (fallback)
 - [ ] `WEBHOOK_HMAC_SECRET` (recomendado si WAHA Plus disponible)
 
 ### Auth + CORS
 - [ ] `JWT_SECRET` (≥32 chars, sin prefix `dev-`)
+- [ ] `ICAL_SECRET` (48 bytes base64 recomendado; obligatorio para feeds iCal en prod)
 - [ ] `CORS_ORIGINS=https://<dominio-panel>,https://<dominio-backend>`
 - [ ] `TRUST_PROXY=true` (Caddy detrás)
 - [ ] `NODE_ENV=production`
 
 ### LLMs
+- [ ] `LLM_PROVIDER_ORDER=deepseek,opencode,gemini` (o el orden real elegido)
 - [ ] `DEEPSEEK_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`
+- [ ] Si usás OpenCode: `OPENCODE_API_KEY`, `OPENCODE_BASE_URL`, `OPENCODE_PLAN`
 
 ### Mail
 - [ ] `RESEND_API_KEY` (para invitaciones de admin)
@@ -68,6 +75,7 @@ Checklist `.env.production` completo:
 - [ ] `AXIOM_ENABLED=true`, `AXIOM_TOKEN`, `AXIOM_DATASET_LOGS=showly-prod`, `AXIOM_ORG_ID`
 - [ ] `SENTRY_ENABLED=true`, `SENTRY_DSN=<backend-dsn>`, `SENTRY_ENVIRONMENT=production`
 - [ ] `SENTRY_TRACES_SAMPLE_RATE=0.1` (10%; subir si querés más traces)
+- [ ] `SENTRY_DEBUG=false` salvo troubleshooting puntual
 - [ ] `NEXT_PUBLIC_SENTRY_ENABLED=true`, `NEXT_PUBLIC_SENTRY_DSN=<web-dsn>`
 - [ ] `NEXT_PUBLIC_SENTRY_ENVIRONMENT=production`
 - [ ] `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN` (build-time para sourcemaps)
@@ -115,12 +123,12 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --bui
 docker compose -f docker-compose.prod.yml ps
 ```
 
-**Expected:** los 5 containers `db`, `redis`, `waha`, `backend`, `web`, `caddy` en `Up (healthy)`. El backend puede tardar 60s en pasar a healthy (start_period).
+**Expected:** los 6 containers `db`, `redis`, `waha`, `backend`, `web`, `caddy` en `Up (healthy)`. El backend puede tardar 60s en pasar a healthy (`start_period: 60s`); WAHA y web tienen `start_period: 30s`.
 
 **Si algún container queda `Up (unhealthy)`:**
 - Backend unhealthy → `docker logs showly-backend-1 --tail 100` — buscar el `Error: Faltan env vars` o similar
 - Web unhealthy → `docker logs showly-web-1 --tail 100` — probablemente falta `NEXT_PUBLIC_*` en build.args
-- WAHA unhealthy → puede tardar el primer arranque (descarga Chromium). Esperar 2 min y re-check
+- WAHA unhealthy → validar que el healthcheck pegue a `/health` con header `X-Api-Key` y revisar `docker logs showly-waha-1 --tail 100`. En NOWEB no descarga Chromium, pero el primer QR/sesión puede demorar; esperar 2 min y re-check.
 
 ## Bloque 4 · Smoke tests post-deploy (15 min)
 

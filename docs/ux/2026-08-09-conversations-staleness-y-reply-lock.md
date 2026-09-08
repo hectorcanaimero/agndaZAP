@@ -5,7 +5,7 @@ priority: P0
 axis: States
 subagent_type: general-purpose
 skill: frontend-design
-status: pending
+status: done
 created: 2026-08-09
 tags:
   - ux
@@ -177,3 +177,21 @@ Restricciones:
 - Auto-takeover NO debe crear race — verificar con simulación: si takeover retorna 409, no enviar.
 Al terminar: reporte con archivos modificados + resultado del build + confirmación de acceptance criteria.
 ```
+
+## Auditoría F1.5.T1 — cierre verificado (2026-08-22)
+
+Estado: **cerrado**. Evidencia focalizada:
+
+- `apps/web/src/app/[locale]/panel/conversaciones/ConversationsClient.tsx:140-160` mantiene `lastRefreshAt`, `nowTick` y calcula `secondsSinceRefresh`.
+- `ConversationsClient.tsx:348-360` actualiza el timestamp al terminar un fetch exitoso y refresca el contador cada 5s sin disparar refetch.
+- `ConversationsClient.tsx:433-455` renderiza un status visible con `role="status"`, `aria-live="polite"`, `refreshing` y `lastRefresh`.
+- `ConversationsClient.tsx:611-623` deja la `Textarea` editable en BOT/NEEDS_HUMAN y la asocia al hint con `aria-describedby="reply-hint"`.
+- `ConversationsClient.tsx:317-324` hace takeover automático antes de enviar si el detalle no está en `HUMAN`; si falla, aborta el send y muestra toast.
+- `ConversationsClient.tsx:592-600` renderiza skeleton de burbujas durante `detailLoading`, no una elipsis literal.
+- `ConversationsClient.tsx:660-666` asocia también el botón Enviar al hint contextual.
+
+Verificaciones F1.5.T1:
+
+- `rg "lastRefresh|refreshing|autoTakeoverHint|aria-describedby|MessageBubbleSkeleton|mutateAsync\(detail.id\)" apps/web/src/app/[locale]/panel/conversaciones/ConversationsClient.tsx` confirmó los marcadores críticos.
+- `pnpm --filter @showly/web exec tsc --noEmit` se ejecuta como verificación focalizada, sin build.
+- `pnpm build` queda explícitamente **no ejecutado** por instrucción de F1.5.T1.

@@ -68,4 +68,27 @@ export class CreatePublicAppointmentDto {
   @IsString()
   @MaxLength(200)
   honeypot?: string;
+
+  /**
+   * Token de sesión de agendamiento (opcional). Presente cuando el paciente
+   * llegó al form desde el link `?t=xxx` que el bot le mandó por WhatsApp.
+   *
+   * Si viene, el controller:
+   *   1. Lo consume (single-use) via SchedulingSessionService.
+   *   2. Valida que el `clinicSlug` del token coincida con el `:slug` de la URL.
+   *   3. Ata la cita creada a la Conversation origen (`conversationId`).
+   *   4. Marca la cita con `source: 'BOT_WEB'` en vez de `'PUBLIC'`.
+   *
+   * Si el token es inválido o expiró, respondemos 400 — NO caemos al flujo
+   * público silenciosamente, porque el usuario cree que sigue en el flujo del
+   * bot y necesita saber que el link no sirve más (para pedir otro).
+   *
+   * Formato: base64url de 24 bytes (32 chars). Validación laxa acá; el service
+   * hace la validación estricta con regex.
+   */
+  @IsOptional()
+  @IsString()
+  @MinLength(20)
+  @MaxLength(64)
+  token?: string;
 }

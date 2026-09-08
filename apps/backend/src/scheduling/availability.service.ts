@@ -48,13 +48,24 @@ export class AvailabilityService {
     const rangeStart = DateTime.fromISO(params.fromISO, { zone }).startOf('day');
     const rangeEnd = rangeStart.plus({ days });
 
-    // Horarios de atención (del profesional o, si no tiene, de la clínica)
-    const businessHours = await this.prisma.businessHour.findMany({
+    // Horarios de atención — semántica de OVERRIDE, no unión:
+    // si el profesional definió CUALQUIER `BusinessHour` propio, ese conjunto
+    // es su horario completo y descartamos el horario base de la clínica. Si
+    // no tiene ninguno, hereda el de la clínica (`professionalId === null`).
+    // Antes generábamos la unión y un profesional con horario propio recibía
+    // slots dentro del horario clínica que no atendía (F1.2.T1, P0).
+    const businessHoursRaw = await this.prisma.businessHour.findMany({
       where: {
         clinicId,
         OR: [{ professionalId }, { professionalId: null }],
       },
     });
+    const hasProfessionalHours = businessHoursRaw.some(
+      (bh) => bh.professionalId === professionalId,
+    );
+    const businessHours = hasProfessionalHours
+      ? businessHoursRaw.filter((bh) => bh.professionalId === professionalId)
+      : businessHoursRaw;
 
     // Bloqueos que intersecan el rango
     const timeOff = await this.prisma.timeOff.findMany({

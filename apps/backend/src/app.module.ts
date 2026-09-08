@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AdminModule } from './admin/admin.module';
 import { LlmRouterModule } from './common/llm/llm-router.module';
 import { LoggerModule } from './common/logger/logger.module';
+import { RedisModule } from './common/redis/redis.module';
 import { SentryAppModule } from './common/sentry/sentry.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
@@ -41,6 +42,7 @@ import { MailModule } from './mail/mail.module';
   imports: [
     LoggerModule,
     SentryAppModule,
+    RedisModule,
     PrismaModule,
     LlmRouterModule,
     WhatsappModule,

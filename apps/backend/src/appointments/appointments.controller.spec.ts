@@ -55,7 +55,7 @@ describe('AppointmentsController', () => {
         ),
       },
       user: {
-        findUnique: jest.fn().mockResolvedValue({
+        findFirst: jest.fn().mockResolvedValue({
           professionalId: 'prof-1',
           clinicId: 'clinic-A',
         }),
@@ -63,7 +63,13 @@ describe('AppointmentsController', () => {
       professional: {
         // Default: el professionalId filtrado siempre pertenece al tenant.
         // Los tests cross-tenant sobreescriben con `mockResolvedValueOnce(null)`.
-        findFirst: jest.fn().mockResolvedValue({ id: 'prof-1' }),
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'prof-1',
+          services: [{ id: 'svc-1' }],
+        }),
+      },
+      service: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'svc-1' }),
       },
     };
     reminders = {
@@ -152,7 +158,7 @@ describe('AppointmentsController', () => {
     });
 
     it('404 si el user PROFESSIONAL no tiene professionalId en DB', async () => {
-      prisma.user.findUnique.mockResolvedValueOnce({ professionalId: null });
+      prisma.user.findFirst.mockResolvedValueOnce({ professionalId: null });
       await expect(controller.listMine(profUser, {})).rejects.toBeInstanceOf(
         NotFoundException,
       );
@@ -327,14 +333,13 @@ describe('AppointmentsController', () => {
       availability.getSlots.mockResolvedValueOnce([
         { startAt: new Date(), endAt: new Date() },
       ]);
-      const result = await controller.slots(
-        adminA,
-        'svc-1',
-        'prof-1',
-        '2030-06-01T00:00:00-04:00',
-        '99', // > 30 → debe clampearse a 30
-        'appt-1',
-      );
+      const result = await controller.slots(adminA, {
+        serviceId: 'svc-1',
+        professionalId: 'prof-1',
+        from: '2030-06-01T00:00:00-04:00',
+        days: 99, // > 30 → debe clampearse a 30
+        excludeAppointmentId: 'appt-1',
+      });
       expect(result).toHaveLength(1);
       const call = availability.getSlots.mock.calls[0][0];
       expect(call.clinicId).toBe('clinic-A');
@@ -346,7 +351,49 @@ describe('AppointmentsController', () => {
 
     it('faltan params → 400', async () => {
       await expect(
-        controller.slots(adminA, undefined, 'prof-1', '2030-06-01'),
+        controller.slots(adminA, {
+          professionalId: 'prof-1',
+          from: '2030-06-01',
+        } as any),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(availability.getSlots).not.toHaveBeenCalled();
+    });
+
+    it('serviceId cross-tenant → 404 antes de consultar slots', async () => {
+      prisma.service.findFirst.mockResolvedValueOnce(null);
+      await expect(
+        controller.slots(adminA, {
+          serviceId: 'svc-of-B',
+          professionalId: 'prof-1',
+          from: '2030-06-01T00:00:00-04:00',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(availability.getSlots).not.toHaveBeenCalled();
+    });
+
+    it('professionalId cross-tenant → 404 antes de consultar slots', async () => {
+      prisma.professional.findFirst.mockResolvedValueOnce(null);
+      await expect(
+        controller.slots(adminA, {
+          serviceId: 'svc-1',
+          professionalId: 'prof-of-B',
+          from: '2030-06-01T00:00:00-04:00',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(availability.getSlots).not.toHaveBeenCalled();
+    });
+
+    it('profesional que no atiende el servicio → 400', async () => {
+      prisma.professional.findFirst.mockResolvedValueOnce({
+        id: 'prof-1',
+        services: [],
+      });
+      await expect(
+        controller.slots(adminA, {
+          serviceId: 'svc-1',
+          professionalId: 'prof-1',
+          from: '2030-06-01T00:00:00-04:00',
+        }),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(availability.getSlots).not.toHaveBeenCalled();
     });

@@ -36,6 +36,8 @@ interface MobileDrawerProps {
   flatItems?: NavItem[] | DrawerNavItem[];
 }
 
+const PANEL_DRAWER_ID = 'panel-mobile-navigation-drawer';
+
 /**
  * Drawer de navegación mobile (<md) para el panel.
  *
@@ -69,6 +71,8 @@ export function MobileDrawer({
         <button
           type="button"
           aria-label={open ? t('closeMenu') : t('openMenu')}
+          aria-controls={PANEL_DRAWER_ID}
+          aria-expanded={open}
           className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-foreground/80 hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Menu className="h-5 w-5" aria-hidden="true" />
@@ -76,6 +80,7 @@ export function MobileDrawer({
       </SheetTrigger>
 
       <SheetContent
+        id={PANEL_DRAWER_ID}
         side="left"
         className="flex w-72 max-w-[85vw] flex-col gap-0 p-0 sm:max-w-[85vw]"
       >

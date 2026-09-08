@@ -17,6 +17,7 @@ import { Separator } from '@/components/ui/separator';
 import { Logo } from '@/components/landing/Logo';
 import { logout } from '@/lib/auth';
 import { cn } from '@/lib/utils';
+import { AdminMobileDrawer } from './AdminMobileDrawer';
 
 interface AdminShellProps {
   locale: string;
@@ -25,7 +26,7 @@ interface AdminShellProps {
   children: ReactNode;
 }
 
-interface NavItem {
+export interface AdminNavItem {
   key: string;
   href: string;
   label: string;
@@ -50,7 +51,7 @@ export function AdminShell({ locale, email, children }: AdminShellProps) {
   const t = useTranslations('admin');
   const pathname = usePathname();
 
-  const navItems: NavItem[] = [
+  const navItems: AdminNavItem[] = [
     {
       key: 'dashboard',
       href: `/${locale}/admin/dashboard`,
@@ -157,6 +158,7 @@ export function AdminShell({ locale, email, children }: AdminShellProps) {
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Header: siempre visible, desktop + mobile */}
         <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-border bg-card/95 px-4 py-3 backdrop-blur">
+          <AdminMobileDrawer locale={locale} email={email} navItems={navItems} />
           {/* Mobile: wordmark + pill Admin */}
           <Logo variant="full" className="h-6 w-auto shrink-0 md:hidden" />
           <span className="rounded-md bg-brand-navy/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-brand-navy md:hidden">
@@ -175,7 +177,7 @@ export function AdminShell({ locale, email, children }: AdminShellProps) {
           <Button
             variant="ghost"
             size="sm"
-            className="shrink-0 gap-2 text-muted-foreground hover:text-destructive md:hidden"
+            className="min-h-11 min-w-11 shrink-0 gap-2 text-muted-foreground hover:text-destructive md:hidden"
             onClick={() => logout(locale)}
           >
             <LogOut className="h-4 w-4" aria-hidden="true" />

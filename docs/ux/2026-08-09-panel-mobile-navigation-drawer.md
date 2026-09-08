@@ -5,7 +5,7 @@ priority: P0
 axis: Responsive
 subagent_type: general-purpose
 skill: mobile-app-ui-design
-status: pending
+status: done
 created: 2026-08-09
 tags:
   - ux
@@ -186,3 +186,19 @@ Restricciones:
 Al terminar: reporte con archivos modificados + build + screenshots (o descripción) de
 mobile abierto/cerrado + verificación de touch targets con axe-core o inspector.
 ```
+
+## Auditoría F1.5.T1 — cierre verificado (2026-08-22)
+
+Estado: **cerrado**. Evidencia focalizada:
+
+- `apps/web/src/app/[locale]/panel/MobileDrawer.tsx:67-80` usa `Sheet`/`SheetTrigger`/`SheetContent` basado en Radix Dialog, con drawer lateral `<md`.
+- `MobileDrawer.tsx:69-72` expone hamburger con `aria-label` i18n y touch target `min-h-11 min-w-11` (44×44px).
+- `MobileDrawer.tsx:116-123` cierra el drawer al navegar (`onClick={() => setOpen(false)}`) y usa links con `min-h-11`.
+- `MobileDrawer.tsx:169-175` cierra el drawer antes de logout y mantiene target `min-h-11`.
+- Radix `Sheet` aporta focus trap, Escape, backdrop y retorno de foco al trigger.
+
+Verificaciones F1.5.T1:
+
+- `rg "SheetContent|SheetTrigger|min-h-11|min-w-11" apps/web/src/app/[locale]/panel/MobileDrawer.tsx apps/web/src/components/ui/sheet.tsx` confirmó drawer + targets.
+- `pnpm --filter @showly/web exec tsc --noEmit` se ejecuta como verificación focalizada, sin build.
+- `pnpm build` queda explícitamente **no ejecutado** por instrucción de F1.5.T1.

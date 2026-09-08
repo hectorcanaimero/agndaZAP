@@ -90,6 +90,49 @@ export interface CreateAppointmentPayload {
   professionalId: string;
   startAtISO: string;
   honeypot?: string;
+  /**
+   * Token de sesión del link WA (opcional). Cuando viene, el backend consume
+   * el token, valida que el `clinicSlug` matchee la URL y ata la cita a la
+   * `Conversation` origen. Si el token expiró/es inválido → 400.
+   */
+  token?: string;
+}
+
+/**
+ * Datos que el backend devuelve al hidratar el link `?t=<token>`.
+ *
+ * - `phoneEditable`: `false` cuando el bot ya conoce el teléfono del paciente
+ *   (Conversation WA con chatId `@c.us`) — el form lo muestra readonly para no
+ *   romper el linkeo WA↔cita. `true` cuando la conversación es `@lid` sin
+ *   phone resuelto — el form pide el teléfono como required editable.
+ */
+export interface SchedulingSession {
+  clinicSlug: string;
+  name: string | null;
+  phone: string | null;
+  phoneEditable: boolean;
+}
+
+/**
+ * Hidrata la sesión de agendamiento desde un token WA. Devuelve `null` si el
+ * token no existe o expiró (404). El caller decide si abortar el prefill y
+ * mostrar un aviso "tu link expiró".
+ *
+ * NO consume el token — eso pasa recién en `createAppointment`. El usuario
+ * puede recargar el form las veces que quiera.
+ */
+export async function fetchSchedulingSession(
+  token: string,
+): Promise<SchedulingSession | null> {
+  const res = await fetch(
+    `${API_URL}/api/public/scheduling/session/${encodeURIComponent(token)}`,
+    { cache: 'no-store' },
+  );
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new Error(`fetchSchedulingSession failed: ${res.status}`);
+  }
+  return res.json();
 }
 
 export interface CreateAppointmentResult {

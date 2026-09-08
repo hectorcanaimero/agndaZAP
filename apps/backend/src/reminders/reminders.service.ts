@@ -22,6 +22,19 @@ export class RemindersService {
     private readonly ctx: RequestContextService,
   ) {}
 
+  /**
+   * SPEC §2 nombra los IDs como `reminder:{id}` y `risk:{apptId}`.
+   * BullMQ 5 reserva `:` como separador interno de claves Redis; por eso el
+   * jobId físico usa `-`, manteniendo la misma determinación 1:1.
+   */
+  private reminderJobId(reminderId: string): string {
+    return `reminder-${reminderId}`;
+  }
+
+  private riskJobId(appointmentId: string): string {
+    return `risk-${appointmentId}`;
+  }
+
   // Snapshot del request context — se serializa a job.data para que el worker
   // pueda rehidratar el contexto y correlacionar logs con el request original.
   private jobContextPayload(clinicId?: string): {
@@ -45,10 +58,11 @@ export class RemindersService {
     await this.cancelForAppointment(appointmentId);
 
     const offsets = appt.clinic.reminderOffsetsH ?? [24, 3];
-    const now = DateTime.now();
+    const now = DateTime.utc();
+    const startAt = DateTime.fromJSDate(appt.startAt).toUTC();
 
     for (const offsetH of offsets) {
-      const fireAt = DateTime.fromJSDate(appt.startAt).minus({ hours: offsetH });
+      const fireAt = startAt.minus({ hours: offsetH });
       if (fireAt <= now) continue; // no programar recordatorios en el pasado
 
       const reminder = await this.prisma.reminder.create({
@@ -69,8 +83,7 @@ export class RemindersService {
         },
         {
           delay,
-          // BullMQ 5.x prohíbe `:` en custom job IDs → usamos `-` como separador.
-          jobId: `reminder-${reminder.id}`, // idempotencia
+          jobId: this.reminderJobId(reminder.id),
           removeOnComplete: true,
           removeOnFail: 100,
         },
@@ -82,7 +95,7 @@ export class RemindersService {
     }
 
     // Job que revisa el umbral sin confirmar (EN_RIESGO)
-    const threshold = DateTime.fromJSDate(appt.startAt).minus({
+    const threshold = startAt.minus({
       hours: appt.clinic.confirmThresholdH,
     });
     if (threshold > now) {
@@ -94,8 +107,9 @@ export class RemindersService {
         },
         {
           delay: threshold.toMillis() - now.toMillis(),
-          jobId: `risk-${appointmentId}`,
+          jobId: this.riskJobId(appointmentId),
           removeOnComplete: true,
+          removeOnFail: 100,
         },
       );
     }
@@ -116,7 +130,7 @@ export class RemindersService {
       where: { appointmentId, status: 'SCHEDULED' },
       data: { status: 'CANCELED' },
     });
-    const riskJob = await this.queue.getJob(`risk-${appointmentId}`);
+    const riskJob = await this.queue.getJob(this.riskJobId(appointmentId));
     await riskJob?.remove().catch(() => undefined);
   }
 
@@ -128,7 +142,7 @@ export class RemindersService {
     });
     // Los recordatorios ya enviados quedan; los pendientes se mantienen como
     // segundo aviso, pero el check-risk se cancela porque ya confirmó.
-    const riskJob = await this.queue.getJob(`risk-${appointmentId}`);
+    const riskJob = await this.queue.getJob(this.riskJobId(appointmentId));
     await riskJob?.remove().catch(() => undefined);
   }
 }

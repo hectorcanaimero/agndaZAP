@@ -192,7 +192,7 @@ export function AdminClinicsClient({ locale, initial }: Props) {
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder={t('filters.search')}
             aria-label={t('filters.search')}
-            className="pl-9"
+            className="min-h-11 pl-9"
           />
         </div>
 
@@ -212,7 +212,7 @@ export function AdminClinicsClient({ locale, initial }: Props) {
           >
             <SelectTrigger
               id="admin-clinic-status-filter"
-              className="h-9 w-[160px]"
+              className="min-h-11 w-full sm:w-[160px]"
               aria-label={t('filters.status')}
             >
               <SelectValue />
@@ -270,7 +270,90 @@ export function AdminClinicsClient({ locale, initial }: Props) {
             <p className="text-sm text-muted-foreground">{t('empty')}</p>
           </div>
         ) : (
-          <div className="h-full overflow-auto">
+          <>
+          <div className="h-full overflow-y-auto p-3 md:hidden">
+            <div className="space-y-3">
+              {items.map((clinic) => (
+                <article
+                  key={clinic.id}
+                  className="rounded-xl border border-border bg-card p-4 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h2 className="truncate text-base font-semibold text-foreground">
+                        <Link
+                          href={`/${locale}/admin/clinics/${clinic.id}`}
+                          className="hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          {clinic.name}
+                        </Link>
+                      </h2>
+                      <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
+                        {clinic.slug}
+                      </p>
+                    </div>
+                    <Badge
+                      variant={statusVariant(clinic.status)}
+                      className={cn('shrink-0 text-[10px]')}
+                    >
+                      {t(`status.${clinic.status}`)}
+                    </Badge>
+                  </div>
+
+                  <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-lg bg-muted/40 p-3">
+                      <dt className="text-xs text-muted-foreground">
+                        {t('table.professionals')}
+                      </dt>
+                      <dd className="mt-1 font-semibold tabular-nums text-foreground">
+                        {clinic._count.professionals}
+                      </dd>
+                    </div>
+                    <div className="rounded-lg bg-muted/40 p-3">
+                      <dt className="text-xs text-muted-foreground">
+                        {t('table.appointments')}
+                      </dt>
+                      <dd className="mt-1 font-semibold tabular-nums text-foreground">
+                        {clinic._count.appointments}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <Button
+                      asChild
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="min-h-11 gap-2"
+                    >
+                      <Link href={`/${locale}/admin/clinics/${clinic.id}`}>
+                        <Eye className="h-4 w-4" aria-hidden="true" />
+                        {t('table.viewDetail')}
+                      </Link>
+                    </Button>
+                    {clinic.status === 'ACTIVE' ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="min-h-11 gap-2"
+                        disabled={
+                          impersonate.isPending &&
+                          impersonate.variables === clinic.id
+                        }
+                        onClick={() => impersonate.mutate(clinic.id)}
+                      >
+                        <LogIn className="h-4 w-4" aria-hidden="true" />
+                        {t('actions.impersonate')}
+                      </Button>
+                    ) : null}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+          <div className="hidden h-full overflow-auto md:block">
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-card">
                 <TableRow>
@@ -359,6 +442,7 @@ export function AdminClinicsClient({ locale, initial }: Props) {
               </TableBody>
             </Table>
           </div>
+          </>
         )}
       </div>
 
@@ -369,8 +453,10 @@ export function AdminClinicsClient({ locale, initial }: Props) {
             type="button"
             variant="outline"
             size="sm"
+            aria-label={t('pagination.prev')}
             disabled={!canPrev || isFetching}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="min-h-11 min-w-11"
           >
             <ChevronLeft className="h-4 w-4" aria-hidden="true" />
           </Button>
@@ -378,8 +464,10 @@ export function AdminClinicsClient({ locale, initial }: Props) {
             type="button"
             variant="outline"
             size="sm"
+            aria-label={t('pagination.next')}
             disabled={!canNext || isFetching}
             onClick={() => setPage((p) => p + 1)}
+            className="min-h-11 min-w-11"
           >
             <ChevronRight className="h-4 w-4" aria-hidden="true" />
           </Button>

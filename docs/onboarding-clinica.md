@@ -39,8 +39,12 @@ Antes de arrancar el onboarding, la clínica debe tener:
 
 ## 2. Crear el registro `Clinic`
 
-> **Deuda documentada**: hoy no hay `POST /api/clinics`. Está en el roadmap
-> post-piloto. Por ahora, tres alternativas.
+> **Actualizado 2026-08-22 (auditoría F1.5.T4)**: el camino PRIMARIO ya no es
+> manual. Hoy existe `POST /admin/clinics` (SUPERADMIN) en el panel admin, que
+> crea Clinic + primer CLINIC_ADMIN + Invitation (email con link
+> `/invite/{token}`) en un solo paso — sin passwords en claro. Ver §2.d.
+> Las secciones 2.a–2.c quedan como fallback técnico para casos donde no se
+> quiera usar el panel (seed masivo, troubleshooting).
 
 ### 2.a. Snippet Prisma Studio (recomendado)
 
@@ -119,6 +123,25 @@ persona con auto-borrado, o entregalo en persona).
 
 > **Deuda**: no hay password reset. Si el user pierde el password, entrás
 > a la DB y le seteas un hash nuevo. Ver [[adr/0005-auth-mvp-y-deuda]] §6.
+
+### 2.d. Flujo recomendado — panel admin + invitación (SUPERADMIN)
+
+Desde el área SaaS Admin (`/[locale]/admin/clinics` → botón "Nueva clínica"):
+
+1. Completar el form (name, slug, wahaSession, timezone, locale, address +
+   nombre y email del admin).
+2. El backend crea Clinic + User(CLINIC_ADMIN) en una transacción, genera una
+   `Invitation` con TTL 7 días y envía un email al admin con el link
+   `/es/invite/{token}` (o `/pt/...` según el locale de la clínica).
+3. Si el email falla, el panel muestra un dialog con el link para copiar y
+   pasarlo por otro canal (WhatsApp/Signal).
+4. El admin abre el link, elige su contraseña (mín 8) y queda activo.
+
+> **Notas**:
+> - No se comunica ninguna contraseña por ningún canal: el admin elige la suya.
+> - `Invitation.token` es 64 hex (~256 bits) y de un solo uso (410 tras aceptar).
+> - **Pendiente (F2)**: no hay endpoint "reenviar invitación" en el panel — si
+>   el email se pierde o expira, hoy hay que regenerar la Invitation por DB.
 
 ---
 
@@ -427,16 +450,26 @@ recepción física.
 
 ## 14. Deuda del onboarding (endpoints faltantes)
 
-> Actualizado 2026-08-09: items 3 y 4 (endpoints WAHA) cerrados por
-> [[adr/0008-panel-conexion-waha-y-observabilidad]]. La lista se
-> renumeró en consecuencia.
+> Actualizado 2026-08-22 (auditoría F1.5.T4): los items 1 y 2 se cerraron con el
+> panel admin + flujo de invitación (`POST /admin/clinics` crea clínica + primer
+> CLINIC_ADMIN + Invitation; el admin acepta y elige su password). El item 3
+> (config de recordatorios) y el 4 (password reset) siguen pendientes.
 
 Documentado para post-piloto:
 
-1. `POST /api/clinics` (SUPERADMIN) — hoy via Prisma Studio o SQL.
-2. `POST /api/clinics/:id/users` (SUPERADMIN) — hoy via Studio + bcrypt CLI.
+1. ~~`POST /api/clinics` (SUPERADMIN)~~ → **cerrado**: `POST /admin/clinics` + panel admin.
+2. ~~`POST /api/clinics/:id/users` (SUPERADMIN)~~ → **cerrado para el primer admin**
+   (invitación). Invitar admins adicionales a una clínica existente sigue pendiente.
 3. UI `/panel/config` para editar `reminderOffsetsH`, `confirmThresholdH`,
    `autoConfirm` — hoy via SQL/Studio.
 4. Password reset flow — hoy via SQL + bcrypt CLI.
 
-Referencias: [[SPEC]] §1 (Clínicas), [[adr/0005-auth-mvp-y-deuda]].
+Otras deudas detectadas en la auditoría F1.5.T4:
+
+- **Reenviar invitación** desde el detalle de clínica (endpoint
+  `POST /admin/invitations/:userId/resend`) — hoy si el email se pierde o expira
+  hay que regenerar la Invitation por DB.
+- **Estado de invitación en el detalle** (`GET /admin/clinics/:id` no expone si
+  la invitación del primer admin está pendiente/aceptada/expirada).
+
+Referencias: [[SPEC]] §1 (Clínicas), [[adr/0005-auth-mvp-y-deuda]], [[notas/2026-08-14-invitation-flow]].

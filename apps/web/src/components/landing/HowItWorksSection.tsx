@@ -1,18 +1,7 @@
 import { useTranslations } from 'next-intl';
 import { FadeIn } from './motion/FadeIn';
 import { Stagger, StaggerItem } from './motion/Stagger';
-import { SectionEyebrow } from './SectionEyebrow';
 
-// How it works (Batch 3) — fondo brand.navy #0F2A4A para crear contraste
-// contra las secciones light vecinas y darle peso visual al núcleo del
-// producto. Cada paso lleva imagen ilustrada 4:3 (SVG hand-crafted, ver
-// /public/landing/how-step-*.svg + manifest), número discreto en teal +
-// título y body en blanco/neutral-300. Zoom sutil en hover con CSS puro
-// (nada de framer-motion — eso es Batch 4).
-//
-// Usamos <img> nativo con dimensiones explícitas (evita CLS) en vez de
-// next/image porque son SVG locales (~3KB c/u) y activar `dangerouslyAllowSVG`
-// para todo el proyecto sería un cambio global fuera de scope del batch.
 const STEPS = [
   { key: 'one', img: '/landing/how-step-1.svg' },
   { key: 'two', img: '/landing/how-step-2.svg' },
@@ -23,13 +12,24 @@ export function HowItWorksSection() {
   const t = useTranslations('landing.howItWorks');
 
   return (
-    <section id="how-it-works" className="bg-brand-navy py-24 md:py-32">
+    <section
+      id="how-it-works"
+      className="relative overflow-hidden bg-brand-navy py-28 md:py-36"
+    >
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 -z-10 opacity-40 [background-image:radial-gradient(at_20%_0%,rgba(40,217,185,0.28),transparent_55%),radial-gradient(at_85%_100%,rgba(40,217,185,0.14),transparent_50%)]"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 -z-10 bg-grain opacity-[0.06] mix-blend-overlay"
+      />
+
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <FadeIn className="max-w-3xl">
-          <SectionEyebrow variant="dark">{t('eyebrow')}</SectionEyebrow>
           <h2
-            className="mt-3 text-4xl md:text-5xl font-bold tracking-tight text-white text-balance"
-            style={{ overflowWrap: 'anywhere' }}
+            className="font-display text-5xl font-medium leading-[1.02] tracking-[-0.03em] text-white text-balance md:text-6xl"
+            style={{ overflowWrap: 'anywhere', fontOpticalSizing: 'auto' }}
           >
             {t('headline')}
           </h2>
@@ -38,15 +38,18 @@ export function HowItWorksSection() {
         <Stagger
           as="ol"
           gap={0.12}
-          className="mt-16 grid grid-cols-1 gap-8 md:mt-20 md:grid-cols-3 lg:gap-10"
+          className="mt-20 grid grid-cols-1 gap-10 md:mt-24 md:grid-cols-3 lg:gap-12"
         >
-          {STEPS.map(({ key, img }) => (
+          {STEPS.map(({ key, img }, i) => (
             <StaggerItem as="li" key={key} className="group flex min-w-0 flex-col">
-              <span className="font-mono text-sm font-semibold uppercase tracking-[0.3em] text-brand-teal/70">
-                {t(`steps.${key}.number`)}
-              </span>
+              <div className="flex items-baseline gap-4">
+                <span className="font-display text-6xl font-medium leading-none text-brand-teal">
+                  {String(i + 1).padStart(2, '0')}
+                </span>
+                <span className="h-px flex-1 bg-white/15" />
+              </div>
 
-              <div className="mt-4 aspect-[4/3] overflow-hidden rounded-xl ring-1 ring-white/10 bg-white/5">
+              <div className="mt-8 aspect-[4/3] overflow-hidden rounded-2xl ring-1 ring-white/10 bg-white/5">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={img}
@@ -55,14 +58,14 @@ export function HowItWorksSection() {
                   height={600}
                   loading="lazy"
                   decoding="async"
-                  className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.02]"
+                  className="h-full w-full object-cover transition-transform duration-700 ease-out-soft group-hover:scale-[1.03]"
                 />
               </div>
 
-              <h3 className="mt-6 text-xl font-semibold text-white">
+              <h3 className="mt-7 text-xl font-semibold leading-snug text-white">
                 {t(`steps.${key}.title`)}
               </h3>
-              <p className="mt-2 text-base leading-relaxed text-neutral-300">
+              <p className="mt-3 text-base leading-relaxed text-white/70">
                 {t(`steps.${key}.body`)}
               </p>
             </StaggerItem>

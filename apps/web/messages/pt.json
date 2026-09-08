@@ -41,6 +41,7 @@
     },
     "hints": {
       "phone": "Use o formato internacional: +55, +58, etc.",
+      "phoneFromWhatsapp": "Pegamos seu número do WhatsApp — mantenha para seguirmos em contato por este chat.",
       "selectServiceFirst": "Primeiro escolha um serviço."
     },
     "errors": {
@@ -112,6 +113,14 @@
         "public": "Página pública para reservas sem atrito"
       },
       "footer": "Multi-tenant · pensada para consultórios de alto volume."
+    },
+    "devCredentials": {
+      "title": "Dev — clique para preencher",
+      "notes": {
+        "superadmin": "Área /admin (cross-tenant)",
+        "clinicAdmin": "Clínica demo ativa",
+        "suspendedClinicAdmin": "Clínica suspensa — login bloqueado"
+      }
     }
   },
   "panel": {
@@ -365,7 +374,8 @@
         "errPhone": "Telefone inválido. Use formato internacional (ex: +55 11 95555-5555).",
         "errServiceOrProfessional": "Selecione serviço e profissional.",
         "errConsent": "O consentimento do paciente é obrigatório."
-      }
+      },
+      "dayAriaLabel": "{date} · {count, plural, one {# consulta} other {# consultas}}"
     },
     "patients": {
       "title": "Pacientes",
@@ -526,7 +536,8 @@
         "empty": "Sem respostas recentes.",
         "unnamed": "Paciente sem nome",
         "metaLine": "{professional} · {service}"
-      }
+      },
+      "selectHint": "Selecione uma resposta na lista para ver o detalhe."
     },
     "conversations": {
       "title": "Caixa",
@@ -1180,7 +1191,8 @@
       "items": {
         "reminders": {
           "title": "Lembretes que confirmam",
-          "body": "24h e 3h antes de cada consulta, no automático. O paciente confirma com um SIM ou pede para remarcar. Você só é avisado quando algo muda."
+          "body": "24h e 3h antes de cada consulta, no automático. O paciente confirma com um SIM ou pede para remarcar. Você só é avisado quando algo muda.",
+          "tag": "Anti no-show ao vivo"
         },
         "handoff": {
           "title": "Sua equipe assume o chat quando quiser",
@@ -1235,10 +1247,18 @@
       "eyebrow": "Segurança e dados",
       "headline": "Os dados dos seus pacientes ficam isolados por clínica.",
       "chips": {
-        "isolation": { "label": "Isolamento por clínica" },
-        "dedicated": { "label": "WhatsApp dedicado" },
-        "noPii": { "label": "Sem dados pessoais nos logs" },
-        "accessControl": { "label": "Painel protegido por padrão" }
+        "isolation": {
+          "label": "Isolamento por clínica"
+        },
+        "dedicated": {
+          "label": "WhatsApp dedicado"
+        },
+        "noPii": {
+          "label": "Sem dados pessoais nos logs"
+        },
+        "accessControl": {
+          "label": "Painel protegido por padrão"
+        }
       },
       "ctaLabel": "Como protegemos seus dados",
       "ariaMore": "Ver detalhes sobre segurança e proteção de dados"
@@ -1393,7 +1413,9 @@
       "leads": "Leads",
       "audit": "Auditoria",
       "logout": "Sair do Admin",
-      "userMenu": "Menu do usuário"
+      "userMenu": "Menu do usuário",
+      "openMenu": "Abrir menu do admin",
+      "closeMenu": "Fechar menu do admin"
     },
     "header": {
       "title": "Área SaaS Admin"
@@ -1477,7 +1499,9 @@
       "retry": "Tentar novamente",
       "count": "{n, plural, =0 {Sem clínicas} =1 {1 clínica} other {# clínicas}}",
       "pagination": {
-        "page": "Página {page} de {total}"
+        "page": "Página {page} de {total}",
+        "prev": "Anterior",
+        "next": "Próxima"
       },
       "detail": {
         "title": "Detalhes da clínica",
@@ -1552,7 +1576,7 @@
         "target": "Recurso",
         "ip": "IP",
         "userAgent": "User-Agent",
-        "metadata": "Metadata"
+        "metadata": "Metadados"
       },
       "empty": "Sem eventos para mostrar.",
       "loading": "Carregando…",
@@ -1560,7 +1584,9 @@
       "retry": "Tentar novamente",
       "showMetadata": "Ver metadata",
       "pagination": {
-        "page": "Página {page} de {total}"
+        "page": "Página {page} de {total}",
+        "prev": "Anterior",
+        "next": "Próxima"
       }
     },
     "overview": {

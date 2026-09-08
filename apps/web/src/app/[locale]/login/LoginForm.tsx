@@ -243,25 +243,25 @@ const DEV_CREDENTIALS: Array<{
   role: 'SUPERADMIN' | 'CLINIC_ADMIN' | 'CLINIC_ADMIN_SUSPENDED';
   email: string;
   password: string;
-  note: string;
+  noteKey: 'superadmin' | 'clinicAdmin' | 'suspendedClinicAdmin';
 }> = [
   {
     role: 'SUPERADMIN',
     email: 'super@showly.dev',
     password: 'super1234',
-    note: 'Área /admin (cross-tenant)',
+    noteKey: 'superadmin',
   },
   {
     role: 'CLINIC_ADMIN',
     email: 'admin@demo.dev',
     password: 'demo1234',
-    note: 'Clínica demo activa',
+    noteKey: 'clinicAdmin',
   },
   {
     role: 'CLINIC_ADMIN_SUSPENDED',
     email: 'admin@demo-2.dev',
     password: 'demo1234',
-    note: 'Clínica suspendida — login bloqueado',
+    noteKey: 'suspendedClinicAdmin',
   },
 ];
 
@@ -270,13 +270,15 @@ function DevCredentials({
 }: {
   onPick: (email: string, password: string) => void;
 }) {
+  const t = useTranslations('login.devCredentials');
+
   if (process.env.NODE_ENV === 'production') return null;
 
   return (
     <div className="mt-6 rounded-md border border-amber-300 bg-amber-50 p-3">
       <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-amber-800">
         <TerminalSquare className="h-3.5 w-3.5" aria-hidden="true" />
-        <span>Dev — click para autocompletar</span>
+        <span>{t('title')}</span>
       </div>
       <ul className="flex flex-col gap-1">
         {DEV_CREDENTIALS.map((c) => (
@@ -294,7 +296,7 @@ function DevCredentials({
                   {c.email} · {c.password}
                 </span>
                 <span className="block truncate text-[11px] text-amber-700">
-                  {c.note}
+                  {t(`notes.${c.noteKey}`)}
                 </span>
               </span>
             </button>

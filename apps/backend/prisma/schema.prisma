@@ -212,6 +212,18 @@ enum AppointmentStatus {
   NO_SHOW
 }
 
+// Origen de la cita — trazabilidad de por dónde entró el paciente.
+//  - BOT     → bot completó todo el flujo por WhatsApp.
+//  - PUBLIC  → paciente entró directo al link `/agendar/[slug]` (compartido,
+//              QR, redes) sin pasar por WA.
+//  - BOT_WEB → bot escaló a agendamiento web: mandó un link firmado por WA y
+//              el paciente completó el form. Ata `conversationId` a la cita.
+enum AppointmentSource {
+  BOT
+  PUBLIC
+  BOT_WEB
+}
+
 model Appointment {
   id             String   @id @default(cuid())
   clinicId       String
@@ -232,6 +244,19 @@ model Appointment {
   canceledAt     DateTime?
   outcome        String?  // atendio | no_show | null
 
+  // Origen de la cita (bot puro, web pública, o bot→web via link). El default
+  // PUBLIC preserva semántica de citas legacy (todas las que existen hoy vinieron
+  // del endpoint público). El bot y el nuevo flujo BOT_WEB setean explícito.
+  source         AppointmentSource @default(PUBLIC)
+
+  // Cuando la cita viene por el link WA (source=BOT_WEB), guardamos la
+  // Conversation origen para poder: (a) notificar por el mismo chat cuando la
+  // cita cambie de estado, (b) reportar en el dashboard "cuántas citas venían
+  // del bot vs. del link público", (c) reactivar el FSM si el paciente vuelve
+  // al chat. NULL cuando source ∈ {BOT, PUBLIC}.
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
   reminders      Reminder[]
   feedback       Feedback?
   createdAt      DateTime @default(now())
@@ -241,6 +266,7 @@ model Appointment {
   @@unique([professionalId, startAt])
   @@index([clinicId, startAt])
   @@index([status])
+  @@index([conversationId])
 }
 
 enum ReminderStatus {
@@ -324,6 +350,9 @@ model Conversation {
   flowStep   String?
   flowData   Json?
   messages   Message[]
+  // Citas creadas via el link de agendamiento web mandado por este chat
+  // (source=BOT_WEB). Vacío para conversaciones que no llegaron a agendar.
+  appointments Appointment[]
   updatedAt  DateTime @updatedAt
   createdAt  DateTime @default(now())
 

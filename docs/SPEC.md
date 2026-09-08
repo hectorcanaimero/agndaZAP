@@ -67,11 +67,14 @@ Cualquier otra transición se rechaza con 422.
 - Se programa un job por cada offset futuro. Los offsets en el pasado se omiten.
 - Confirmar cancela el job `check-risk`. Cancelar/reprogramar elimina todos los jobs de la cita.
 - Idempotencia por `jobId` determinista (`reminder:{id}`, `risk:{apptId}`).
+  En BullMQ, el `jobId` físico usa `reminder-{id}` y `risk-{apptId}` porque `:` es separador reservado de claves Redis; la relación lógica 1:1 se mantiene.
 
 ### Bot
 - Confirmaciones (`sí`, `cancelar`, etc.) se resuelven por regla determinista antes de invocar el LLM.
+- Las respuestas de recordatorio `SÍ`, `REAGENDAR` y `CANCELAR` no dependen del LLM: confirman, derivan a recepción para reagendar sin mover la cita todavía, o cancelan explícitamente la cita.
 - El bot nunca crea ni cancela una cita sin confirmación explícita del paciente.
 - Si `Conversation.state = HUMAN`, el bot no responde.
+- La FSM de agendamiento se persiste en `Conversation.flowStep` + `flowData` y avanza por `ASK_SERVICE → ASK_PROFESSIONAL → ASK_SLOT → CONFIRM`; pasos auxiliares como captura de nombre deben preservar esos datos para que el flujo sea retomable.
 
 ---
 
@@ -124,6 +127,30 @@ Feature: Handoff a humano
     Then la conversación pasa a NEEDS_HUMAN
     And el bot deja de responder hasta que se libere
 ```
+
+### 3.1 Matriz de cobertura de tests vs Gherkin (audit F1.7.T2)
+
+Auditoría realizada el 2026-08-23 contra los specs existentes en `apps/backend/src/**/*.spec.ts`.
+La columna **Hueco explícito** documenta las partes del escenario que todavía no tienen cobertura
+directa; si no hay hueco, el escenario queda cubierto por al menos un test representativo.
+
+| Feature / Scenario §3 | Tests representativos existentes | Veredicto | Hueco explícito |
+|---|---|---:|---|
+| Agendamiento — Paciente agenda en un horario disponible | `scheduling/scheduling.service.spec.ts` → `crea la cita y programa recordatorios cuando el slot está libre`, `crea la cita CONFIRMADA cuando clinic.autoConfirm=true`; `bot/bot.service.spec.ts` → `flujo end-to-end: agendar → nombre → confirmar → cita creada + recordatorios programados` | 🟡 Parcial | Falta test directo de `reminders/reminders.service.ts` que pruebe offsets reales `24h` y `3h`; los tests actuales sólo verifican que `SchedulingService` invoca `scheduleForAppointment`. |
+| Agendamiento — No se permite doble reserva del mismo slot | `scheduling/scheduling.service.spec.ts` → `tira ConflictException 409 si el @@unique falla (doble reserva)`, `tira ConflictException si availability ya no ofrece ese slot`; `bot/bot.service.spec.ts` → `si scheduling tira ConflictException el bot re-lista horarios libres y vuelve a ASK_SLOT` | 🟡 Parcial | Falta spec propio de `scheduling/availability.service.ts` que pruebe que una cita activa no se ofrece como slot disponible; hoy se testea vía mock y por el fallback `@@unique`. |
+| Recordatorios — Paciente confirma tras el recordatorio | `appointments/appointments.controller.spec.ts` → `PENDIENTE → CONFIRMADA: llama a reminders.confirmAppointment`; `appointment-status.util.spec.ts` → matriz legal `PENDIENTE → CONFIRMADA` | 🟡 Parcial | Falta test de `BotService` para respuesta determinista `SÍ` fuera de la FSM y test directo de `RemindersService.confirmAppointment` que pruebe que se elimina el job `check-risk`. |
+| Recordatorios — Paciente no confirma y la cita entra en riesgo | `appointment-status.util.spec.ts` → matriz legal `PENDIENTE → EN_RIESGO`; `dashboard/dashboard.controller.spec.ts` cubre agregación visual de citas `EN_RIESGO` | 🔴 Gap | Falta test de `reminders/reminders.processor.ts` para job `check-risk`: `updateMany` sólo si sigue `PENDIENTE`, transición a `EN_RIESGO` y alerta a recepción con conversación en `NEEDS_HUMAN`. |
+| Recordatorios — Cancelación libera el horario | `appointments/appointments.controller.spec.ts` → `PENDIENTE → CANCELADA: 200 con status CANCELADA + cancelForAppointment`, `CONFIRMADA → CANCELADA: llama a reminders.cancelForAppointment`; `appointment-status.util.spec.ts` → matriz legal a `CANCELADA` | 🟡 Parcial | Falta test de `BotService` para respuesta determinista `CANCELAR` de recordatorio; falta test directo de `RemindersService.cancelForAppointment`; falta spec de `AvailabilityService` que demuestre que una cita `CANCELADA` libera el slot. |
+| Handoff a humano — El paciente pide hablar con una persona | `bot/bot.service.spec.ts` → `"hablar con una persona" en cualquier paso marca NEEDS_HUMAN y resetea la FSM`, `si state=HUMAN, el bot no responde`; `conversations/conversations.controller.spec.ts` → `release → set state=BOT, limpia flowStep y flowData` | 🟡 Parcial | Falta un test que demuestre explícitamente que `state=NEEDS_HUMAN` también silencia al bot hasta `release`; hoy la no-respuesta cubierta es para `state=HUMAN`. |
+
+#### Test centinela cross-tenant
+
+El centinela de fuga cross-tenant requerido por F1.7.T2 está en
+`scheduling/scheduling.service.spec.ts` → `rechaza el intento de usar un serviceId de otra clínica`.
+Ese test no sólo espera `NotFoundException`: también assertéa que la query use
+`where: { id: 'svc-of-clinic-B', clinicId: 'clinic-A', active: true }`.
+Si alguien remueve el filtro `clinicId` de esa query, el test falla aunque el mock siga devolviendo
+`null`; por eso es un test load-bearing contra fuga entre tenants.
 
 ---
 

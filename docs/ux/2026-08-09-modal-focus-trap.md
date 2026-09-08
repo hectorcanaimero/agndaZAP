@@ -5,7 +5,7 @@ priority: P0
 axis: A11y
 subagent_type: general-purpose
 skill: frontend-design
-status: pending
+status: done
 created: 2026-08-09
 tags:
   - ux
@@ -179,3 +179,19 @@ Restricciones:
 Al terminar: reporte con archivos modificados + build + verificación keyboard-only de al menos
 2 modales (Services form + Agenda detail).
 ```
+
+## Auditoría F1.5.T1 — cierre verificado (2026-08-22)
+
+Estado: **cerrado**. El componente histórico `modal.tsx` fue reemplazado por primitives Radix/shadcn, así que el criterio se verifica sobre los wrappers vigentes:
+
+- `apps/web/src/components/ui/dialog.tsx:4` usa `@radix-ui/react-dialog`.
+- `apps/web/src/components/ui/dialog.tsx:38-51` renderiza `DialogPrimitive.Content` con overlay, escape/click exterior y close controlados por Radix. El close button queda después de `{children}` en el DOM, evitando que sea el primer foco cuando el body tiene campos focusables.
+- `apps/web/src/components/ui/alert-dialog.tsx:4` usa `@radix-ui/react-alert-dialog` para confirmaciones destructivas.
+- `apps/web/src/components/ui/confirm-dialog.tsx:89-115` consume `AlertDialogContent`, `AlertDialogCancel` y `AlertDialogAction`; Radix aporta `role="alertdialog"`, focus trap, Escape y retorno de foco.
+- `ConfirmDialog.tsx:97-112` bloquea doble confirm mientras `busy` está activo y mantiene foco seguro en el flujo Cancel/Confirm.
+
+Verificaciones F1.5.T1:
+
+- `rg "@radix-ui/react-(dialog|alert-dialog)|DialogPrimitive.Content|AlertDialogContent" apps/web/src/components/ui` confirmó que los modales usan primitives con focus management nativo.
+- `pnpm --filter @showly/web exec tsc --noEmit` se ejecuta como verificación focalizada, sin build.
+- `pnpm build` queda explícitamente **no ejecutado** por instrucción de F1.5.T1.

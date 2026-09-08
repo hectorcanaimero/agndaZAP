@@ -70,6 +70,9 @@ services:
     image: devlikeapro/waha:latest
     restart: unless-stopped
     environment:
+      # NOWEB (Baileys): menos RAM que WEBJS/Chromium y consistente con
+      # `WahaService.startSession()` que crea sesiones con config.noweb.store.
+      WHATSAPP_DEFAULT_ENGINE: NOWEB
       WAHA_API_KEY: ${WAHA_API_KEY}
       WHATSAPP_HOOK_URL: http://backend:4000/webhooks/waha
       WHATSAPP_HOOK_EVENTS: message,session.status
@@ -88,7 +91,9 @@ services:
     volumes:
       - /srv/showly/data/waha:/app/.sessions
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      # WAHA 2026.8.1 requiere X-Api-Key en /health; sin header devuelve 401.
+      # CMD-SHELL permite expandir la env del container ($$WAHA_API_KEY).
+      test: ["CMD-SHELL", "wget --spider -q --header=\"X-Api-Key: $$WAHA_API_KEY\" http://localhost:3000/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -126,11 +131,18 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       TRUST_PROXY: "true"
       CORS_ORIGINS: ${CORS_ORIGINS}
-      BOT_LLM_PROVIDER: ${BOT_LLM_PROVIDER:-deepseek}
-      BOT_LLM_FALLBACK: ${BOT_LLM_FALLBACK:-gemini}
+      ICAL_SECRET: ${ICAL_SECRET}
+      WAHA_HEALTH_INTERVAL_MIN: ${WAHA_HEALTH_INTERVAL_MIN:-5}
+      LLM_PROVIDER_ORDER: ${LLM_PROVIDER_ORDER:-deepseek,opencode,gemini}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      OPENCODE_API_KEY: ${OPENCODE_API_KEY:-}
+      OPENCODE_BASE_URL: ${OPENCODE_BASE_URL:-}
+      OPENCODE_PLAN: ${OPENCODE_PLAN:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      EMAIL_FROM: ${EMAIL_FROM}
+      APP_BASE_URL: ${APP_BASE_URL}
       # Observability: logs (Pino → Axiom)
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_PRETTY: "false"
@@ -178,6 +190,7 @@ services:
         NEXT_PUBLIC_SENTRY_ENVIRONMENT: ${NEXT_PUBLIC_SENTRY_ENVIRONMENT:-production}
         NEXT_PUBLIC_SENTRY_RELEASE: ${NEXT_PUBLIC_SENTRY_RELEASE:-}
         NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE:-0.1}
+        SENTRY_TUNNEL_ROUTE: ${SENTRY_TUNNEL_ROUTE:-}
     restart: unless-stopped
     depends_on:
       backend:
@@ -188,6 +201,9 @@ services:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
       # Sentry runtime vars — el server-side (RSC, API routes) las lee acá.
       SENTRY_ENABLED: "true"
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.1}
+      SENTRY_DEBUG: ${SENTRY_DEBUG:-false}
       NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN}
       NEXT_PUBLIC_SENTRY_ENABLED: "true"
       NEXT_PUBLIC_SENTRY_ENVIRONMENT: ${NEXT_PUBLIC_SENTRY_ENVIRONMENT:-production}
