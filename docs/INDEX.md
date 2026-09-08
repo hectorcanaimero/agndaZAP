@@ -15,6 +15,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[runbook-lanzamiento|Runbook de lanzamiento]] — playbook pre-canary 40 clínicas (2026-08-18).
 - [[smoke-e2e|Smoke E2E]] — checklist pre-demo.
 - [[deploy|Deploy productivo]] — Hetzner + Docker + Caddy.
+- [[deploy-coolify|Deploy en Coolify]] — proyecto/app, dominios, envs por API y gotchas (2026-09-09).
 
 ## Decisiones de arquitectura (ADR)
 - [[adr/0001-monorepo|0001 — Monorepo pnpm + Flutter]]
@@ -62,6 +63,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[notas/2026-08-14-impersonation-flow|2026-08-14 — Impersonation flow: cookies, redirects y edge cases]]
 - [[notas/2026-08-19-observabilidad-implementada|2026-08-19 — Observabilidad Pino+Axiom+Sentry implementada + smoke tests]]
 - [[notas/2026-08-18-sprint-completo-40-clinicas|2026-08-18 — Sprint completo pre-lanzamiento 40 clínicas (CIERRE)]]
+- [[notas/2026-09-09-nestjs-pino-inject-con-contexto|2026-09-09 — nestjs-pino: `@InjectPinoLogger(Nombre)` rompe el bootstrap en prod]]
 
 ## Flujo de trabajo
 - [[skills-y-flujo|Skills, agentes y flujo de trabajo]]

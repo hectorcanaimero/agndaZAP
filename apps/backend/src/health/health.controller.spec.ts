@@ -16,7 +16,7 @@ describe('HealthController', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let redis: any;
   let controller: HealthController;
-  const logger = { warn: jest.fn() };
+  const logger = { warn: jest.fn(), setContext: jest.fn() };
   const originalFetch = global.fetch;
 
   beforeEach(() => {

@@ -1,5 +1,13 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-09 — Sprint 0: CI verde + primer deploy en Coolify (PR #24)
+- **Contexto**: radiografía completa del proyecto (hecho / funciona / falta) y plan de 4 sprints. `main` no pasaba el job web de CI: `AgendaLive.tsx` (sin importar en ningún lado) usaba 7 claves `landing.agendaLive.*` inexistentes. Tests backend 560/560. Ver [[deploy-coolify]] para la infra.
+- **Coolify**: creado proyecto `showly` + app docker compose desde el repo público (rama `main`, `docker-compose.coolify.yml`) en la instancia del VPS. Dominios temporales sslip.io porque `showly.us` apunta a otro servidor. Secretos generados fuera del repo; keys de LLM/Resend/Axiom/Sentry pendientes.
+- **Deploys**: 1) falló en `pnpm build` del web por AgendaLive. 2) pasó el build, `db` unhealthy: Coolify escribía `POSTGRES_USER='showly'` con comillas por `is_literal=true`. 3) db/redis/waha sanos, backend en crash-loop: `@InjectPinoLogger(HealthController.name)` sin provider (introducido el 03-09, nunca desplegado). 4) con el fix de health.
+- **Commits en `fix/sprint-0-ci-verde`**: claves agendaLive es/pt + label tipado · `WEB_BASE_URL` en compose prod/coolify (faltaba, los links del bot caían a localhost) · `next build` en el job web de CI · fix del logger en HealthController · `docs/deploy-coolify.md`.
+- **Regla nueva**: nunca `@InjectPinoLogger(Nombre)`; siempre `@InjectPinoLogger()` + `setContext` en el ctor (patrón de AuthController). Candidato sprint 2: test de bootstrap del `AppModule` que habría atrapado esto.
+- **Pendiente**: mergear PR #24 y volver la app de Coolify a `main`; decidir los borrados locales sin commitear (`.codex`, `.obsidian`, `orchestrator/`, `specs/`, `tasks.json`, `scripts/task-*.sh`); cargar keys reales; actualizar `.coolify` con los uuids nuevos.
+
 ## 2026-08-10 — Feedback post-atención (satisfacción) — PR #15
 - Sistema end-to-end para medir satisfacción por WhatsApp cuando una cita pasa a ATENDIDA. Ver [[adr/0012-feedback-post-atencion|ADR 0012]] para el "por qué" completo.
 - **Schema**: `Professional.followUpEnabled` (default `false`) + `followUpDelayHours` (default `2h`, rango 0-168), y nuevo modelo `Feedback` (score 1-5, `comment?`, unique en `appointmentId`).
