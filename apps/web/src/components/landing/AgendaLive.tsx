@@ -27,7 +27,7 @@ const INITIAL: Appointment[] = [
 
 const STATUS_CONFIG: Record<
   Status,
-  { label: string; dot: string; text: string; bg: string; ring: string; Icon: typeof Check }
+  { label: 'attended' | 'confirmed' | 'pending' | 'atRisk'; dot: string; text: string; bg: string; ring: string; Icon: typeof Check }
 > = {
   attended: {
     label: 'attended',

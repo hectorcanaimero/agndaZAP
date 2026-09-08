@@ -1099,6 +1099,23 @@
       "title": "Showly | Agendamiento por WhatsApp para clínicas",
       "description": "Showly agenda, confirma y recuerda las citas de tu clínica por WhatsApp. Menos no-shows, más pacientes atendidos."
     },
+    "agendaLive": {
+      "todayLabel": "Hoy",
+      "liveLabel": "En vivo",
+      "status": {
+        "attended": "Atendida",
+        "confirmed": "Confirmada",
+        "pending": "Pendiente",
+        "atRisk": "En riesgo"
+      },
+      "countLabels": {
+        "confirmed": "confirmadas",
+        "pending": "pendientes",
+        "atRisk": "en riesgo"
+      },
+      "toastLabel": "Recordatorio enviado",
+      "toastMessage": "Andrés confirmó su cita de las 11:15 por WhatsApp."
+    },
     "nav": {
       "brand": "Showly",
       "howItWorks": "Cómo funciona",
