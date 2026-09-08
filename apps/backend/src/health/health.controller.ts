@@ -66,9 +66,14 @@ export class HealthController {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
-    @InjectPinoLogger(HealthController.name)
-    private readonly logger: PinoLogger,
-  ) {}
+    @InjectPinoLogger() private readonly logger: PinoLogger,
+  ) {
+    // `@InjectPinoLogger(nombre)` exige el provider `PinoLogger:HealthController`,
+    // que nestjs-pino sólo crea si la clase decorada se cargó antes de
+    // `LoggerModule.forRoot`; en prod no ocurre y Nest no arranca. Mismo
+    // patrón que AuthController/AppointmentsController: setContext en el ctor.
+    this.logger.setContext(HealthController.name);
+  }
 
   @Get('live')
   @HttpCode(200)
