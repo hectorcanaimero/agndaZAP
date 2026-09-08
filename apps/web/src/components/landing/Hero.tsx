@@ -8,12 +8,8 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { FadeIn } from './motion/FadeIn';
-import { SectionEyebrow } from './SectionEyebrow';
 import { WhatsAppMock } from './WhatsAppMock';
 
-// Trust strip — señales de confianza CONCRETAS Y HONESTAS. No inventamos
-// clientes ("+X clínicas"), no fingimos logos de "as featured in". Cada
-// chip refleja una realidad verificable del producto o del piloto.
 const TRUST_ITEMS = [
   { Icon: FlaskConical, key: 'pilot' },
   { Icon: MessageCircle, key: 'whatsapp' },
@@ -21,47 +17,68 @@ const TRUST_ITEMS = [
   { Icon: Languages, key: 'multilang' },
 ] as const;
 
-// Hero — copy + trust strip a la izquierda, mock del bot a la derecha.
-// La foto de la recepcionista se quito: mandaba un mensaje ambiguo ("va a
-// ser reemplazada") justo para el segmento hesitante con automatizacion.
-// El mock ahora tiene frame de telefono realista y peso visual suficiente
-// para llevar la derecha solo.
 export function Hero() {
   const t = useTranslations('landing.hero');
 
   return (
-    <section className="relative overflow-x-clip bg-white">
+    <section className="relative isolate overflow-hidden bg-cream-50">
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 -z-10 [background-image:linear-gradient(to_right,rgba(0,0,0,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(0,0,0,0.04)_1px,transparent_1px)] [background-size:56px_56px] [mask-image:radial-gradient(ellipse_at_top,black,transparent_70%)]"
+        className="pointer-events-none absolute inset-0 -z-20 bg-mesh-hero"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 -z-10 bg-grain opacity-[0.08] mix-blend-multiply"
       />
 
-      <div className="mx-auto max-w-6xl px-4 pb-16 pt-16 sm:px-6 sm:pt-24 lg:px-8 lg:pb-24 lg:pt-28">
-        <div className="grid items-start gap-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-16">
-          <FadeIn className="min-w-0 lg:pt-6">
-            <SectionEyebrow variant="light">{t('eyebrow')}</SectionEyebrow>
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute right-[-8rem] top-24 -z-10 hidden h-[520px] w-[520px] rounded-full bg-brand-teal/25 blur-[110px] lg:block"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -left-40 bottom-0 -z-10 h-[360px] w-[360px] rounded-full bg-brand-navy/10 blur-[100px]"
+      />
+
+      <div className="mx-auto max-w-6xl px-4 pb-20 pt-20 sm:px-6 sm:pt-28 lg:px-8 lg:pb-28 lg:pt-32">
+        <div className="grid items-center gap-14 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:gap-8">
+          <FadeIn className="relative z-10 min-w-0">
+            <p className="inline-flex items-center gap-2 rounded-full border border-brand-navy/15 bg-white/60 px-3 py-1 text-xs font-medium text-brand-navy shadow-warm-sm">
+              <span
+                aria-hidden="true"
+                className="relative inline-flex h-2 w-2"
+              >
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-teal opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-brand-teal" />
+              </span>
+              {t('eyebrow')}
+            </p>
 
             <h1
-              className="mt-6 text-5xl font-extrabold leading-[1.05] tracking-tight text-neutral-950 sm:text-6xl lg:text-7xl text-balance"
-              style={{ overflowWrap: 'anywhere' }}
+              className="mt-6 font-display text-[3.25rem] font-medium leading-[1.02] tracking-[-0.035em] text-brand-navy sm:text-[4rem] lg:text-[5.25rem] text-balance"
+              style={{ overflowWrap: 'anywhere', fontOpticalSizing: 'auto' }}
             >
               {t('headline')}
             </h1>
 
-            <p className="mt-6 max-w-xl text-base text-neutral-700 sm:text-lg lg:text-xl">
+            <p className="mt-7 max-w-xl text-lg leading-relaxed text-warm-600 sm:text-xl">
               {t('subheadline')}
             </p>
 
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Button
                 asChild
                 size="lg"
-                className="h-12 px-6 text-base"
+                className="group relative h-14 overflow-hidden rounded-full bg-brand-navy px-7 text-base font-semibold text-white shadow-warm-lg transition-transform duration-300 ease-out-soft hover:-translate-y-0.5 hover:shadow-warm-xl"
               >
                 <a href="#cta">
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-0 -z-10 bg-gradient-to-r from-brand-navy via-brand-navy to-brand-teal/40 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+                  />
                   {t('primaryCta')}
                   <ArrowRight
-                    className="ml-1 h-4 w-4"
+                    className="ml-1 h-4 w-4 transition-transform duration-300 ease-out-soft group-hover:translate-x-1"
                     aria-hidden="true"
                   />
                 </a>
@@ -69,33 +86,30 @@ export function Hero() {
               <Button
                 asChild
                 size="lg"
-                variant="outline"
-                className="h-12 px-6 text-base"
+                variant="ghost"
+                className="group h-14 rounded-full px-6 text-base font-semibold text-brand-navy hover:bg-brand-navy/5"
               >
-                <a href="#how-it-works">{t('secondaryCta')}</a>
+                <a href="#how-it-works">
+                  {t('secondaryCta')}
+                  <span
+                    aria-hidden="true"
+                    className="ml-1 inline-block transition-transform duration-300 ease-out-soft group-hover:translate-x-0.5"
+                  >
+                    →
+                  </span>
+                </a>
               </Button>
             </div>
 
-            {/*
-              Trust strip: chips inline con icono + label. Visual: chips
-              transparentes con borde neutral suave — no compiten con el
-              CTA primario. En mobile hacen wrap natural (gap-y-2), en
-              desktop caen en una sola fila hasta lg.
-            */}
-            <ul className="mt-8 flex flex-wrap items-center gap-x-2.5 gap-y-2">
+            <ul className="mt-10 flex flex-wrap items-center gap-2.5">
               {TRUST_ITEMS.map(({ Icon, key }) => (
                 <li
                   key={key}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white/70 px-3 py-1.5 text-xs font-medium text-neutral-700 backdrop-blur"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-warm-200 bg-cream-50 px-3 py-1.5 text-xs font-medium text-warm-600 shadow-warm-sm"
                 >
-                  {/*
-                    Ícono en navy (brand) por defecto. El chip "whatsapp"
-                    literalmente refiere al canal WhatsApp — conserva el verde
-                    brand-700 como identificador cromático del canal.
-                  */}
                   <Icon
                     className={`h-3.5 w-3.5 ${
-                      key === 'whatsapp' ? 'text-brand-700' : 'text-brand-navy'
+                      key === 'whatsapp' ? 'text-brand-700' : 'text-brand-teal'
                     }`}
                     aria-hidden="true"
                   />
@@ -105,21 +119,32 @@ export function Hero() {
             </ul>
           </FadeIn>
 
-          {/*
-            Wrapper del mockup: max-width fijo para que el WhatsApp phone
-            frame quede a escala humana (no cubre 50% del hero). El grid
-            asigna 45% del ancho en desktop; en mobile stackea debajo del
-            copy y siempre queda centrado. WhatsAppMock internamente ya
-            fija su altura por contenido, no forzamos aspect-ratio para
-            evitar recortes del bezel.
-          */}
-          <FadeIn className="min-w-0" delay={0.15}>
-            <div className="mx-auto w-full max-w-[340px]">
-              <WhatsAppMock />
+          <FadeIn className="relative min-w-0 lg:-ml-6" delay={0.15}>
+            <div className="relative mx-auto w-full max-w-[360px] lg:max-w-[380px]">
+              <div
+                aria-hidden="true"
+                className="absolute -inset-6 -z-10 rounded-[3rem] bg-gradient-to-br from-brand-teal/30 via-cream-100/40 to-transparent blur-2xl"
+              />
+              <div className="relative">
+                <WhatsAppMock />
+              </div>
+              <div
+                aria-hidden="true"
+                className="absolute -right-4 top-16 hidden h-16 w-16 rounded-full bg-brand-teal/20 blur-lg lg:block"
+              />
+              <div
+                aria-hidden="true"
+                className="absolute -left-6 bottom-24 hidden h-20 w-20 rounded-full bg-brand-navy/10 blur-xl lg:block"
+              />
             </div>
           </FadeIn>
         </div>
       </div>
+
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-b from-transparent to-cream-50"
+      />
     </section>
   );
 }

@@ -17,35 +17,36 @@ export function ForWhomSection() {
   const t = useTranslations('landing.forWhom');
 
   return (
-    <section className="bg-white py-20 lg:py-28">
+    <section className="bg-cream-50 py-24 lg:py-32">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <div className="max-w-3xl">
-          <span className="text-xs font-medium uppercase tracking-widest text-brand-navy">
-            {t('eyebrow')}
-          </span>
           <h2
-            className="mt-3 text-3xl font-bold leading-tight tracking-tight text-neutral-950 sm:text-4xl lg:text-5xl"
-            style={{ overflowWrap: 'anywhere' }}
+            className="font-display text-4xl font-medium leading-[1.05] tracking-[-0.03em] text-brand-navy sm:text-5xl lg:text-6xl text-balance"
+            style={{ overflowWrap: 'anywhere', fontOpticalSizing: 'auto' }}
           >
             {t('headline')}
           </h2>
         </div>
 
-        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:mt-16">
+        <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:mt-20">
           {CARDS.map(({ key, Icon }) => (
             <article
               key={key}
-              className="group min-w-0 rounded-2xl border border-neutral-200 bg-gradient-to-br from-white to-neutral-50 p-6 transition-colors hover:border-brand-teal/40"
+              className="group relative min-w-0 overflow-hidden rounded-[1.75rem] border border-warm-200 bg-cream-50 p-7 shadow-warm-sm transition-all duration-300 ease-out-soft hover:-translate-y-1 hover:border-brand-teal/40 hover:shadow-warm-lg"
             >
-              <div className="flex items-start gap-4">
-                <div className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand-teal/10 text-brand-teal ring-1 ring-inset ring-brand-teal/20 transition-colors group-hover:bg-brand-teal/20">
-                  <Icon className="h-5 w-5" />
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-brand-teal/10 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+              />
+              <div className="relative flex items-start gap-5">
+                <div className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand-teal/10 text-brand-teal ring-1 ring-inset ring-brand-teal/20 transition-transform duration-300 ease-back-out group-hover:scale-110">
+                  <Icon className="h-6 w-6" />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-lg font-semibold text-neutral-950">
+                  <h3 className="text-xl font-semibold leading-snug text-brand-navy">
                     {t(`cards.${key}.title`)}
                   </h3>
-                  <p className="mt-2 text-sm text-neutral-600">
+                  <p className="mt-2.5 text-base leading-relaxed text-warm-600">
                     {t(`cards.${key}.body`)}
                   </p>
                 </div>

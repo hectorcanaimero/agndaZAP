@@ -1191,7 +1191,8 @@
       "items": {
         "reminders": {
           "title": "Recordatorios que confirman",
-          "body": "24h y 3h antes de cada cita, en automático. El paciente confirma con un SÍ o pide reagendar. Tú te enteras solo si algo cambia."
+          "body": "24h y 3h antes de cada cita, en automático. El paciente confirma con un SÍ o pide reagendar. Tú te enteras solo si algo cambia.",
+          "tag": "Anti no-show en vivo"
         },
         "handoff": {
           "title": "Tu equipo toma el chat cuando quiere",

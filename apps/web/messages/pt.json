@@ -1191,7 +1191,8 @@
       "items": {
         "reminders": {
           "title": "Lembretes que confirmam",
-          "body": "24h e 3h antes de cada consulta, no automático. O paciente confirma com um SIM ou pede para remarcar. Você só é avisado quando algo muda."
+          "body": "24h e 3h antes de cada consulta, no automático. O paciente confirma com um SIM ou pede para remarcar. Você só é avisado quando algo muda.",
+          "tag": "Anti no-show ao vivo"
         },
         "handoff": {
           "title": "Sua equipe assume o chat quando quiser",

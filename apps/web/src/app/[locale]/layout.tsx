@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, getTranslations, setRequestLocale } from 'next-intl/server';
-import { Inter } from 'next/font/google';
+import { Inter, Fraunces } from 'next/font/google';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { routing } from '@/i18n/routing';
@@ -9,13 +9,24 @@ import { QueryProvider } from '@/lib/query-provider';
 import { Toaster } from '@/components/ui/sonner';
 import '../globals.css';
 
-// Inter — única fuente del sistema: body, UI, headings landing y panel.
-// display: 'swap' evita el flash invisible mientras carga. Fraunces se sacó
-// en el batch 2 (ver docs/notas): el serif no jugaba con el brand navy/teal
-// y sumaba peso al bundle sin retorno visual claro.
+// Inter — body/UI en TODO el sistema (landing, panel, admin).
 const inter = Inter({
   subsets: ['latin', 'latin-ext'],
   variable: '--font-inter',
+  display: 'swap',
+});
+
+// Fraunces — display SOLO para H1/H2 del landing público. Eje SOFT alto
+// para curvas cálidas (humanist, no nostalgic) y opsz 144 para display.
+// weights limitados (500/600/700) para no inflar bundle: el body sigue en
+// Inter. Scope acotado responde al rechazo del batch previo que la usaba
+// en H1-H3 y saturaba.
+const fraunces = Fraunces({
+  subsets: ['latin', 'latin-ext'],
+  variable: '--font-fraunces',
+  weight: 'variable',
+  style: ['normal', 'italic'],
+  axes: ['SOFT', 'opsz'],
   display: 'swap',
 });
 
@@ -68,7 +79,11 @@ export default async function LocaleLayout({
   const messages = await getMessages();
 
   return (
-    <html lang={locale} className={inter.variable} suppressHydrationWarning>
+    <html
+      lang={locale}
+      className={`${inter.variable} ${fraunces.variable}`}
+      suppressHydrationWarning
+    >
       <body className="antialiased font-sans" suppressHydrationWarning>
         <QueryProvider>
           <NextIntlClientProvider messages={messages} locale={locale}>

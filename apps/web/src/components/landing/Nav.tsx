@@ -22,7 +22,7 @@ export function Nav() {
   ];
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-neutral-200/70 bg-white/80 backdrop-blur-md">
+    <header className="sticky top-0 z-40 w-full border-b border-warm-200/60 bg-cream-50/85 backdrop-blur-lg">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <Link href="/" aria-label="Showly" className="shrink-0">
           <Logo variant="full" />
@@ -36,7 +36,7 @@ export function Nav() {
             <a
               key={l.href}
               href={l.href}
-              className="text-sm font-medium text-neutral-700 transition-colors hover:text-neutral-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy focus-visible:ring-offset-2 rounded-sm"
+              className="relative text-sm font-medium text-warm-600 transition-colors hover:text-brand-navy after:absolute after:left-0 after:-bottom-1 after:h-px after:w-full after:origin-left after:scale-x-0 after:bg-brand-teal after:transition-transform after:duration-300 after:ease-out-soft hover:after:scale-x-100"
             >
               {l.label}
             </a>
@@ -46,18 +46,14 @@ export function Nav() {
         <div className="hidden items-center gap-3 md:flex">
           <Link
             href="/login"
-            className="text-sm font-medium text-neutral-700 transition-colors hover:text-neutral-950"
+            className="text-sm font-medium text-warm-600 transition-colors hover:text-brand-navy"
           >
             {t('signIn')}
           </Link>
-          {/*
-            CTA primary override a navy. Ver Hero.tsx para el racional:
-            verde queda reservado al canal WhatsApp, navy es el brand.
-          */}
           <Button
             asChild
             size="sm"
-            className="bg-brand-navy text-white hover:bg-brand-navy/90"
+            className="group rounded-full bg-brand-navy px-5 text-sm font-semibold text-white shadow-warm-md transition-transform duration-300 ease-out-soft hover:-translate-y-0.5 hover:shadow-warm-lg hover:bg-brand-navy/95"
           >
             <a href="#cta">{t('primaryCta')}</a>
           </Button>
@@ -75,14 +71,14 @@ export function Nav() {
       </div>
 
       {open && (
-        <div className="border-t border-neutral-200 bg-white md:hidden">
+        <div className="border-t border-warm-200 bg-cream-50 md:hidden">
           <nav className="flex flex-col gap-1 px-4 py-3" aria-label="Móvil">
             {links.map((l) => (
               <a
                 key={l.href}
                 href={l.href}
                 onClick={() => setOpen(false)}
-                className="rounded-md px-3 py-2.5 text-base font-medium text-neutral-800 hover:bg-neutral-100"
+                className="rounded-xl px-4 py-3 text-base font-medium text-brand-navy hover:bg-warm-100"
               >
                 {l.label}
               </a>
@@ -90,14 +86,14 @@ export function Nav() {
             <Link
               href="/login"
               onClick={() => setOpen(false)}
-              className="rounded-md px-3 py-2.5 text-base font-medium text-neutral-800 hover:bg-neutral-100"
+              className="rounded-xl px-4 py-3 text-base font-medium text-brand-navy hover:bg-warm-100"
             >
               {t('signIn')}
             </Link>
             <a
               href="#cta"
               onClick={() => setOpen(false)}
-              className="mt-2 inline-flex items-center justify-center rounded-md bg-brand-navy px-3 py-2.5 text-base font-semibold text-white hover:bg-brand-navy/90"
+              className="mt-2 inline-flex items-center justify-center rounded-full bg-brand-navy px-4 py-3 text-base font-semibold text-white shadow-warm-md"
             >
               {t('primaryCta')}
             </a>

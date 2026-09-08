@@ -102,11 +102,12 @@
 }
 
 /*
- * Reset extra: en el flujo público queremos un canvas limpio, sin margen del user agent.
- * Uso @apply para heredar los tokens de Tailwind — sin hex hardcoded.
+ * Reset + browser surface polish para el flujo público.
  *
- * Mantenemos `bg-gray-50 text-gray-900` para no cambiar el look actual del panel/público
- * hasta que F2 introduzca los tokens semánticos (bg-background text-foreground).
+ * El panel/admin sigue usando bg-gray-50 vía sus propios shells; acá
+ * pintamos el body con cream tint (#FDFBF7) que es el nuevo canvas del
+ * landing. Las páginas internas se pintan sobre esto y ganan calidez
+ * ambiental sin cambiar sus tokens.
  */
 @layer base {
   * {
@@ -116,6 +117,55 @@
   body {
     margin: 0;
     padding: 0;
-    @apply bg-gray-50 text-gray-900;
+    @apply bg-cream-50 text-neutral-900;
+    /* Tabular numerals globales — números de agenda, precios y estados
+       alinean vertical sin que la copy pierda contexto humanist. */
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'ss01', 'ss03';
+  }
+  /* Selection — no dejamos default UA (azul del OS). Tint navy con teal. */
+  ::selection {
+    background: rgba(40, 217, 185, 0.35);
+    color: #0F2A4A;
+  }
+  /* Focus ring visible + coherente con brand — cae a todo <button>/<a>/inputs
+     que no traigan su propio focus-visible. */
+  :focus-visible {
+    outline: 2px solid #28D9B9;
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  /* Caret color en inputs del landing (lead form). */
+  input,
+  textarea {
+    caret-color: #0F2A4A;
+  }
+  /* Custom scrollbar warm para superficies del landing. Fallback default
+     en el panel — usa su propia paleta gray. */
+  @media (min-width: 768px) {
+    .landing-scroll {
+      scrollbar-color: rgba(15, 42, 74, 0.35) transparent;
+      scrollbar-width: thin;
+    }
+    .landing-scroll::-webkit-scrollbar {
+      height: 6px;
+      width: 6px;
+    }
+    .landing-scroll::-webkit-scrollbar-thumb {
+      background: rgba(15, 42, 74, 0.35);
+      border-radius: 999px;
+    }
+  }
+}
+
+/* Reduced motion — respetar prefer del usuario. Framer-motion ya lo hace
+   pero forzamos CSS animations por si algo escapa. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
