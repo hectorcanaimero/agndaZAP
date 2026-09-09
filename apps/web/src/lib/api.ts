@@ -17,11 +17,10 @@ export interface PublicClinic {
   timezone: string;
   locale: string;
   /**
-   * Número de WhatsApp de la clínica (dígitos, para `https://wa.me/`).
-   * TODO backend: `GET /api/public/clinics/:slug` todavía no lo expone;
-   * el link en /gracias queda condicionado a que exista.
+   * WhatsApp de la clínica en E.164 (`+...`) para el link `wa.me` de /gracias.
+   * `null` si la clínica no lo configuró (opt-in en /panel/ajustes).
    */
-  whatsappPhone?: string | null;
+  whatsappPhone: string | null;
   services: Array<{
     id: string;
     name: string;

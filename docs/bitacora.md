@@ -494,3 +494,12 @@
 - Suite: 49 suites / 721 tests (antes 45 / 596). Tabla de cobertura de [[SPEC]] actualizada.
 - **Bug detectado, no corregido** (`it.skip` + `// BUG:` en `reminders.processor.spec.ts`): `send-reminder` solo excluye `CANCELADA`/`NO_SHOW`; una cita ya `ATENDIDA` recibe igualmente "te recordamos tu cita… responde SÍ".
 - Hallazgos menores: `ReminderStatus.CONFIRMED` y `FAILED` no se usan en ningún camino (la confirmación vive en `Appointment.confirmedAt`; el fallo de WAHA se relanza para retry de BullMQ y el Reminder queda `SCHEDULED`); `send-follow-up` manda el prompt aunque no exista `Conversation` para ese teléfono, con lo que la respuesta "5" caería al LLM en vez de la sub-FSM.
+
+## 2026-09-09 — Sprint 2 · smoke E2E automatizado con Playwright + job `e2e` en CI (s2-10)
+
+- Tres casos en `apps/web/e2e/`: agendar desde `/es/agendar/demo` hasta `/gracias` (fecha + hora del slot elegido), slug inexistente → 404 "Clínica no encontrada", y doble `POST /api/public/clinics/demo/appointments` al mismo slot → 201 y 409 (vía `request`, sin navegador). Selectores por id/rol/texto i18n, sin `data-testid` nuevos ni cambios en `src/`.
+- `@playwright/test` **1.63.0** pineado en `apps/web` (única versión cuyo `browsers.json` apunta a `chromium-1243`, el build ya instalado en el VPS). Sólo proyecto chromium.
+- `scripts/e2e-local.sh`: infra efímera `docker-compose.e2e.yml` (proyecto `showly-e2e`, puertos 5433/6380, tmpfs, **sin WAHA**) → migrate + seed → build → backend :4102 + web :3102 → tests; `trap EXIT` limpia procesos y contenedores. Job `e2e` en `ci.yml` con Postgres/Redis como `services:` y cache del browser.
+- **Decisión**: el backend arranca sin WAHA (el health-monitor sólo loguea `waha.health.error`), así que no hace falta stub: `WAHA_BASE_URL` a un puerto discard + intervalo 60 min. `NODE_ENV=test` para esquivar `validateProdEnv` y habilitar el seed. Detalle en [[smoke-e2e]] §12.
+- **Bug detectado, no corregido**: el rate-limit público usa una sola clave Redis por `slug+ip+minuto` compartida entre GET (30/min) y POST (5/min), así que los GETs de página/slots consumen el presupuesto de 5 del POST → un paciente normal puede recibir 429 al confirmar. El spec de API espera al próximo bucket de minuto para no chocar. Fix sugerido: `scope`/endpoint en la clave.
+- Corrida local sobre `fix/body-parser-express5` (sin ese hotfix todo POST JSON devuelve 500): **3/3 verdes** en 56 s.

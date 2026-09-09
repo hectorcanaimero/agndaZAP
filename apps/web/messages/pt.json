@@ -1077,7 +1077,13 @@
       "toneFormal": "Formal",
       "toneTecnico": "Técnico",
       "placeholdersTitle": "Placeholders disponíveis",
-      "placeholdersBody": "São substituídos ao enviar: <clinicName></clinicName> pelo nome da clínica, <patientName></patientName> pelo nome do paciente se conhecido."
+      "placeholdersBody": "São substituídos ao enviar: <clinicName></clinicName> pelo nome da clínica, <patientName></patientName> pelo nome do paciente se conhecido.",
+      "publicWhatsapp": {
+        "label": "WhatsApp público",
+        "hint": "Exibido ao paciente ao confirmar a consulta para que ele possa falar com você. Formato internacional, ex. +55 11 99999-9999. Vazio = não é exibido.",
+        "placeholder": "+55 11 99999-9999",
+        "invalid": "Número inválido. Use o formato internacional (ex. +55 11 99999-9999)."
+      }
     },
     "whatsapp": {
       "title": "Conexão do WhatsApp",

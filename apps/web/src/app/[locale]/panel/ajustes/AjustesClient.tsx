@@ -51,6 +51,8 @@ export interface ClinicSettings {
   /** ISO 4217 (3 letras uppercase) — moneda de cobro de la clínica. */
   currency: string;
   address: string | null;
+  /** WhatsApp público (E.164) que ve el paciente en /gracias. null = no se expone. */
+  publicWhatsappPhone: string | null;
   autoConfirm: boolean;
   reminderOffsetsH: number[];
   confirmThresholdH: number;
@@ -281,6 +283,14 @@ export function AjustesClient({
 const generalSchema = z.object({
   name: z.string().trim().min(2).max(120),
   address: z.string().max(300).optional(),
+  // Espejo del regex del backend (tras quitar separadores visuales). '' = borrar.
+  publicWhatsappPhone: z
+    .string()
+    .max(32)
+    .refine(
+      (v) => v === '' || /^(\+|00)?[1-9]\d{7,14}$/.test(v.replace(/[\s\-().]/g, '')),
+      { message: 'invalid' },
+    ),
   timezone: z.string().min(1),
   locale: z.enum(['es', 'pt']),
   currency: z.enum(ALLOWED_CURRENCIES),
@@ -304,6 +314,7 @@ function GeneralForm({ clinic }: { clinic: ClinicSettings }) {
     defaultValues: {
       name: clinic.name,
       address: clinic.address ?? '',
+      publicWhatsappPhone: clinic.publicWhatsappPhone ?? '',
       timezone: clinic.timezone,
       locale: (clinic.locale as 'es' | 'pt') ?? 'es',
       // Si el backend responde una moneda fuera del whitelist (edge case por
@@ -345,6 +356,12 @@ function GeneralForm({ clinic }: { clinic: ClinicSettings }) {
       .mutateAsync({
         name: values.name,
         address: values.address || undefined,
+        // Sólo si cambió (evita ensuciar el trail de auditoría). '' se manda
+        // tal cual: el backend lo interpreta como "borrar" (NULL).
+        publicWhatsappPhone:
+          values.publicWhatsappPhone.trim() !== (clinic.publicWhatsappPhone ?? '')
+            ? values.publicWhatsappPhone.trim()
+            : undefined,
         timezone: values.timezone,
         locale: values.locale,
         currency: values.currency,
@@ -385,6 +402,24 @@ function GeneralForm({ clinic }: { clinic: ClinicSettings }) {
           disabled={busy}
           rows={2}
           maxLength={300}
+        />
+      </Field>
+
+      <Field
+        label={t('publicWhatsapp.label')}
+        htmlFor="gen-public-whatsapp"
+        hint={t('publicWhatsapp.hint')}
+        error={errors.publicWhatsappPhone && t('publicWhatsapp.invalid')}
+      >
+        <Input
+          id="gen-public-whatsapp"
+          type="tel"
+          inputMode="tel"
+          autoComplete="off"
+          placeholder={t('publicWhatsapp.placeholder')}
+          {...register('publicWhatsappPhone')}
+          disabled={busy}
+          maxLength={32}
         />
       </Field>
 

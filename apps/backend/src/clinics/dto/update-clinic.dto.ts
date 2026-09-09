@@ -12,6 +12,7 @@ import {
   MinLength,
   IsIn,
   Matches,
+  ValidateIf,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 
@@ -117,6 +118,27 @@ export class UpdateClinicDto {
   @IsOptional()
   @IsBoolean()
   autoConfirm?: boolean;
+
+  /**
+   * WhatsApp público de la clínica (opt-in). Se expone tal cual en
+   * `GET /api/public/clinics/:slug` → `whatsappPhone` para el link wa.me de
+   * /gracias. Acepta separadores visuales (espacios, guiones, paréntesis) que
+   * el `@Transform` quita antes del regex E.164; el controller lo canoniza con
+   * `normalizeE164`. String vacío = "borrar" (se persiste NULL y deja de
+   * exponerse). Nunca es un teléfono de paciente ni de profesional.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.replace(/[\s\-().]/g, '') : value,
+  )
+  @ValidateIf((o: UpdateClinicDto) => o.publicWhatsappPhone !== '')
+  @Matches(/^(\+|00)?[1-9]\d{7,14}$/, {
+    message:
+      'publicWhatsappPhone debe ser un número internacional válido (ej. +5804121234567)',
+  })
+  publicWhatsappPhone?: string;
 
   /* ─── Recordatorios ─── */
 

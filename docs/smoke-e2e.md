@@ -186,6 +186,10 @@ Verificación:
 
 ## 4. Escenario 3 — Público agenda desde la web
 
+> Este escenario (más el 404 de slug inexistente y el doble booking → 409)
+> está **automatizado** con Playwright: `scripts/e2e-local.sh` en local y el
+> job `e2e` en CI. Ver §12. El checklist manual sigue valiendo para la demo.
+
 - [ ] Nueva ventana / incógnito: `http://localhost:3002/es/agendar/demo`.
 - [ ] Página muestra formulario con:
   - Info de la clínica (nombre, dirección).
@@ -413,6 +417,98 @@ ADRs:
   real, pero el backend no debería reventar el webhook por un fallo de envío
   — el mensaje OUT debería persistirse igual. Evaluar en la fase de
   finalización.
+
+---
+
+## 12. Automatizado — Playwright (sprint 2, s2-10)
+
+El **Escenario 3** (público agenda desde la web) y su caso negativo (slug
+inexistente → 404) están automatizados con Playwright. Corren en local y en
+CI; el resto del checklist sigue siendo manual (depende de WAHA/LLM reales).
+
+Qué cubre (`apps/web/e2e/*.spec.ts`):
+
+| Spec | Caso | Verifica |
+|---|---|---|
+| `agendar.spec.ts` | `/es/agendar/demo`: servicio → profesional → primer slot → nombre/teléfono/consentimiento → submit | redirect a `/gracias?date=&time=`, `time` = hora del slot elegido, copy `thanks.subtitle` y `¡Listo, Paciente!` |
+| `agendar.spec.ts` | `/es/agendar/no-existe-e2e` | HTTP 404 + heading "Clínica no encontrada" |
+| `appointments-api.spec.ts` | `POST /api/public/clinics/demo/appointments` ×2 mismo slot (vía `request`, sin navegador) | 201 y luego 409 |
+
+Selectores: ids del form (`#serviceId`, `#professionalId`, `#name`, `#phone`,
+`#consent`), `button[data-slot]` y textos de `messages/es.json`. No hay
+`data-testid` nuevos. Los tests usan el seed tal cual (`Consulta general`,
+`Dra. Ana Ríos` en UI, `Dr. Luis Pérez` en API para no pelear por el mismo
+slot) y un teléfono E.164 único por corrida.
+
+### Local
+
+```bash
+scripts/e2e-local.sh                 # todo: infra + migrate + seed + build + start + tests
+E2E_SKIP_BUILD=1 scripts/e2e-local.sh   # reutiliza dist/ y .next/ (iteración rápida)
+scripts/e2e-local.sh --headed        # args extra van a `playwright test`
+```
+
+Qué hace: `docker compose -f docker-compose.e2e.yml up -d db redis`
+(proyecto **`showly-e2e`**, puertos **5433/6380**, DB en tmpfs, **sin WAHA**)
+→ `prisma migrate deploy` + `prisma db seed` → build de backend y web →
+backend `node dist/main.js` en **:4102** y web `next build` + `next start`
+en **:3102** (`NEXT_PUBLIC_API_URL=http://localhost:4102`) → `pnpm --filter
+@showly/web e2e`. El `trap EXIT` mata backend/web y baja los contenedores
+siempre, incluso con Ctrl+C o fallo. Logs en `.e2e-logs/` (gitignored).
+Si existe `devsrv`, los procesos arrancan con tope de 3 GB.
+
+Requisitos: Docker, y el chromium de Playwright en `~/.cache/ms-playwright`
+(`chromium-1243` ↔ `@playwright/test` **1.63.0**, pineado sin `^` en
+`apps/web/package.json` para que un bump accidental no pida otro browser).
+Si falta, `pnpm --filter @showly/web exec playwright install chromium`.
+
+### CI
+
+Job `e2e` en `.github/workflows/ci.yml` (`needs: [backend, web]`): Postgres
+(`pgvector/pgvector:pg15`) y Redis como `services:`, browser cacheado en
+`~/.cache/ms-playwright` con key por versión de `@playwright/test`,
+`playwright install chromium --with-deps` **sólo en CI**, migrate + seed,
+backend y web en background con `nohup`, espera a `/api/health/live` y a
+`/es/agendar/demo`, y corre los specs. Si falla, sube `playwright-report/` +
+`test-results/` (trazas y screenshots) como artifact y vuelca los logs de
+backend/web al job.
+
+### Decisiones
+
+- **Backend sin WAHA**: `main.ts` no llama a WAHA en el bootstrap; sólo
+  programa el health-monitor como job repetible y `WahaHealthMonitor.checkAll`
+  captura el error de cada sesión (`waha.health.error`) sin tumbar nada. Por
+  eso NO hace falta stub: `WAHA_BASE_URL=http://127.0.0.1:9` (puerto discard,
+  falla rápido) y `WAHA_HEALTH_INTERVAL_MIN=60` para que ni siquiera tickee
+  durante la corrida. `/api/health` completo reporta `waha:false` — la espera
+  usa `/api/health/live`.
+- **`NODE_ENV=test`**: evita el fail-fast de prod (`validateProdEnv`) y es
+  uno de los dos valores que acepta el seed. `JWT_SECRET` ≥ 32 chars igual,
+  por si alguien sube el gate.
+- **Infra separada** (`docker-compose.e2e.yml`, proyecto `showly-e2e`, puertos
+  5433/6380): el compose principal usa proyecto `showly` con volúmenes
+  persistentes; un `down -v` del smoke sobre esos contenedores borraría la DB
+  de desarrollo de otra sesión.
+- **Serial** (`workers: 1`): los tests crean citas reales contra el mismo
+  seed; el rate-limit público es 5/min por IP+slug y una corrida consume 3.
+- **Espera de bucket en el spec de API** (`waitForFreshRateLimitBucket`,
+  hasta 60 s): ver hallazgo abajo.
+
+### Hallazgo (producción, no corregido acá)
+
+`RateLimit(n)` cuenta en Redis con clave `ratelimit:<slug>:<ip>:<minuto>` —
+**una sola clave por slug+IP compartida** entre `GET :slug` (30/min),
+`GET availability` (30/min) y `POST appointments` (5/min). En la práctica el
+presupuesto del POST es "5 requests de cualquier tipo por minuto": un
+paciente que carga la página (SSR = 1 GET), cambia dos veces de profesional
+(2-3 GETs de slots) y confirma, ya puede recibir **429** en su primer POST.
+El smoke lo reprodujo (`e2e-run2`: primer POST → 429 con los GETs previos
+del mismo minuto). Candidato a fix: incluir el nombre del endpoint (o
+`scope`) en la clave. Registrado en [[bitacora]] s2-10.
+
+- **`webServer` de Playwright deshabilitado**: el web necesita
+  `NEXT_PUBLIC_API_URL` horneado en `next build`; orquestarlo desde
+  `playwright.config.ts` duplicaría el script y el job de CI.
 
 Referencias: [[onboarding-clinica]], [[runbook-panel]], [[PRD]] §8,
 [[SPEC]] §3.

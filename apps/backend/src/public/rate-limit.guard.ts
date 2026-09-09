@@ -29,7 +29,8 @@ export const REDIS_CLIENT = Symbol('REDIS_CLIENT');
  * Fábrica de guards Nest para rate-limit basado en Redis.
  *
  * Estrategia: **fixed window por IP + slug** con bucket de 60 segundos.
- * Clave Redis: `ratelimit:{slug}:{ip}:{minuteBucket}`.
+ * Clave Redis: `ratelimit:{scope}:{slug}:{ip}:{minuteBucket}` (scope y slug
+ * opcionales; se omiten los ausentes).
  *
  * Implementación atómica con `INCR` + `EXPIRE`:
  * - `INCR` devuelve el nuevo contador (crea la clave si no existe con valor 1).
@@ -82,10 +83,14 @@ export function RateLimit(
       // - Si no, caemos al `slug` del path (rutas públicas con :slug).
       // - Si tampoco hay slug, usamos `'default'` (nunca `'unknown'` porque
       //   quisimos evitar el bucket compartido implícito).
-      const key1 =
-        scope ??
-        (req.params?.slug as string | undefined) ??
-        'default';
+      // scope Y slug se combinan (no se excluyen): antes `scope` reemplazaba
+      // al slug y sin scope los tres endpoints públicos (:slug, availability,
+      // appointments) compartían UNA clave por IP, así que el POST de reserva
+      // (límite 5) contaba también los GET previos: un paciente que cambiaba de
+      // profesional dos veces recibía 429 al confirmar (visto en el smoke E2E,
+      // sprint 2). Ahora cada endpoint tiene su propio bucket por slug e IP.
+      const slug = req.params?.slug as string | undefined;
+      const key1 = [scope, slug].filter(Boolean).join(':') || 'default';
       const ip = extractIp(req, this.trustProxy);
 
       // Bucket de 60s. Dos requests dentro del mismo minuto caen a la misma

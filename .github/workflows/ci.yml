@@ -98,3 +98,124 @@ jobs:
           NEXT_PUBLIC_SENTRY_ENABLED: "false"
           SENTRY_ENABLED: "false"
         run: pnpm build
+
+  # ─────────────────────────── E2E ───────────────────────────
+  # Smoke Playwright (chromium) de la página pública de agendamiento —
+  # sprint 2 (s2-10). Postgres+Redis como `services:`; el backend y el web
+  # corren en background en el runner (sin WAHA: el backend no lo exige para
+  # arrancar, el health-monitor sólo loguea el error). Ver
+  # docs/smoke-e2e.md §Automatizado y scripts/e2e-local.sh (mismo flujo).
+  e2e:
+    name: E2E — Playwright smoke (agendar)
+    runs-on: ubuntu-latest
+    needs: [backend, web]
+    services:
+      postgres:
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_USER: showly
+          POSTGRES_PASSWORD: showly
+          POSTGRES_DB: showly
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U showly"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      # Backend — env mínima de test. NODE_ENV=test evita el fail-fast de
+      # prod (`validateProdEnv`) y permite el seed. Nada de esto es secreto.
+      NODE_ENV: test
+      DATABASE_URL: postgresql://showly:showly@localhost:5432/showly
+      REDIS_URL: redis://localhost:6379
+      PORT: "4102"
+      JWT_SECRET: ci-jwt-secret-de-prueba-con-mas-de-32-caracteres
+      WEBHOOK_TOKEN: ci-webhook-token
+      WAHA_BASE_URL: http://127.0.0.1:9
+      WAHA_API_KEY: ci-waha-key
+      WAHA_HEALTH_INTERVAL_MIN: "60"
+      CORS_ORIGINS: http://localhost:3102
+      ICAL_SECRET: ci-ical-secret
+      SENTRY_ENABLED: "false"
+      AXIOM_ENABLED: "false"
+      LOG_LEVEL: warn
+      LOG_PRETTY: "false"
+      BOT_TYPING_ENABLED: "false"
+      APP_BASE_URL: http://localhost:3102
+      WEB_BASE_URL: http://localhost:3102
+      # Web (build-time) + Playwright.
+      NEXT_PUBLIC_API_URL: http://localhost:4102
+      NEXT_PUBLIC_SENTRY_ENABLED: "false"
+      E2E_API_URL: http://localhost:4102
+      E2E_WEB_URL: http://localhost:3102
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Install dependencies (frozen)
+        run: pnpm install --frozen-lockfile
+      - name: Prisma generate
+        working-directory: apps/backend
+        run: pnpm exec prisma generate
+      # Cache del browser: la key incluye la versión de @playwright/test
+      # (cada release cambia la revisión de chromium). `install` con cache
+      # hit es casi no-op (sólo valida) pero `--with-deps` igual instala las
+      # libs de sistema, que no se cachean.
+      - name: Playwright version
+        id: pw
+        working-directory: apps/web
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+      - name: Install chromium (solo CI)
+        working-directory: apps/web
+        run: pnpm exec playwright install chromium --with-deps
+      - name: Migrate + seed
+        working-directory: apps/backend
+        run: |
+          pnpm exec prisma migrate deploy
+          pnpm exec prisma db seed
+      - name: Build backend + web
+        run: |
+          pnpm --filter @showly/backend build
+          pnpm --filter @showly/web build
+      - name: Start backend + web (background)
+        run: |
+          (cd apps/backend && nohup node dist/main.js > "$RUNNER_TEMP/backend.log" 2>&1 &)
+          (cd apps/web && nohup pnpm exec next start -p 3102 > "$RUNNER_TEMP/web.log" 2>&1 &)
+      - name: Wait for backend + web
+        run: |
+          for i in $(seq 1 60); do curl -sf http://localhost:4102/api/health/live && break; sleep 2; done
+          curl -sf http://localhost:4102/api/health/live
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:3102/es/agendar/demo && break; sleep 2; done
+          curl -sf -o /dev/null http://localhost:3102/es/agendar/demo
+      - name: Playwright smoke
+        run: pnpm --filter @showly/web e2e
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+          retention-days: 7
+      - name: Server logs (on failure)
+        if: failure()
+        run: |
+          echo "::group::backend.log"; cat "$RUNNER_TEMP/backend.log" || true; echo "::endgroup::"
+          echo "::group::web.log"; cat "$RUNNER_TEMP/web.log" || true; echo "::endgroup::"

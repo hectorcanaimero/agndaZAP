@@ -1077,7 +1077,13 @@
       "toneFormal": "Formal",
       "toneTecnico": "Técnico",
       "placeholdersTitle": "Placeholders disponibles",
-      "placeholdersBody": "Se reemplazan al enviar: <clinicName></clinicName> por el nombre de la clínica, <patientName></patientName> por el nombre del paciente si lo conocemos."
+      "placeholdersBody": "Se reemplazan al enviar: <clinicName></clinicName> por el nombre de la clínica, <patientName></patientName> por el nombre del paciente si lo conocemos.",
+      "publicWhatsapp": {
+        "label": "WhatsApp público",
+        "hint": "Se muestra al paciente al confirmar la cita para que pueda escribirte. Formato internacional, ej. +58 412 1234567. Vacío = no se muestra.",
+        "placeholder": "+58 412 1234567",
+        "invalid": "Número inválido. Usá formato internacional (ej. +58 412 1234567)."
+      }
     },
     "whatsapp": {
       "title": "Conexión de WhatsApp",

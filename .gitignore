@@ -88,3 +88,8 @@ tasks.json.bak-*
 
 # One-off scratch
 test-luxon.js
+
+# Playwright (apps/web/e2e)
+playwright-report/
+test-results/
+.e2e-logs/
