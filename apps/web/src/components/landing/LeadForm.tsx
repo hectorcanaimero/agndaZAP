@@ -68,6 +68,9 @@ type LeadFormValues = z.infer<typeof leadSchema>;
  * - 429 → mensaje "muchas solicitudes, probá en un minuto" + toast.
  * - 400 (validation server) → mensaje genérico "revisá los datos" + toast.
  * - Red/otro → toast genérico. El form queda editable.
+ * Además del toast (efímero), el mismo mensaje queda en un banner inline
+ * `role="alert"` sobre el botón (mismo patrón que `ScheduleForm`), que se
+ * limpia al editar cualquier campo.
  *
  * Doble submit lock: rhf `isSubmitting` + `mutation.isPending`. Idéntico
  * cinturón + tirantes que `ScheduleForm`.
@@ -98,6 +101,7 @@ export function LeadForm() {
   const clinicType = watch('clinicType');
   const consent = watch('consent');
   const [succeeded, setSucceeded] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const mutation = useMutation<
     CreateLeadResponse,
@@ -122,6 +126,7 @@ export function LeadForm() {
 
   async function onSubmit(values: LeadFormValues) {
     if (isSubmitting || mutation.isPending) return;
+    setSubmitError(null);
 
     const result = await mutation.mutateAsync(values);
 
@@ -137,16 +142,21 @@ export function LeadForm() {
       return;
     }
 
-    if (result.status === 429) {
-      toast.error(t('errors.rateLimit'));
-      return;
-    }
-    if (result.status === 400) {
-      toast.error(t('errors.validation'));
-      return;
-    }
-    toast.error(t('errors.generic'));
+    const message =
+      result.status === 429
+        ? t('errors.rateLimit')
+        : result.status === 400
+          ? t('errors.validation')
+          : t('errors.generic');
+    setSubmitError(message);
+    toast.error(message);
   }
+
+  // Cualquier edición (inputs nativos vía onChange del form; Select y
+  // Checkbox vía sus handlers) descarta el error de envío anterior.
+  const clearSubmitError = () => {
+    if (submitError) setSubmitError(null);
+  };
 
   const submitting = isSubmitting || mutation.isPending;
 
@@ -178,6 +188,7 @@ export function LeadForm() {
   return (
     <form
       onSubmit={handleSubmit(onSubmit)}
+      onChange={clearSubmitError}
       className="rounded-2xl bg-white p-6 shadow-lg sm:p-8"
       noValidate
       data-analytics-view="lead_form_view"
@@ -246,11 +257,12 @@ export function LeadForm() {
         */}
         <Select
           value={clinicType ?? ''}
-          onValueChange={(v) =>
+          onValueChange={(v) => {
+            clearSubmitError();
             setValue('clinicType', v as (typeof CLINIC_TYPES)[number], {
               shouldValidate: true,
-            })
-          }
+            });
+          }}
         >
           <SelectTrigger id="lead-clinic-type">
             <SelectValue placeholder={t('placeholders.clinicType')} />
@@ -269,11 +281,12 @@ export function LeadForm() {
         <Checkbox
           id="lead-consent"
           checked={consent === true}
-          onCheckedChange={(v) =>
+          onCheckedChange={(v) => {
+            clearSubmitError();
             setValue('consent', v === true ? true : (undefined as never), {
               shouldValidate: true,
-            })
-          }
+            });
+          }}
           className="mt-0.5"
         />
         <Label
@@ -287,6 +300,18 @@ export function LeadForm() {
         <p className="mt-2 text-xs text-red-600" role="alert">
           {t('errors.consent')}
         </p>
+      ) : null}
+
+      {submitError ? (
+        // Mismo patrón que ScheduleForm: role="alert" + aria-live="assertive"
+        // para que screen readers lo anuncien; el toast solo es efímero.
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="mt-5 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900"
+        >
+          {submitError}
+        </div>
       ) : null}
 
       {/*
