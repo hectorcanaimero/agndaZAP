@@ -20,8 +20,29 @@ export const REQUIRED_PROD_ENV = [
   'SENTRY_DSN',
 ] as const;
 
-export function getRequiredProdEnv(): readonly string[] {
-  return REQUIRED_PROD_ENV;
+/** Prefijos de los placeholders del repo (`.env.example`, defaults de dev). */
+const PLACEHOLDER_PREFIXES = ['dev-', 'cambiar-'] as const;
+
+/**
+ * Un secreto presente tiene que ser SUFICIENTEMENTE FUERTE, no sólo existir.
+ * - `< 32 chars` → poca entropía (HS256 / HMAC). Recomendado 48+ bytes base64.
+ * - prefijo `dev-` / `cambiar-` → placeholder del repo que nadie rotó.
+ * Devuelve los errores del secreto `name`; vacío si no está seteado (la
+ * obligatoriedad se chequea aparte).
+ */
+function checkSecretStrength(name: string, value: string | undefined): string[] {
+  if (!value) return [];
+  const errors: string[] = [];
+  if (value.length < 32) {
+    errors.push(`${name} debe tener al menos 32 caracteres en producción`);
+  }
+  const placeholder = PLACEHOLDER_PREFIXES.find((p) => value.startsWith(p));
+  if (placeholder) {
+    errors.push(
+      `${name} no puede tener prefijo "${placeholder}" en producción`,
+    );
+  }
+  return errors;
 }
 
 export function validateProdEnv(env: EnvLike): string[] {
@@ -32,16 +53,7 @@ export function validateProdEnv(env: EnvLike): string[] {
     errors.push(`Faltan env vars en producción: ${missing.join(', ')}`);
   }
 
-  // JWT_SECRET: no basta con "existe", tiene que ser SUFICIENTEMENTE FUERTE.
-  // - `< 32 chars` → HS256 pierde entropía útil. Recomendado 48+ bytes base64.
-  // - `startsWith('dev-')` → el default del repo; en prod es error fatal.
-  const jwtSecret = env.JWT_SECRET ?? '';
-  if (jwtSecret && jwtSecret.length < 32) {
-    errors.push('JWT_SECRET debe tener al menos 32 caracteres en producción');
-  }
-  if (jwtSecret.startsWith('dev-')) {
-    errors.push('JWT_SECRET no puede tener prefijo "dev-" en producción');
-  }
+  errors.push(...checkSecretStrength('JWT_SECRET', env.JWT_SECRET));
 
   // Auth del webhook WAHA. Semántica de `verifyWebhookAuth` (webhook-auth.util):
   // HMAC > token > skip explícito, y el skip (ALLOW_WEBHOOK_WITHOUT_TOKEN)
@@ -55,6 +67,10 @@ export function validateProdEnv(env: EnvLike): string[] {
       'WEBHOOK_HMAC_SECRET o WEBHOOK_TOKEN son obligatorios en producción',
     );
   }
+  errors.push(...checkSecretStrength('WEBHOOK_TOKEN', env.WEBHOOK_TOKEN));
+  errors.push(
+    ...checkSecretStrength('WEBHOOK_HMAC_SECRET', env.WEBHOOK_HMAC_SECRET),
+  );
   if (env.ALLOW_WEBHOOK_WITHOUT_TOKEN === 'true') {
     errors.push(
       'ALLOW_WEBHOOK_WITHOUT_TOKEN=true no está permitido en producción (se ignora en el webhook y esconde la falta de secreto)',
