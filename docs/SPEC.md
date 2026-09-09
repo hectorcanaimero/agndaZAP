@@ -36,6 +36,27 @@ Todas las rutas de negocio requieren JWT con `clinicId` y `role`. Prefijo `/api`
 ### Webhook
 - `POST /webhooks/waha` → eventos de WAHA (público, validado por token).
 
+### Página pública (sin auth, rate-limit por slug+IP)
+- `GET /api/public/clinics/:slug` → snapshot para `/agendar/[clinicSlug]` y `/gracias`:
+  ```json
+  {
+    "id": "...", "name": "...", "slug": "...", "address": "... | null",
+    "timezone": "America/Caracas", "locale": "es",
+    "whatsappPhone": "+5804121234567 | null",
+    "services": [{ "id", "name", "durationMin", "priceCents" }],
+    "professionals": [{ "id", "name", "serviceIds": [] }]
+  }
+  ```
+  - Solo clínicas `ACTIVE`; SUSPENDED/ARCHIVED/inexistente → 404 indistinguible.
+  - `whatsappPhone` = `Clinic.publicWhatsappPhone` (opt-in desde `/panel/ajustes` →
+    `PATCH /api/clinics/me { publicWhatsappPhone }`, o `POST/PATCH /api/admin/clinics`).
+    Se guarda en E.164 con `+`; `""` lo borra. Si la clínica no lo configuró → `null`
+    y `/gracias` no muestra el botón "Escribir a la clínica por WhatsApp" (`wa.me/<sin +>`).
+  - **Nunca** se exponen teléfonos/emails de profesionales, usuarios ni pacientes,
+    ni `wahaSession`/`autoConfirm`.
+- `GET /api/public/clinics/:slug/availability?serviceId&professionalId&from&days` → `Slot[]`.
+- `POST /api/public/clinics/:slug/appointments` → crea cita `source=PUBLIC` (honeypot + consent).
+
 ### Dashboard
 - `GET /api/dashboard/metrics` → no-show rate, citas por estado, confirmaciones, tendencia.
 
