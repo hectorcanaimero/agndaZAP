@@ -4,8 +4,8 @@ import 'reflect-metadata';
 // order no lo garantiza — la llamada explícita en bootstrap() sí.
 import { RequestMethod, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Queue } from 'bullmq';
-import express from 'express';
 import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
 import { initSentry, isSentryEnabled } from './common/sentry/sentry.config';
@@ -46,7 +46,16 @@ async function bootstrap(): Promise<void> {
   // `bufferLogs: true` retiene los logs internos de Nest hasta que
   // `app.useLogger()` los adopte — sin esto perdemos los mensajes de
   // inicialización (module init, route mapping) en Pino.
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  // `rawBody: true`: Nest guarda los bytes originales en `req.rawBody` con SU
+  // propio body-parser (Express 4). Antes registrábamos `express.json()` del
+  // paquete `express` v5 además del parser de Nest: dos parsers de versiones
+  // distintas sobre el mismo stream → "stream is not readable" (500) en TODO
+  // POST con JSON, login y webhook incluidos. Visto en el primer deploy real
+  // (Coolify, 2026-09-09).
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: true,
+    rawBody: true,
+  });
 
   // Reemplazar el Logger default de Nest por Pino global. A partir de acá
   // TODOS los `Logger.log()` internos de Nest y los `logger.log()` de este
@@ -69,22 +78,10 @@ async function bootstrap(): Promise<void> {
     }
   }
 
-  // Body parsers con `verify` callback que preserva el buffer raw en `req.rawBody`.
-  // Necesario para verificar HMAC del webhook WAHA sobre los bytes originales
-  // (JSON.stringify del body parseado no es determinístico — se pierden
-  // whitespace, orden de keys, encoding). Solo se guarda el raw en el path del
-  // webhook para no gastar memoria en TODO request.
-  const captureRawBody = (
-    req: express.Request & { rawBody?: Buffer },
-    _res: express.Response,
-    buf: Buffer,
-  ): void => {
-    if (req.url?.startsWith('/webhooks/')) {
-      req.rawBody = buf;
-    }
-  };
-  app.use(express.json({ verify: captureRawBody, limit: '1mb' }));
-  app.use(express.urlencoded({ extended: true, verify: captureRawBody }));
+  // Límite del body: el default de Nest es 100kb; los payloads del webhook
+  // WAHA (mensajes con metadata) y los FAQ largos del panel lo superan.
+  app.useBodyParser('json', { limit: '1mb' });
+  app.useBodyParser('urlencoded', { extended: true, limit: '1mb' });
 
   // Helmet ANTES de CORS: headers de seguridad (X-Content-Type-Options,
   // Strict-Transport-Security, referrer-policy, etc.) aplican también a la
