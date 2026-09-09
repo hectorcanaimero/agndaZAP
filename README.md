@@ -10,11 +10,17 @@ Sistema multi-tenant que combina:
   3h antes por default), pide confirmación explícita y marca las citas
   como EN_RIESGO cuando el paciente no responde.
 - Un **panel web** para recepción (agenda visual, bandeja de
-  conversaciones, dashboard de no-show rate, editor de FAQ).
+  conversaciones, pacientes, dashboard de no-show rate, editor de FAQ,
+  feedback post-atención, conexión WAHA por QR).
 - Una **página pública** `/agendar/[clinicSlug]` para que el paciente
-  agende desde la web sin bajar app.
-- (Roadmap) Una **app Flutter** para el profesional (agenda del día +
-  push).
+  agende desde la web sin bajar app (y un link con token que el bot manda
+  cuando no puede cerrar la cita por chat, ver [[docs/adr/0018-scheduling-link-wa]]).
+- Un **panel de operador SaaS** (`/admin/*`, rol SUPERADMIN) para dar de
+  alta clínicas, invitar a su admin, suspender/reactivar, impersonar con
+  auditoría y ver leads del landing.
+- (Fase 4, post-piloto) Una **app Flutter** para el profesional (agenda
+  del día + push). Hoy `apps/mobile` es un stub; el panel responsive cubre
+  al profesional en el piloto.
 
 ---
 
@@ -39,20 +45,73 @@ relativo** en los primeros 60 días de uso.
 
 ## Estado del proyecto
 
-Bloques cerrados (208 tests verdes):
+Estado al **2026-09-09**. Backend con **49 suites / 721 tests** verdes
+(`find apps/backend/src -name '*.spec.ts' | wc -l` → 49; ver
+[`docs/bitacora.md`](./docs/bitacora.md), entrada "Sprint 2 · tests de
+reminders y follow-ups"). CI en GitHub Actions (`tsc` + jest backend,
+`tsc` + `next build` + chequeo i18n web).
 
-- [x] **Bloque 0** — Infra + esqueleto (Docker Compose, Prisma, WAHA).
-- [x] **Bloque 1** — Wiring NestJS (main + app.module + BullMQ + prisma).
-- [x] **Bloque 2** — FSM de agendamiento en el bot.
-- [x] **Bloque 3** — Página pública `/agendar/[clinicSlug]` + rate-limit.
-- [x] **Bloque 4** — Auth (JWT + guards multi-tenant + RBAC).
-- [x] **Bloque 5** — Panel Next.js (agenda, bandeja, dashboard, FAQ, CRUDs).
-- [x] **Bloque RAG** — FAQ vectorizada (pgvector + OpenAI embeddings).
-- [x] **Bloque Piloto** — Seed histórico + docs de onboarding + smoke E2E + deploy.
+Funcionalidad entregada:
 
-Pendiente:
+- [x] **Infra + wiring** — Docker Compose, Prisma + pgvector, BullMQ, WAHA,
+      health checks (`/api/health`, `/api/health/live`).
+- [x] **Bot de WhatsApp** — FSM de agendamiento (servicio → profesional →
+      slot → confirmación), preclasificador determinista antes del LLM
+      (SÍ / CANCELAR / REAGENDAR / "hablar con alguien"), handoff a humano,
+      link de agendamiento con token cuando llega por `@lid` sin número.
+- [x] **RAG FAQ** — base de conocimiento por clínica vectorizada
+      (pgvector + OpenAI embeddings) con síntesis DeepSeek → Gemini.
+- [x] **Recordatorios anti no-show** — offsets configurables por clínica,
+      confirmación explícita, `EN_RIESGO` + alerta a recepción, dedup por
+      `jobId`.
+- [x] **Feedback post-atención** — score 1-5 por WhatsApp después de
+      `ATENDIDA`, configurable por profesional, resumen en el panel
+      ([[docs/adr/0012-feedback-post-atencion]]).
+- [x] **Página pública** `/agendar/[clinicSlug]` — catálogo, slots, alta de
+      cita con consent, rate-limit y anti-spam Redis.
+- [x] **Auth multi-tenant** — JWT HS256 (24h), RBAC (`SUPERADMIN`,
+      `CLINIC_ADMIN`, `PROFESSIONAL`), `tenantWhere` en toda query, login
+      bloqueado si la clínica no está `ACTIVE`.
+- [x] **Panel completo** — agenda, conversaciones, pacientes, dashboard,
+      FAQ, feedback, servicios, profesionales (perfil + feed iCal),
+      horarios, bloqueos, ajustes, conexión WhatsApp por QR, leads.
+- [x] **SUPERADMIN + impersonation** — `/admin/*`: alta/suspensión/
+      reactivación de clínicas, impersonation con JWT de 30 min sólo sobre
+      clínicas `ACTIVE`, trail de auditoría
+      ([[docs/adr/0014-superadmin-como-operador-saas]],
+      [[docs/adr/0016-admin-audit-impersonation-trail]]).
+- [x] **Invitaciones** — alta de clínica → email (Resend) con token →
+      `/invite/[token]` fija la contraseña del admin.
+- [x] **Leads** — formulario del landing → `POST /api/public/leads` → funnel
+      en `/admin/leads`.
+- [x] **Observabilidad** — Pino → Axiom (JSON estructurado, `requestId`
+      correlacionado HTTP → BullMQ → WhatsApp, PII redactada) + Sentry en
+      backend y web ([[docs/adr/0015-pino-axiom-sentry]]).
+- [x] **Analytics de producto** — Plausible (sin cookies, sin PII) en
+      landing y página pública
+      ([[docs/notas/2026-09-09-analytics-plausible]]).
+- [x] **Webhook WAHA endurecido** — HMAC-first sobre el body raw, fail-closed,
+      dedup de eventos por `payload.id` en Redis
+      ([[docs/adr/0017-webhook-hmac-cookie-hardening]]).
+- [x] **Deploy** — Coolify (docker compose) con dominios sslip.io temporales
+      hasta mover el DNS de `showly.us` ([`docs/deploy-coolify.md`](./docs/deploy-coolify.md)).
 
-- [ ] App Flutter (agenda del profesional + push).
+Sprints (plan de 4, ver bitácora):
+
+- [x] **Sprint 0** — CI verde + primer deploy en Coolify (PR #24).
+- [x] **Sprint 1** — P1 de seguridad de la auditoría
+      ([`docs/auditoria/RESUMEN-finalizacion.md`](./docs/auditoria/RESUMEN-finalizacion.md)):
+      clínica no `ACTIVE` → 404 en rutas públicas, secretos del webhook en el
+      fail-fast de prod, `normalizeE164` único, `bufferMin` simétrico en
+      disponibilidad, dedup del webhook, analytics.
+- [ ] **Sprint 2** — en PRs: tests de reminders/follow-ups (PR #28,
+      mergeado), resto en revisión.
+- [ ] **Sprint 3** — en curso: docs al día (este README, SPEC, PRD),
+      bootstrap con contraseñas por entorno, cierre de deuda documental.
+
+Pendiente después del piloto:
+
+- [ ] App Flutter (Fase 4; ver [`apps/mobile/README.md`](./apps/mobile/README.md)).
 - [ ] Piloto real con 1 clínica + build in public.
 - [ ] Deuda documentada en [[docs/adr/0004-pii-y-compliance]],
       [[docs/adr/0005-auth-mvp-y-deuda]], [[docs/adr/0006-panel-mvp-y-deuda]].
@@ -79,8 +138,11 @@ Pendiente:
 | Web (panel + público)| Next.js 15 + Tailwind + shadcn-style + next-intl (es/pt) |
 | Auth                | JWT HS256 (24h) + bcrypt(10) + guards multi-tenant  |
 | Fechas / TZ         | Luxon (siempre en TZ de la clínica)                 |
-| App móvil (roadmap) | Flutter (fuera del workspace pnpm)                  |
-| Infra               | Docker Compose (dev), Hetzner + Caddy (prod)        |
+| Observabilidad      | Pino → Axiom (logs) + Sentry (errores, backend y web) |
+| Analytics           | Plausible (sin cookies), activado por `NEXT_PUBLIC_PLAUSIBLE_DOMAIN` |
+| Email transaccional | Resend (invitaciones)                               |
+| App móvil (Fase 4)  | Flutter (fuera del workspace pnpm) — no implementada |
+| Infra               | Docker Compose (dev), Coolify + Traefik (prod); Hetzner + Caddy documentado como alternativa |
 
 ---
 
@@ -137,7 +199,10 @@ showly/
 │   ├── onboarding-clinica.md        # playbook alta de clínica nueva
 │   ├── runbook-panel.md             # día a día de recepción
 │   ├── smoke-e2e.md                 # checklist pre-demo
-│   ├── deploy.md                    # deploy productivo (Hetzner + Caddy)
+│   ├── deploy-coolify.md            # deploy actual (Coolify)
+│   ├── deploy.md                    # alternativa documentada (Hetzner + Caddy)
+│   ├── runbook-lanzamiento.md       # checklist de lanzamiento
+│   ├── auditoria/                   # auditoría F1 (RESUMEN-finalizacion + reportes)
 │   ├── adr/                         # decisiones de arquitectura
 │   └── notas/                       # descubrimientos y gotchas
 ├── packages/
@@ -152,16 +217,22 @@ showly/
 │   │       ├── whatsapp/            # WAHA client + webhook
 │   │       ├── bot/                 # FSM + intención LLM
 │   │       ├── knowledge/           # RAG FAQ (pgvector)
-│   │       ├── public/              # endpoints públicos + rate-limit
+│   │       ├── public/              # endpoints públicos + rate-limit + scheduling-session
+│   │       ├── admin/               # SUPERADMIN: clínicas, impersonation, audit, métricas
+│   │       ├── invitations/ · leads/ · feedback/ · follow-ups/ · mail/
+│   │       ├── health/ · common/    # health checks, logger Pino, redactor PII, env
 │   │       ├── services/ · professionals/ · business-hours/ · time-off/
-│   │       ├── appointments/ · conversations/ · dashboard/ · faq/
+│   │       ├── appointments/ · patients/ · conversations/ · dashboard/ · faq/ · clinics/
 │   │       └── main.ts · app.module.ts
 │   ├── web/                         # @showly/web — Next.js 15
 │   │   └── src/app/[locale]/
-│   │       ├── agendar/[clinicSlug]/  # página pública
+│   │       ├── page.tsx · seguridad/  # landing + página de seguridad
+│   │       ├── agendar/[clinicSlug]/  # página pública (+ /gracias)
+│   │       ├── invite/[token]/        # aceptación de invitación
 │   │       ├── login/
-│   │       └── panel/               # agenda, bandeja, dashboard, faq, cruds
-│   └── mobile/                      # Flutter (fuera del workspace pnpm) — roadmap
+│   │       ├── panel/               # agenda, conversaciones, pacientes, dashboard, faq, feedback, cruds
+│   │       └── admin/               # SUPERADMIN: clinics, dashboard, audit, leads
+│   └── mobile/                      # Flutter (fuera del workspace pnpm) — Fase 4, stub
 ├── package.json · pnpm-workspace.yaml
 └── .env.example                     # todas las env vars, sin valores reales
 ```
@@ -179,7 +250,13 @@ Ver [`.env.example`](./.env.example) para la lista completa. Las críticas:
 | `DATABASE_URL`      | Postgres con pgvector. En dev: `postgresql://showly:showly@localhost:5432/showly` |
 | `REDIS_URL`         | Redis para BullMQ + rate-limit                         |
 | `JWT_SECRET`        | Mínimo 32 chars, `openssl rand -base64 48`. Fail-fast en prod si es dev-* |
-| `WEBHOOK_TOKEN`     | Token custom del webhook WAHA (obligatorio en prod)    |
+| `WEBHOOK_HMAC_SECRET` | Firma HMAC-SHA256 del webhook WAHA sobre el body raw. Si está seteado, el token se ignora (anti-downgrade) |
+| `WEBHOOK_TOKEN`     | Token compartido del webhook WAHA (fallback si no hay HMAC; uno de los dos es obligatorio en prod) |
+| `ICAL_SECRET`       | Firma de los feeds iCal `/ical/professionals/:id` (sin Bearer) |
+| `WEB_BASE_URL`      | URL pública del web; el bot la usa para armar `…/agendar/slug?t=<token>` |
+| `NEXT_PUBLIC_PLAUSIBLE_DOMAIN` | Dominio en Plausible (build-time). Vacío → analytics apagado |
+| `SENTRY_DSN` + `AXIOM_*` | Observabilidad. `SENTRY_DSN` es fail-fast en prod aunque `SENTRY_ENABLED=false` |
+| `RESEND_API_KEY`    | Envío de invitaciones por email                        |
 | `WAHA_BASE_URL` + `WAHA_API_KEY` | Cliente WAHA para enviar mensajes         |
 | `DEEPSEEK_API_KEY` + `GEMINI_API_KEY` | LLM router (primario + fallback) |
 | `OPENAI_API_KEY`    | Embeddings de FAQ (opcional; si no está, FAQ funciona sin RAG) |
@@ -222,7 +299,10 @@ pnpm --filter @showly/backend prisma:reindex-faq
 - [`docs/onboarding-clinica.md`](./docs/onboarding-clinica.md) — alta de clínica nueva.
 - [`docs/runbook-panel.md`](./docs/runbook-panel.md) — día a día de recepción.
 - [`docs/smoke-e2e.md`](./docs/smoke-e2e.md) — checklist E2E pre-demo.
-- [`docs/deploy.md`](./docs/deploy.md) — deploy productivo (Hetzner + Caddy).
+- [`docs/deploy-coolify.md`](./docs/deploy-coolify.md) — deploy actual (Coolify).
+- [`docs/deploy.md`](./docs/deploy.md) — alternativa documentada (Hetzner + Caddy).
+- [`docs/runbook-lanzamiento.md`](./docs/runbook-lanzamiento.md) — checklist de lanzamiento.
+- [`docs/auditoria/RESUMEN-finalizacion.md`](./docs/auditoria/RESUMEN-finalizacion.md) — auditoría F1 y estado de cierre.
 - [`docs/INDEX.md`](./docs/INDEX.md) — índice del vault Obsidian.
 - [`docs/adr/`](./docs/adr/) — decisiones de arquitectura.
 
@@ -267,9 +347,10 @@ pnpm build && pnpm test         # ambos verdes
 - **Datos de salud (PHI)** — cifrado en tránsito (TLS), aislamiento por
   tenant, cero PII en logs. Deuda parcial documentada en
   [[docs/adr/0004-pii-y-compliance]].
-- **Auth MVP** — sin refresh tokens, sin password reset, sin MFA. OK
-  para piloto de 1 clínica; roadmap de cierre en
-  [[docs/adr/0005-auth-mvp-y-deuda]].
+- **Auth MVP** — JWT de 24h sin refresh ni revocación, sin password reset,
+  sin MFA. La impersonation del SUPERADMIN valida al emitir que la clínica
+  esté `ACTIVE` y deja trail en `AdminAudit`. OK para piloto de 1 clínica;
+  roadmap de cierre en [[docs/adr/0005-auth-mvp-y-deuda]].
 
 ---
 
