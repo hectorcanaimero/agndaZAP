@@ -193,6 +193,15 @@ export class BotService {
     ],
   } as const;
 
+  /**
+   * Aviso de IA de terceros (ADR 0004 §7). Se agrega SIEMPRE al final del
+   * greeting — también cuando la clínica personaliza `botGreeting` — porque
+   * es un requisito de compliance (LGPD/GDPR), no un texto editable. Incluye
+   * el escape a humano para que el paciente sepa cómo salir del bot.
+   */
+  static readonly AI_DISCLOSURE =
+    'Te atiende un asistente automático que usa servicios de IA de terceros (DeepSeek, Google, OpenAI) para gestionar tu cita. Si preferís hablar con una persona, escribí *humano*.';
+
   /** Regex para detectar saludos → dispara `greeting` en vez de fallback. */
   private static readonly GREETING_REGEX =
     /^(hola|holis|holaa+|buenas|buenos d[ií]as|buenas tardes|buenas noches|hey|hi|hello)\b/i;
@@ -232,9 +241,12 @@ export class BotService {
     } as const;
     const template =
       customMap[key] || this.pickVariant(BotService.DEFAULT_BOT_MESSAGES[key]);
-    return template
+    const rendered = template
       .replace(/\{clinicName\}/g, clinic.name)
       .replace(/\{patientName\}/g, ctx?.patientName ?? '');
+    return key === 'greeting'
+      ? `${rendered}\n\n${BotService.AI_DISCLOSURE}`
+      : rendered;
   }
 
   /**

@@ -838,9 +838,28 @@ describe('BotService — FSM de agendamiento', () => {
         name: 'Mi Consultorio',
         botGreeting: 'Hola, sos parte de {clinicName}',
       });
-      expect((bot as any).resolveBotMessage(clinic, 'greeting')).toBe(
-        'Hola, sos parte de Mi Consultorio',
+      expect((bot as any).resolveBotMessage(clinic, 'greeting')).toMatch(
+        /^Hola, sos parte de Mi Consultorio/,
       );
+    });
+
+    it('greeting: agrega SIEMPRE el aviso de IA de terceros (ADR 0004 §7), también con custom', () => {
+      const custom = makeClinic({ botGreeting: 'Hola, soy {clinicName}' });
+      const fromCustom = (bot as any).resolveBotMessage(custom, 'greeting');
+      expect(fromCustom).toContain(BotService.AI_DISCLOSURE);
+      expect(fromCustom).toContain('DeepSeek');
+      expect(fromCustom).toContain('*humano*');
+
+      const fromDefault = (bot as any).resolveBotMessage(
+        makeClinic({ botGreeting: null }),
+        'greeting',
+      );
+      expect(fromDefault).toContain(BotService.AI_DISCLOSURE);
+
+      // fallback/handoff NO llevan el aviso (sólo el primer contacto).
+      expect(
+        (bot as any).resolveBotMessage(makeClinic(), 'fallback'),
+      ).not.toContain(BotService.AI_DISCLOSURE);
     });
 
     it('reemplaza {patientName} cuando viene, o "" cuando no', () => {
@@ -867,6 +886,7 @@ describe('BotService — FSM de agendamiento', () => {
       });
       const msg = waha.sendText.mock.calls.at(-1)![2];
       expect(msg).toContain('Clínica A'); // {clinicName} en el default
+      expect(msg).toContain('IA de terceros'); // aviso ADR 0004 §7
       expect(intent.detect).not.toHaveBeenCalled();
     });
   });

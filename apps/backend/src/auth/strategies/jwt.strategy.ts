@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { Role } from '@prisma/client';
 import { AuthUser } from '../decorators/current-user.decorator';
+import { ClinicStatusCache } from '../../common/redis/clinic-status.cache';
 
 /**
  * Payload del JWT que firmamos en `AuthService.login` y también en el flujo
@@ -25,7 +26,9 @@ export interface JwtPayload {
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
-  constructor() {
+  private readonly logger = new Logger(JwtStrategy.name);
+
+  constructor(private readonly clinicStatus: ClinicStatusCache) {
     // El secret se resuelve UNA vez al construir la estrategia. Si falta en
     // prod, `main.ts` ya fail-fast'ea; en dev usamos un fallback para no
     // frenar el bootstrap local.
@@ -58,11 +61,36 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
    * chico (userId, clinicId, role) para no filtrar más de lo necesario y
    * para que el `@CurrentUser()` decorator tenga un contrato estable.
    *
-   * No vamos a DB acá: si un user es desactivado, su JWT sigue siendo válido
-   * hasta que expire. Es aceptable para MVP (expiración de 24h). Cuando
-   * agreguemos revocación, será acá donde chequearemos la denylist.
+   * No vamos a DB por el usuario: si un user es desactivado, su JWT sigue
+   * siendo válido hasta que expire (aceptable para MVP, expiración de 24h).
+   *
+   * Excepción (F1.4.T4): tokens de IMPERSONATION. Duran 30 min y operan
+   * como CLINIC_ADMIN de una clínica concreta; si el SUPERADMIN la suspende
+   * mientras el token vive, el acceso debe cortarse. Re-validamos
+   * `Clinic.status === 'ACTIVE'` en cada request vía `ClinicStatusCache`
+   * (Redis TTL 60 s, fail-closed a DB). Los tokens de login normal no
+   * consultan nada.
    */
   async validate(payload: JwtPayload): Promise<AuthUser> {
+    if (payload.impersonatedBy && payload.clinicId) {
+      let active: boolean;
+      try {
+        active = await this.clinicStatus.isActive(payload.clinicId);
+      } catch (e) {
+        // Fail-closed: sin poder verificar, no dejamos pasar.
+        this.logger.warn(
+          `no se pudo verificar status de clínica para impersonation clinicId=${payload.clinicId}: ${(e as Error).message}`,
+        );
+        throw new UnauthorizedException('no se pudo validar la clínica');
+      }
+      if (!active) {
+        this.logger.warn(
+          `impersonation rechazada: clínica no activa clinicId=${payload.clinicId} by=${payload.impersonatedBy}`,
+        );
+        throw new UnauthorizedException('la clínica no está activa');
+      }
+    }
+
     return {
       userId: payload.sub,
       clinicId: payload.clinicId,

@@ -16,6 +16,10 @@ y `*.log`). Ver §6 "Cobertura de fuentes".
 
 **Veredicto: NO-GO en el estado actual, con camino corto y claro a GO condicional.**
 
+> **Actualización 2026-09-09:** P0 cerrados el 03-09; P1 3–8 cerrados en PR #26 (rama
+> `fix/sprint-1-p1-seguridad`). GO condicional pendiente de merge + pasada final de
+> security-auditor (sprint 3). Ver "Estado al 2026-09-09" al inicio de §3.
+
 El sistema está **notablemente más sólido de lo que sugiere el número de hallazgos**: el
 modelo multi-tenant es correcto (deny-by-default, `tenantWhere` único, escape-hatch
 `?clinicId=` eliminado), el webhook tiene HMAC fail-closed bien testeado, el redactor de
@@ -101,6 +105,25 @@ F1.1.T3, wizard de onboarding F1.5.T4, y la deuda P2) puede ir en paralelo o pos
 ---
 
 ## 3. Hallazgos P1 (deben estar antes del GO)
+
+### Estado al 2026-09-09
+
+Commits en la rama `fix/sprint-1-p1-seguridad` (PR #26), salvo indicación contraria.
+
+| Hallazgo | Estado | Commit(s) | Notas |
+|---|---|---|---|
+| Prefijo de teléfono (`+`) inconsistente | cerrado | `dc82d96`, `b889e16` | `normalizeE164()` único (webhook/público/panel/leads) + migración idempotente. Pares duplicados con/sin `+` quedan como merge manual (query en la nota). |
+| Buffer no respetado en citas ocupadas | cerrado | `c68ef6d`, `784872a` | Buffer a ambos lados (cita existente y slot nuevo); `SPEC.md` §2 lo define. |
+| Endpoints públicos ignoran `Clinic.status` | cerrado | `a7cdab5`, `6230eec` | `findFirst({ slug, status: 'ACTIVE' })` en los 3 endpoints; el webhook también descarta `message` de clínicas no activas. |
+| Sin idempotencia de eventos en el webhook | cerrado | `ef498ef`, `e0caff3` | `SET NX EX 86400` por `sha256(from\|payload.id)`; rollback de la marca si el bot falla. |
+| Secretos del webhook fuera del fail-fast | cerrado | `0b13ac3`, `912a5a2` | `validateProdEnv()` exige HMAC o token, ≥32 chars, sin prefijo `dev-`/`cambiar-`; `ALLOW_WEBHOOK_WITHOUT_TOKEN=true` es error en prod. |
+| Consent de IA de terceros ausente | cerrado | `185c834` | Form público es/pt con proveedores + link a `/seguridad`; panel; `AI_DISCLOSURE` siempre al final del greeting del bot. |
+| PHI en logs de `WahaService` | cerrado | `da2f2e3` | Sólo status + sesión + longitud del body. |
+| JWT de impersonation no re-valida `Clinic.status` | cerrado | `2ad1eda` | `ClinicStatusCache` (Redis TTL 60 s, fail-closed a DB); admin invalida al suspender/reactivar. |
+| Wizard de onboarding sin mergear | abierto | — | Sprint 3. |
+| `SPEC.md` / `ARCHITECTURE.md` desactualizados | abierto | (`784872a` sólo bufferMin) | Pendiente pasada completa de drift. |
+| `docs/deploy-coolify.md` inexistente | cerrado | sprint 0 (PR #24) | Creado el 2026-09-09. |
+| Flutter stub (P0 diferido) | abierto | — | Post-piloto, según §1. |
 
 - [P1] Bug de prefijo de teléfono: confirmación por WhatsApp rota para citas de panel/público
   - **Gap:** el webhook guarda `phone` sin `+` (`bareId = from.replace(/@(c.us|lid|...)$/,'')`),
