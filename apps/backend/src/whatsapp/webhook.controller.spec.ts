@@ -58,7 +58,7 @@ describe('WebhookController', () => {
 
     prisma = {
       clinic: {
-        findUnique: jest.fn().mockResolvedValue({ id: 'clinic-A' }),
+        findUnique: jest.fn().mockResolvedValue({ id: 'clinic-A', status: 'ACTIVE' }),
         update: jest.fn(),
       },
     };
@@ -153,6 +153,23 @@ describe('WebhookController', () => {
     expect(bot.handleIncoming).toHaveBeenCalledWith(
       expect.objectContaining({ phone: null, lid: '123456789012345' }),
     );
+  });
+
+  it('clínica SUSPENDED: message → { ok: true } sin llamar al bot ni marcar dedup', async () => {
+    prisma.clinic.findUnique.mockResolvedValueOnce({ id: 'clinic-A', status: 'SUSPENDED' });
+    const result = await post(messageEvent(MSG_ID));
+    expect(result).toEqual({ ok: true });
+    expect(bot.handleIncoming).not.toHaveBeenCalled();
+    expect(redis.set).not.toHaveBeenCalled();
+  });
+
+  it('clínica SUSPENDED: session.status se sigue procesando', async () => {
+    prisma.clinic.findUnique.mockResolvedValueOnce({ id: 'clinic-A', status: 'SUSPENDED' });
+    await post({ event: 'session.status', session: 'clinic-a', payload: { status: 'WORKING' } });
+    expect(prisma.clinic.update).toHaveBeenCalledWith({
+      where: { id: 'clinic-A' },
+      data: { wahaConnected: true },
+    });
   });
 
   it('session desconocida → { ok: true } sin procesar', async () => {

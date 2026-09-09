@@ -178,6 +178,16 @@ export class WebhookController {
     }
 
     if (event === 'message') {
+      // Clínica SUSPENDED/ARCHIVED: el bot no responde (misma regla que los
+      // endpoints públicos). `session.status` se sigue procesando arriba para
+      // no perder el estado de la sesión WAHA. Log sin PII: sólo clinicId.
+      if (clinic.status !== 'ACTIVE') {
+        this.logger.debug(
+          `webhook message ignorado: clínica no activa clinicId=${clinic.id} status=${clinic.status}`,
+        );
+        return { ok: true };
+      }
+
       const msg = payload as WahaMessagePayload | undefined;
       if (msg?.fromMe) return { ok: true }; // ignorar salientes
       const from = msg?.from ?? '';
