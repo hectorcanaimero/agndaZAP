@@ -25,6 +25,13 @@
       "title": "Rápido y por WhatsApp",
       "quick": "Reservá en menos de un minuto.",
       "whatsapp": "Confirmación y recordatorios por WhatsApp."
+    },
+    "summary": {
+      "title": "Tu elección",
+      "service": "Servicio",
+      "professional": "Profesional",
+      "when": "Fecha y hora",
+      "pending": "Sin elegir"
     }
   },
   "form": {
@@ -82,6 +89,9 @@
         "title": "Tus datos",
         "description": "Los usamos para confirmar tu cita."
       }
+    },
+    "steps": {
+      "label": "Paso {step} de {total}"
     }
   },
   "thanks": {

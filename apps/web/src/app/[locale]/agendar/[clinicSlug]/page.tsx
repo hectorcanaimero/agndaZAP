@@ -4,6 +4,7 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { Card, CardContent } from '@/components/ui/card';
 import { fetchClinic, fetchSchedulingSession } from '@/lib/api';
 import { ScheduleForm, type SchedulePrefill } from './ScheduleForm';
+import { ScheduleSelectionProvider, SelectionSummary } from './ScheduleSelection';
 
 /**
  * Página pública SSR de agendamiento.
@@ -77,6 +78,9 @@ export default async function AgendarPage({
   return (
     <main id="main" tabIndex={-1} className="min-h-screen bg-gray-50 px-4 py-8 md:py-12">
       <div className="mx-auto max-w-5xl">
+        {/* Provider client mínimo: el form publica su elección y la sidebar
+            la muestra. Ver ScheduleSelection.tsx. */}
+        <ScheduleSelectionProvider>
         <div className="grid gap-8 md:grid-cols-[320px_1fr]">
           {/* Sidebar — info clínica. Sticky en desktop para que quede visible
               mientras el paciente scrollea el form. */}
@@ -109,6 +113,10 @@ export default async function AgendarPage({
                 ) : null}
               </CardContent>
             </Card>
+
+            {/* Resumen persistente de la elección actual (vacío hasta que el
+                paciente elige algo). */}
+            <SelectionSummary />
 
             {/* Info card — qué esperar (WhatsApp + fácil) */}
             <div className="rounded-lg border border-gray-200 bg-white p-4 text-xs text-gray-600 shadow-sm">
@@ -158,6 +166,7 @@ export default async function AgendarPage({
             </Card>
           </section>
         </div>
+        </ScheduleSelectionProvider>
       </div>
     </main>
   );

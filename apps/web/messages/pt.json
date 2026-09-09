@@ -25,6 +25,13 @@
       "title": "Rápido e pelo WhatsApp",
       "quick": "Reserve em menos de um minuto.",
       "whatsapp": "Confirmação e lembretes pelo WhatsApp."
+    },
+    "summary": {
+      "title": "Sua escolha",
+      "service": "Serviço",
+      "professional": "Profissional",
+      "when": "Data e hora",
+      "pending": "Ainda não escolhido"
     }
   },
   "form": {
@@ -82,6 +89,9 @@
         "title": "Seus dados",
         "description": "Usamos para confirmar sua consulta."
       }
+    },
+    "steps": {
+      "label": "Passo {step} de {total}"
     }
   },
   "thanks": {

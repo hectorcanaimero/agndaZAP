@@ -32,6 +32,7 @@ import {
 } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
 import { todayStartInTZ } from '@/lib/utils';
+import { useScheduleSelection } from './ScheduleSelection';
 
 interface Service {
   id: string;
@@ -208,10 +209,13 @@ function SubmitSpinner() {
  */
 function SectionHeader({
   icon: Icon,
+  step,
   title,
   description,
 }: {
   icon: React.ComponentType<{ className?: string; 'aria-hidden'?: boolean }>;
+  /** Etiqueta "Paso N de 3" — indicador visual, no es un wizard. */
+  step: string;
   title: string;
   description?: string;
 }) {
@@ -224,7 +228,13 @@ function SectionHeader({
         />
       </div>
       <div>
-        <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
+        <h2 className="text-sm font-semibold text-gray-900">
+          <span className="font-medium text-brand-700">{step}</span>
+          <span aria-hidden="true" className="mx-1.5 text-gray-300">
+            ·
+          </span>
+          {title}
+        </h2>
         {description ? (
           <p className="text-xs text-gray-500">{description}</p>
         ) : null}
@@ -258,6 +268,7 @@ export function ScheduleForm(props: ScheduleFormProps) {
   const t = useTranslations('form');
   const router = useRouter();
   const qc = useQueryClient();
+  const { setSelection } = useScheduleSelection();
 
   // El teléfono va readonly solo cuando el prefill vino con phone conocido
   // (`phoneEditable === false`). En el caso @lid el phone viene vacío y
@@ -372,6 +383,60 @@ export function ScheduleForm(props: ScheduleFormProps) {
     // el setSubmitError re-renderea antes de que el usuario cambie de slot.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSlot]);
+
+  // Publica la elección actual (etiquetas ya formateadas) para el resumen de
+  // la sidebar. Sin PII: nombres de servicio/profesional son datos públicos.
+  useEffect(() => {
+    const service = services.find((s) => s.id === serviceId)?.name ?? null;
+    const professional =
+      professionals.find((p) => p.id === professionalId)?.name ?? null;
+    const when = selectedSlot
+      ? new Intl.DateTimeFormat(locale, {
+          timeZone: timezone,
+          weekday: 'short',
+          day: '2-digit',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        }).format(new Date(selectedSlot))
+      : null;
+    setSelection({ service, professional, when });
+  }, [
+    serviceId,
+    professionalId,
+    selectedSlot,
+    services,
+    professionals,
+    locale,
+    timezone,
+    setSelection,
+  ]);
+
+  /**
+   * Navegación por flechas dentro del radiogroup de horarios (WAI-ARIA
+   * radio pattern, versión básica): ←/↑ anterior, →/↓ siguiente, Home/End.
+   * Sólo mueve el foco; la selección sigue siendo con Enter/Espacio/click.
+   */
+  const handleSlotsKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
+    if (!keys.includes(e.key)) return;
+    const radios = Array.from(
+      e.currentTarget.querySelectorAll<HTMLButtonElement>(
+        '[role="radio"]:not([disabled])',
+      ),
+    );
+    if (radios.length === 0) return;
+    const current = radios.indexOf(document.activeElement as HTMLButtonElement);
+    let next = current;
+    if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = radios.length - 1;
+    else if (e.key === 'ArrowRight' || e.key === 'ArrowDown')
+      next = current < 0 ? 0 : (current + 1) % radios.length;
+    else next = current <= 0 ? radios.length - 1 : current - 1;
+    e.preventDefault();
+    radios[next]?.focus();
+  }, []);
 
   const refetchSlots = useCallback(async () => {
     if (!serviceId || !professionalId) return;
@@ -512,6 +577,7 @@ export function ScheduleForm(props: ScheduleFormProps) {
       <section className="space-y-4">
         <SectionHeader
           icon={Stethoscope}
+          step={t('steps.label', { step: 1, total: 3 })}
           title={t('sections.service.title')}
           description={t('sections.service.description')}
         />
@@ -584,12 +650,12 @@ export function ScheduleForm(props: ScheduleFormProps) {
       <section className="space-y-3">
         <SectionHeader
           icon={Calendar}
+          step={t('steps.label', { step: 2, total: 3 })}
           title={t('sections.slot.title')}
           description={t('sections.slot.description')}
         />
 
         <div className="space-y-2">
-          <Label className="sr-only">{t('labels.slot')}</Label>
           {!serviceId || !professionalId ? (
             <p className="text-sm text-gray-500">{t('chooseCombination')}</p>
           ) : slotsLoading ? (
@@ -627,26 +693,42 @@ export function ScheduleForm(props: ScheduleFormProps) {
               </div>
             </div>
           ) : (
-            <div className="space-y-4">
-              {groupedSlots.map((group) => (
+            // Un solo radiogroup para todos los días: el paciente elige UN
+            // horario. Roving tabindex: el seleccionado (o el primero) entra
+            // en el orden de tabulación; el resto se alcanza con flechas.
+            <div
+              role="radiogroup"
+              aria-label={t('labels.slot')}
+              aria-describedby={errors.startAtISO ? 'slot-error' : undefined}
+              className="space-y-4"
+              onKeyDown={handleSlotsKeyDown}
+            >
+              {groupedSlots.map((group, groupIdx) => (
                 <div key={group.dayLabel}>
                   <p className="mb-2 text-sm font-semibold text-gray-700">
                     {group.dayLabel}
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {group.slots.map((slot) => {
+                    {group.slots.map((slot, slotIdx) => {
                       const time = formatSlotTime(
                         slot.startAt,
                         timezone,
                         locale,
                       );
                       const isSelected = selectedSlot === slot.startAt;
+                      const isFirst = groupIdx === 0 && slotIdx === 0;
+                      const tabbable = selectedSlot
+                        ? isSelected
+                        : isFirst;
                       return (
                         <button
                           key={slot.startAt}
                           type="button"
                           data-slot
-                          aria-pressed={isSelected}
+                          role="radio"
+                          aria-checked={isSelected}
+                          aria-label={`${group.dayLabel} ${time}`}
+                          tabIndex={tabbable ? 0 : -1}
                           // Deshabilitar TODOS los slots durante submit — evita
                           // que el paciente cambie de slot mid-flight y termine
                           // con estado inconsistente cliente/servidor.
@@ -674,7 +756,9 @@ export function ScheduleForm(props: ScheduleFormProps) {
             </div>
           )}
           {errors.startAtISO ? (
-            <p className="text-sm text-red-600">{t('errors.slotRequired')}</p>
+            <p id="slot-error" className="text-sm text-red-600">
+              {t('errors.slotRequired')}
+            </p>
           ) : null}
         </div>
       </section>
@@ -683,6 +767,7 @@ export function ScheduleForm(props: ScheduleFormProps) {
       <section className="space-y-4">
         <SectionHeader
           icon={User}
+          step={t('steps.label', { step: 3, total: 3 })}
           title={t('sections.patient.title')}
           description={t('sections.patient.description')}
         />
