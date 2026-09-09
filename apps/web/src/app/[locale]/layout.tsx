@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import { routing } from '@/i18n/routing';
 import { QueryProvider } from '@/lib/query-provider';
 import { Toaster } from '@/components/ui/sonner';
+import { Analytics } from '@/components/analytics/Analytics';
 import '../globals.css';
 
 // Inter — body/UI en TODO el sistema (landing, panel, admin).
@@ -89,6 +90,7 @@ export default async function LocaleLayout({
           <NextIntlClientProvider messages={messages} locale={locale}>
             {children}
             <Toaster richColors position="top-right" />
+            <Analytics />
           </NextIntlClientProvider>
         </QueryProvider>
       </body>

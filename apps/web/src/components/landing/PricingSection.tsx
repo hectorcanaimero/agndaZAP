@@ -85,7 +85,11 @@ export function PricingSection() {
               size="lg"
               className="group mt-10 h-14 w-full rounded-full bg-brand-navy text-base font-semibold text-white shadow-warm-lg transition-transform duration-300 ease-out-soft hover:-translate-y-0.5 hover:shadow-warm-xl hover:bg-brand-navy/95"
             >
-              <a href="#cta">
+              <a
+                href="#cta"
+                data-analytics="cta_click"
+                data-analytics-location="pricing"
+              >
                 {t('cta')}
                 <ArrowRight
                   className="ml-1 h-4 w-4 transition-transform duration-300 ease-out-soft group-hover:translate-x-1"
