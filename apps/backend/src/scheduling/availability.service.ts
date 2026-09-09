@@ -38,8 +38,9 @@ export class AvailabilityService {
     const clinic = await this.prisma.clinic.findUniqueOrThrow({
       where: { id: clinicId },
     });
-    const service = await this.prisma.service.findUniqueOrThrow({
-      where: { id: serviceId },
+    // Tenant check: el servicio tiene que pertenecer a la clínica.
+    const service = await this.prisma.service.findFirstOrThrow({
+      where: { id: serviceId, clinicId },
     });
 
     const zone = clinic.timezone;
@@ -80,21 +81,37 @@ export class AvailabilityService {
     // Citas ocupadas (no canceladas) del profesional en el rango.
     // Excluimos la cita que se está reagendando (si aplica) para que su slot
     // actual no aparezca como "ocupado por sí misma".
+    //
+    // Traemos `service.bufferMin` de CADA cita: el buffer post-cita (limpieza,
+    // notas) forma parte del tiempo ocupado. Sin esto un slot podía pegarse a
+    // `endAt` de una cita ignorando su buffer.
+    // Limitación conocida: el filtro `endAt > rangeStart` no suma el buffer,
+    // así que una cita del día anterior cuyo buffer cruce la medianoche no
+    // bloquea el primer slot del rango. Aceptable: los horarios de atención
+    // no arrancan a las 00:00 y los buffers son de minutos.
     const taken = await this.prisma.appointment.findMany({
       where: {
+        clinicId,
         professionalId,
         status: { notIn: ['CANCELADA', 'NO_SHOW'] },
         startAt: { lt: rangeEnd.toJSDate() },
         endAt: { gt: rangeStart.toJSDate() },
         ...(excludeAppointmentId ? { id: { not: excludeAppointmentId } } : {}),
       },
-      select: { startAt: true, endAt: true },
+      select: {
+        startAt: true,
+        endAt: true,
+        service: { select: { bufferMin: true } },
+      },
     });
 
+    // Intervalo ocupado = [startAt, endAt + bufferMin de esa cita).
     const takenIntervals = taken.map((a) =>
       Interval.fromDateTimes(
         DateTime.fromJSDate(a.startAt),
-        DateTime.fromJSDate(a.endAt),
+        DateTime.fromJSDate(a.endAt).plus({
+          minutes: a.service?.bufferMin ?? 0,
+        }),
       ),
     );
     const offIntervals = timeOff.map((t) =>
@@ -129,11 +146,19 @@ export class AvailabilityService {
         while (cursor.plus({ minutes: service.durationMin }) <= closeAt) {
           const slotStart = cursor;
           const slotEnd = cursor.plus({ minutes: service.durationMin });
+          // El buffer de la cita NUEVA también es tiempo ocupado: contra las
+          // citas existentes comparamos [slotStart, slotEnd + bufferMin).
+          // Contra TimeOff y cierre sólo la duración (el buffer puede caer
+          // en un bloqueo o fuera de horario sin problema).
           const slotInterval = Interval.fromDateTimes(slotStart, slotEnd);
+          const slotWithBuffer = Interval.fromDateTimes(
+            slotStart,
+            slotEnd.plus({ minutes: service.bufferMin }),
+          );
 
           const inPast = slotStart <= now;
           const overlapsTaken = takenIntervals.some((iv) =>
-            iv.overlaps(slotInterval),
+            iv.overlaps(slotWithBuffer),
           );
           const overlapsOff = offIntervals.some((iv) =>
             iv.overlaps(slotInterval),

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   HttpCode,
@@ -9,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { Public } from '../auth/decorators/public.decorator';
 import { extractIp, MinimalRequest } from '../common/extract-ip';
+import { normalizeE164 } from '../common/phone.util';
 import { RateLimit } from '../public/rate-limit.guard';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { LeadsService } from './leads.service';
@@ -47,11 +49,12 @@ export class LeadsController {
       return { ok: true };
     }
 
-    // Normalizamos phone: agregamos `+` si no lo trae (E.164 estricto).
+    // Normalizamos phone a E.164 con `+` (helper único, ver phone.util).
     // Mismo criterio que el endpoint de agendamiento — un solo shape en DB.
-    const normalizedPhone = dto.phone.startsWith('+')
-      ? dto.phone
-      : `+${dto.phone}`;
+    const normalizedPhone = normalizeE164(dto.phone);
+    if (!normalizedPhone) {
+      throw new BadRequestException('phone inválido');
+    }
 
     // IP y userAgent para auditoría anti-abuso. `userAgent` puede ser útil para
     // segmentar mobile vs desktop en analytics. Truncamos a 500 chars (mismo

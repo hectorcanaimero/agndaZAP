@@ -24,6 +24,7 @@ import { Public } from '../auth/decorators/public.decorator';
 import { CreatePublicAppointmentDto } from './dto/create-public-appointment.dto';
 import { RateLimit } from './rate-limit.guard';
 import { SlugValidationPipe } from './slug.pipe';
+import { normalizeE164 } from '../common/phone.util';
 
 /**
  * PublicController — Bloque 3 del roadmap.
@@ -129,8 +130,10 @@ export class PublicController {
     }>;
     professionals: Array<{ id: string; name: string; serviceIds: string[] }>;
   }> {
-    const clinic = await this.prisma.clinic.findUnique({
-      where: { slug },
+    // `findFirst` + `status: 'ACTIVE'`: una clínica SUSPENDED/ARCHIVED responde
+    // 404 igual que una inexistente. `findUnique` no admite filtros extra.
+    const clinic = await this.prisma.clinic.findFirst({
+      where: { slug, status: 'ACTIVE' },
       include: {
         services: {
           where: { active: true },
@@ -201,8 +204,8 @@ export class PublicController {
     }
     this.assertValidAvailabilityFrom(from);
 
-    const clinic = await this.prisma.clinic.findUnique({
-      where: { slug },
+    const clinic = await this.prisma.clinic.findFirst({
+      where: { slug, status: 'ACTIVE' },
       select: { id: true },
     });
     if (!clinic) {
@@ -264,8 +267,8 @@ export class PublicController {
     }
 
     // 2) Resolvemos clínica por slug.
-    const clinic = await this.prisma.clinic.findUnique({
-      where: { slug },
+    const clinic = await this.prisma.clinic.findFirst({
+      where: { slug, status: 'ACTIVE' },
       select: { id: true },
     });
     if (!clinic) {
@@ -300,10 +303,11 @@ export class PublicController {
       conversationId = session.conversationId;
     }
 
-    // 4) Normalizamos phone: agregamos `+` si no lo trae (E.164 estricto).
-    const normalizedPhone = dto.phone.startsWith('+')
-      ? dto.phone
-      : `+${dto.phone}`;
+    // 4) Normalizamos phone a E.164 con `+` (helper único, ver phone.util).
+    const normalizedPhone = normalizeE164(dto.phone);
+    if (!normalizedPhone) {
+      throw new BadRequestException('phone inválido');
+    }
 
     // 5) Delegamos. SchedulingService tira ConflictException / NotFoundException
     // / BadRequestException con sus mensajes internos; el endpoint público

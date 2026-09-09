@@ -1,5 +1,9 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-09 — Sprint 1: P1 de seguridad de la auditoría (rama `fix/sprint-1-p1-seguridad`)
+- 6 commits atómicos, cada uno con test: clínica no ACTIVE → 404 en `/public/clinics/:slug/*` · secretos del webhook en el fail-fast de prod (`common/env.util.ts`) · WAHA no loguea el body de error (PHI) · `normalizeE164` único para webhook/público/panel/leads · `bufferMin` de las citas ocupadas en disponibilidad · dedup de eventos WAHA por `payload.id` en Redis. Ver [[notas/2026-09-09-formato-phone-e164-y-dedup-webhook]].
+- **Decisión**: formato canónico de `phone` = E.164 con `+`. Sin migración de datos; pacientes viejos del bot (sin `+`) quedan como deuda de merge.
+
 ## 2026-09-09 — Sprint 0: CI verde + primer deploy en Coolify (PR #24)
 - **Contexto**: radiografía completa del proyecto (hecho / funciona / falta) y plan de 4 sprints. `main` no pasaba el job web de CI: `AgendaLive.tsx` (sin importar en ningún lado) usaba 7 claves `landing.agendaLive.*` inexistentes. Tests backend 560/560. Ver [[deploy-coolify]] para la infra.
 - **Coolify**: creado proyecto `showly` + app docker compose desde el repo público (rama `main`, `docker-compose.coolify.yml`) en la instancia del VPS. Dominios temporales sslip.io porque `showly.us` apunta a otro servidor. Secretos generados fuera del repo; keys de LLM/Resend/Axiom/Sentry pendientes.

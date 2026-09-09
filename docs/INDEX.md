@@ -65,6 +65,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[notas/2026-08-18-sprint-completo-40-clinicas|2026-08-18 — Sprint completo pre-lanzamiento 40 clínicas (CIERRE)]]
 - [[notas/2026-09-09-analytics-plausible|2026-09-09 — Analytics de producto con Plausible (eventos del embudo)]]
 - [[notas/2026-09-09-nestjs-pino-inject-con-contexto|2026-09-09 — nestjs-pino: `@InjectPinoLogger(Nombre)` rompe el bootstrap en prod]]
+- [[notas/2026-09-09-formato-phone-e164-y-dedup-webhook|2026-09-09 — Formato canónico de `phone` (E.164 con `+`) y dedup del webhook WAHA]]
 
 ## Flujo de trabajo
 - [[skills-y-flujo|Skills, agentes y flujo de trabajo]]

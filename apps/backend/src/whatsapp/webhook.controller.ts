@@ -3,13 +3,18 @@ import {
   Controller,
   Headers,
   HttpCode,
+  Inject,
   Logger,
   Post,
   Req,
 } from '@nestjs/common';
+import { createHash } from 'node:crypto';
+import type Redis from 'ioredis';
 import { Public } from '../auth/decorators/public.decorator';
 import { BotService } from '../bot/bot.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { normalizeE164 } from '../common/phone.util';
+import { REDIS_CLIENT } from '../public/rate-limit.guard';
 import { verifyWebhookAuthFromEnv } from './webhook-auth.util';
 
 /**
@@ -18,7 +23,7 @@ import { verifyWebhookAuthFromEnv } from './webhook-auth.util';
  * campos (id, timestamp, me, engine, environment…) que no controlamos. Un
  * @UsePipes local no puede suavizar al pipe global — por eso validamos manual.
  */
-interface WahaWebhookBody {
+export interface WahaWebhookBody {
   event?: string;
   session?: string;
   payload?: Record<string, unknown>;
@@ -33,6 +38,8 @@ interface WahaWebhookBody {
  * en algunas versiones, se cubren ambos abajo).
  */
 interface WahaMessagePayload {
+  /** Id del mensaje en WAHA. Lo usamos para deduplicar reintentos. */
+  id?: string;
   fromMe?: boolean;
   from?: string;
   body?: string;
@@ -62,10 +69,67 @@ interface WahaSessionStatusPayload {
 export class WebhookController {
   private readonly logger = new Logger(WebhookController.name);
 
+  /** TTL del marcador de dedup: WAHA reintenta en minutos, 24h es de sobra. */
+  private static readonly DEDUP_TTL_SEC = 86_400;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly bot: BotService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
+
+  /**
+   * Clave de dedup. Los ids de WAHA tienen forma `false_<phone>@c.us_<hex>`
+   * (contienen el teléfono) y los genera el cliente, así que NO van crudos a
+   * Redis ni a logs: hasheamos `from|id` → tamaño fijo, sin PHI.
+   */
+  private dedupKey(session: string, from: string, messageId: string): string {
+    const digest = createHash('sha256')
+      .update(`${from}|${messageId}`)
+      .digest('hex');
+    return `waha:evt:${session}:${digest}`;
+  }
+
+  /**
+   * Dedup de eventos `message`: WAHA reintenta el webhook si no recibe 200 a
+   * tiempo y puede entregar el mismo mensaje dos veces (→ doble respuesta del
+   * bot / doble cita). `SET NX` atómico por clave hasheada.
+   *
+   * - Devuelve `true` si es la PRIMERA vez que vemos el id (procesar).
+   * - Fail-open: si Redis falla, procesar (mejor un duplicado que perder
+   *   mensajes). Log `warn` sin PII.
+   */
+  private async claimMessage(key: string): Promise<boolean> {
+    try {
+      const result = await this.redis.set(
+        key,
+        '1',
+        'EX',
+        WebhookController.DEDUP_TTL_SEC,
+        'NX',
+      );
+      return result !== null;
+    } catch (e) {
+      this.logger.warn(
+        `dedup webhook falló (redis): ${(e as Error).message}`,
+      );
+      return true;
+    }
+  }
+
+  /**
+   * Si el bot falló, liberamos la marca para que el reintento de WAHA sí se
+   * procese. Best-effort: si Redis también falla, el TTL la limpia en 24h.
+   */
+  private async releaseMessage(key: string): Promise<void> {
+    try {
+      await this.redis.del(key);
+    } catch (e) {
+      this.logger.warn(
+        `dedup webhook: no se pudo liberar la clave (redis): ${(e as Error).message}`,
+      );
+    }
+  }
 
   // Convención de webhooks: 200 OK aunque el evento no aplique. Evita reintentos
   // agresivos del emisor por códigos "raros" (Nest devuelve 201 por default en @Post).
@@ -114,11 +178,36 @@ export class WebhookController {
     }
 
     if (event === 'message') {
+      // Clínica SUSPENDED/ARCHIVED: el bot no responde (misma regla que los
+      // endpoints públicos). `session.status` se sigue procesando arriba para
+      // no perder el estado de la sesión WAHA. Log sin PII: sólo clinicId.
+      if (clinic.status !== 'ACTIVE') {
+        this.logger.debug(
+          `webhook message ignorado: clínica no activa clinicId=${clinic.id} status=${clinic.status}`,
+        );
+        return { ok: true };
+      }
+
       const msg = payload as WahaMessagePayload | undefined;
       if (msg?.fromMe) return { ok: true }; // ignorar salientes
       const from = msg?.from ?? '';
       const body = msg?.body ?? '';
       if (!from) return { ok: true };
+
+      // Sin `payload.id` no podemos deduplicar → procesar normal.
+      const messageId = typeof msg?.id === 'string' ? msg.id : undefined;
+      const dedupKey = messageId
+        ? this.dedupKey(session, from, messageId)
+        : null;
+      if (dedupKey && !(await this.claimMessage(dedupKey))) {
+        // Reintento de WAHA: ya lo procesamos. Sólo un prefijo del hash en el
+        // log — nunca el id crudo (contiene el phone).
+        const hashPrefix = dedupKey.slice(dedupKey.lastIndexOf(':') + 1, -52);
+        this.logger.debug(
+          `webhook duplicado ignorado session=${session} hash=${hashPrefix}…`,
+        );
+        return { ok: true };
+      }
 
       // WhatsApp está migrando de <phone>@c.us a <lid>@lid (Linked ID) para
       // privacidad. Cuando llega un LID no tenemos forma pública de resolverlo
@@ -139,22 +228,33 @@ export class WebhookController {
       // `@c.us` (phone-based) o `@lid` (LID de privacidad). Guardamos ambos por
       // separado para poder mostrar el número real cuando lo conocemos y no
       // ensuciar la columna `phone` con LIDs.
+      // `phone` pasa por `normalizeE164` (con `+`) para que coincida con el
+      // formato con el que la página pública y el panel guardan `Patient.phone`.
+      // Si WAHA manda algo que no es un número válido, tratamos el contacto
+      // como sin phone (misma rama que `@lid`).
       const bareId = from.replace(/@(c\.us|lid|s\.whatsapp\.net)$/, '');
       const isLid = from.endsWith('@lid');
-      const phone = isLid ? null : bareId;
+      const phone = isLid ? null : normalizeE164(bareId);
       const lid = isLid ? bareId : null;
       // pushName: WAHA lo expone como `notifyName` top-level o dentro de `_data`.
       const contactName =
         msg?.notifyName ?? msg?._data?.notifyName ?? msg?._data?.pushName ?? null;
 
-      await this.bot.handleIncoming({
-        clinicId: clinic.id,
-        chatId: from,
-        phone,
-        lid,
-        contactName,
-        text: body,
-      });
+      try {
+        await this.bot.handleIncoming({
+          clinicId: clinic.id,
+          chatId: from,
+          phone,
+          lid,
+          contactName,
+          text: body,
+        });
+      } catch (e) {
+        // Liberamos la marca de dedup y relanzamos: WAHA reintenta y el
+        // segundo intento sí se procesa. Sin esto el mensaje se perdía.
+        if (dedupKey) await this.releaseMessage(dedupKey);
+        throw e;
+      }
     }
 
     return { ok: true };
