@@ -211,7 +211,7 @@ importers:
         specifier: ^1.31.0
         version: 1.31.0(react@19.2.8)
       luxon:
-        specifier: 3.7.2
+        specifier: ^3.7.2
         version: 3.7.2
       next:
         specifier: ^15.4.0
@@ -245,7 +245,7 @@ importers:
         version: 3.25.76
     devDependencies:
       '@types/luxon':
-        specifier: 3.7.4
+        specifier: ^3.7.4
         version: 3.7.4
       '@types/node':
         specifier: ^22.5.0
