@@ -42,6 +42,46 @@ describe('WahaService (primitives)', () => {
     jest.restoreAllMocks();
   });
 
+  // ─────────────────────────── sendText ───────────────────────────
+
+  describe('sendText', () => {
+    it('non-ok: no loguea el body de la respuesta ni el texto enviado (PHI)', async () => {
+      const phone = '+584141234567';
+      const text = 'Hola Ana, tu cita de ginecología es mañana 10:00';
+      const echoedBody = JSON.stringify({ error: 'bad chatId', chatId: '584141234567@c.us', text });
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: false,
+        status: 422,
+        text: async () => echoedBody,
+      }) as unknown as typeof fetch;
+
+      const errorSpy = jest.spyOn(Logger.prototype, 'error');
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn');
+
+      await expect(svc.sendText('clinic-abc', phone, text)).rejects.toThrow(
+        'WAHA sendText 422',
+      );
+
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      for (const spy of [errorSpy, warnSpy]) {
+        for (const call of spy.mock.calls) {
+          for (const arg of call) {
+            const serialized =
+              typeof arg === 'string' ? arg : JSON.stringify(arg);
+            expect(serialized).not.toContain('bad chatId');
+            expect(serialized).not.toContain('584141234567');
+            expect(serialized).not.toContain('Ana');
+          }
+        }
+      }
+      // Sí queda status, sesión y un resumen sin contenido.
+      const msg = errorSpy.mock.calls[0][0] as string;
+      expect(msg).toContain('422');
+      expect(msg).toContain('session=clinic-abc');
+      expect(msg).toContain(`bodyLen=${echoedBody.length}`);
+    });
+  });
+
   // ─────────────────────────── startSession ───────────────────────────
 
   describe('startSession', () => {

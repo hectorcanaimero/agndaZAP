@@ -11,6 +11,20 @@ export class WahaService {
   private readonly baseUrl = process.env.WAHA_BASE_URL ?? 'http://localhost:3000';
   private readonly apiKey = process.env.WAHA_API_KEY ?? 'dev-waha-key';
 
+  /**
+   * Resumen del body de error de WAHA apto para logs. WAHA suele ecoar el
+   * request en el error (chatId + text del mensaje → PII/PHI del paciente),
+   * así que NUNCA logueamos el contenido: sólo su longitud.
+   */
+  private async describeErrorBody(res: Response): Promise<string> {
+    try {
+      const body = await res.text();
+      return `bodyLen=${body.length}`;
+    } catch {
+      return 'bodyLen=?';
+    }
+  }
+
   private headers() {
     return {
       'Content-Type': 'application/json',
@@ -36,8 +50,11 @@ export class WahaService {
     });
 
     if (!res.ok) {
-      const body = await res.text();
-      this.logger.error(`WAHA sendText falló (${res.status}): ${body}`);
+      // Sólo status + session + longitud del body: sin chatId ni text (PHI).
+      const summary = await this.describeErrorBody(res);
+      this.logger.error(
+        `WAHA sendText falló (${res.status}) session=${session} ${summary}`,
+      );
       throw new Error(`WAHA sendText ${res.status}`);
     }
   }
@@ -148,15 +165,19 @@ export class WahaService {
         body: JSON.stringify({ name: session }),
       });
       if (!startRes.ok) {
-        const body = await startRes.text();
-        this.logger.error(`WAHA startSession failed (${startRes.status}): ${body}`);
+        const summary = await this.describeErrorBody(startRes);
+        this.logger.error(
+          `WAHA startSession failed (${startRes.status}) session=${session} ${summary}`,
+        );
         throw new Error(`WAHA startSession ${startRes.status}`);
       }
       return;
     }
 
-    const body = await createRes.text();
-    this.logger.error(`WAHA createSession failed (${createRes.status}): ${body}`);
+    const summary = await this.describeErrorBody(createRes);
+    this.logger.error(
+      `WAHA createSession failed (${createRes.status}) session=${session} ${summary}`,
+    );
     throw new Error(`WAHA createSession ${createRes.status}`);
   }
 
@@ -184,8 +205,10 @@ export class WahaService {
     );
 
     if (!res.ok) {
-      const body = await res.text();
-      this.logger.error(`WAHA logout failed (${res.status}): ${body}`);
+      const summary = await this.describeErrorBody(res);
+      this.logger.error(
+        `WAHA logout failed (${res.status}) session=${session} ${summary}`,
+      );
       throw new Error(`WAHA logout ${res.status}`);
     }
   }
