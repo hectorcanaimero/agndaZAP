@@ -187,6 +187,47 @@ describe('PublicController', () => {
       expect(result).not.toHaveProperty('autoConfirm');
     });
 
+    it('whatsappPhone es null cuando la clínica no configuró publicWhatsappPhone (opt-in)', async () => {
+      const result = await controller.getClinic('clinica-a');
+      expect(result.whatsappPhone).toBeNull();
+    });
+
+    it('whatsappPhone devuelve el número configurado (ya canonizado en E.164)', async () => {
+      const base = await prisma.clinic.findFirst();
+      prisma.clinic.findFirst.mockResolvedValueOnce({
+        ...base,
+        publicWhatsappPhone: '+5804121234567',
+      });
+      const result = await controller.getClinic('clinica-a');
+      expect(result.whatsappPhone).toBe('+5804121234567');
+      // El nombre interno del campo no se filtra tal cual.
+      expect(result).not.toHaveProperty('publicWhatsappPhone');
+    });
+
+    it('nunca expone teléfonos de profesionales aunque Prisma los traiga', async () => {
+      const base = await prisma.clinic.findFirst();
+      prisma.clinic.findFirst.mockResolvedValueOnce({
+        ...base,
+        wahaSession: 'clinica-a',
+        professionals: [
+          {
+            id: 'prof-1',
+            name: 'Dra. Ríos',
+            phone: '+5804129999999',
+            services: [{ id: 'svc-1' }],
+          },
+        ],
+      });
+      const result = await controller.getClinic('clinica-a');
+      expect(result.professionals[0]).toEqual({
+        id: 'prof-1',
+        name: 'Dra. Ríos',
+        serviceIds: ['svc-1'],
+      });
+      expect(JSON.stringify(result)).not.toContain('9999999');
+      expect(result).not.toHaveProperty('wahaSession');
+    });
+
     it('tira 404 si el slug no existe', async () => {
       prisma.clinic.findFirst.mockResolvedValueOnce(null);
       await expect(controller.getClinic('no-existe')).rejects.toBeInstanceOf(

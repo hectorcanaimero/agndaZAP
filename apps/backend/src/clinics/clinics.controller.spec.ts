@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import type { AuthUser } from '../auth/tenant-context.util';
@@ -70,6 +70,8 @@ describe('ClinicsController', () => {
       expect(call.where).toEqual({ id: 'clinic-A' });
       // El select expone `currency` — regresión guard.
       expect(call.select.currency).toBe(true);
+      // ...y el WhatsApp público, para que /panel/ajustes pueda editarlo.
+      expect(call.select.publicWhatsappPhone).toBe(true);
     });
 
     it('tira 404 si la clínica no existe', async () => {
@@ -113,6 +115,101 @@ describe('ClinicsController', () => {
       // (patch parcial — no queremos overridear el valor existente con undefined).
       expect(call.data).not.toHaveProperty('currency');
       expect(call.data.name).toBe('Nuevo Nombre');
+    });
+  });
+
+  describe('PATCH /clinics/me — publicWhatsappPhone (opt-in)', () => {
+    beforeEach(() => {
+      prisma.clinic.findUnique.mockResolvedValue({ timezone: 'America/Caracas' });
+      prisma.clinic.update.mockResolvedValue({ id: 'clinic-A' });
+    });
+
+    it('persiste el número canonizado a E.164 con `+`', async () => {
+      const dto = plainToInstance(UpdateClinicDto, {
+        publicWhatsappPhone: '58 (412) 123-4567',
+      });
+      expect(await validate(dto)).toHaveLength(0);
+
+      await controller.update(adminA, dto);
+
+      const call = prisma.clinic.update.mock.calls[0][0];
+      expect(call.where).toEqual({ id: 'clinic-A' });
+      expect(call.data.publicWhatsappPhone).toBe('+584121234567');
+      expect(call.select.publicWhatsappPhone).toBe(true);
+    });
+
+    it("'' → NULL (la clínica deja de exponer el número)", async () => {
+      const dto = plainToInstance(UpdateClinicDto, { publicWhatsappPhone: '' });
+      expect(await validate(dto)).toHaveLength(0);
+
+      await controller.update(adminA, dto);
+
+      const call = prisma.clinic.update.mock.calls[0][0];
+      expect(call.data.publicWhatsappPhone).toBeNull();
+    });
+
+    it('NO toca publicWhatsappPhone cuando el DTO no lo incluye (patch parcial)', async () => {
+      const dto = plainToInstance(UpdateClinicDto, { name: 'Otra' });
+      await controller.update(adminA, dto);
+      const call = prisma.clinic.update.mock.calls[0][0];
+      expect(call.data).not.toHaveProperty('publicWhatsappPhone');
+    });
+
+    it('400 defensivo si el valor no normaliza (bypass del DTO)', async () => {
+      const dto = new UpdateClinicDto();
+      dto.publicWhatsappPhone = 'abc';
+      await expect(controller.update(adminA, dto)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(prisma.clinic.update).not.toHaveBeenCalled();
+    });
+
+    it('multi-tenant: otro admin sólo actualiza SU clínica', async () => {
+      const adminB: AuthUser = {
+        userId: 'user-B',
+        clinicId: 'clinic-B',
+        role: 'CLINIC_ADMIN',
+      };
+      const dto = plainToInstance(UpdateClinicDto, {
+        publicWhatsappPhone: '+5511999999999',
+      });
+      await controller.update(adminB, dto);
+      expect(prisma.clinic.update.mock.calls[0][0].where).toEqual({
+        id: 'clinic-B',
+      });
+    });
+  });
+
+  describe('UpdateClinicDto — validación de publicWhatsappPhone', () => {
+    async function errorsFor(value: unknown) {
+      const dto = plainToInstance(UpdateClinicDto, {
+        publicWhatsappPhone: value,
+      });
+      return validate(dto);
+    }
+
+    it.each([
+      '+5804121234567',
+      '5804121234567',
+      '005804121234567',
+      '+55 11 99999-9999',
+      '',
+    ])('acepta %p', async (v) => {
+      expect(await errorsFor(v)).toHaveLength(0);
+    });
+
+    it.each([
+      'abc',
+      '+0123456789',
+      '1234567',
+      '+12345678901234567',
+      'https://wa.me/5804121234567',
+      '<script>',
+      12345678901,
+    ])('rechaza %p', async (v) => {
+      const errors = await errorsFor(v);
+      expect(errors).toHaveLength(1);
+      expect(errors[0].property).toBe('publicWhatsappPhone');
     });
   });
 

@@ -1,4 +1,4 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { ClinicStatus } from '@prisma/client';
 import type { InvitationsService } from '../invitations/invitations.service';
 import type { MailService } from '../mail/mail.service';
@@ -368,6 +368,27 @@ describe('AdminClinicsService', () => {
       expect(updateCall.data['name']).toBe('Nuevo Nombre');
       // timezone no debe aparecer si no fue provisty
       expect(Object.keys(updateCall.data)).not.toContain('timezone');
+      expect(Object.keys(updateCall.data)).not.toContain('publicWhatsappPhone');
+    });
+
+    it('canoniza publicWhatsappPhone a E.164 y acepta "" como borrado', async () => {
+      stub.clinic.findUnique.mockResolvedValue({ id: 'clinic-1', status: ClinicStatus.ACTIVE });
+      stub.clinic.update.mockResolvedValue({});
+
+      await service.update('clinic-1', { publicWhatsappPhone: '58 412 1234567' });
+      await service.update('clinic-1', { publicWhatsappPhone: '' });
+
+      const calls = stub.clinic.update.mock.calls as Array<[{ data: Record<string, unknown> }]>;
+      expect(calls[0][0].data['publicWhatsappPhone']).toBe('+584121234567');
+      expect(calls[1][0].data['publicWhatsappPhone']).toBeNull();
+    });
+
+    it('400 si publicWhatsappPhone no normaliza (bypass del DTO)', async () => {
+      stub.clinic.findUnique.mockResolvedValueOnce({ id: 'clinic-1', status: ClinicStatus.ACTIVE });
+      await expect(
+        service.update('clinic-1', { publicWhatsappPhone: 'abc' }),
+      ).rejects.toThrow(BadRequestException);
+      expect(stub.clinic.update).not.toHaveBeenCalled();
     });
   });
 
