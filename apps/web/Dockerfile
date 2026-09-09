@@ -35,6 +35,10 @@ WORKDIR /repo/apps/web
 ARG NEXT_PUBLIC_API_URL
 RUN test -n "$NEXT_PUBLIC_API_URL" || (echo "NEXT_PUBLIC_API_URL requerido en build (pasar --build-arg NEXT_PUBLIC_API_URL=https://api.tudominio.com)" && exit 1)
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+# URL pública del sitio (sitemap, robots, JSON-LD, metadataBase). Opcional:
+# sin valor cae a https://showly.tech (ver src/lib/site-url.ts).
+ARG NEXT_PUBLIC_WEB_URL
+ENV NEXT_PUBLIC_WEB_URL=${NEXT_PUBLIC_WEB_URL}
 
 # Sentry client-side + upload de source maps (F2.1.T2).
 #

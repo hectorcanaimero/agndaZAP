@@ -9,6 +9,8 @@ import { QueryProvider } from '@/lib/query-provider';
 import { Toaster } from '@/components/ui/sonner';
 import { Analytics } from '@/components/analytics/Analytics';
 import { SkipToContent } from '@/components/a11y/SkipToContent';
+import { OrganizationJsonLd } from '@/components/seo/OrganizationJsonLd';
+import { getSiteUrl } from '@/lib/site-url';
 import '../globals.css';
 
 // Inter — body/UI en TODO el sistema (landing, panel, admin).
@@ -41,6 +43,8 @@ export async function generateMetadata({
   const t = await getTranslations({ locale, namespace: 'landing.meta' });
 
   return {
+    // Base absoluta para OG images y canonical; ver `lib/site-url.ts`.
+    metadataBase: new URL(getSiteUrl()),
     title: 'Showly',
     description: t('description'),
     icons: {
@@ -87,6 +91,7 @@ export default async function LocaleLayout({
       suppressHydrationWarning
     >
       <body className="antialiased font-sans" suppressHydrationWarning>
+        <OrganizationJsonLd />
         <QueryProvider>
           <NextIntlClientProvider messages={messages} locale={locale}>
             <SkipToContent />
