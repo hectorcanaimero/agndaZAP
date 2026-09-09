@@ -185,7 +185,11 @@ export function AdminShell({ locale, email, children }: AdminShellProps) {
           </Button>
         </header>
 
-        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 md:px-8 md:py-8">
+        <main
+          id="main"
+          tabIndex={-1}
+          className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 outline-none md:px-8 md:py-8"
+        >
           <div className="mx-auto flex h-full w-full max-w-[1600px] flex-col">
             {children}
           </div>

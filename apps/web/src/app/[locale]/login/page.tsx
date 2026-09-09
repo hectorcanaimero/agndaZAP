@@ -25,7 +25,7 @@ export default async function LoginPage({
   const t = await getTranslations('login');
 
   return (
-    <main className="grid min-h-screen grid-cols-1 bg-background lg:grid-cols-2">
+    <main id="main" tabIndex={-1} className="grid min-h-screen grid-cols-1 bg-background lg:grid-cols-2">
       {/* Brand panel — solo desktop */}
       <aside
         className="relative hidden overflow-hidden bg-gradient-to-br from-brand-700 via-brand-700 to-brand-900 text-white lg:flex lg:flex-col"

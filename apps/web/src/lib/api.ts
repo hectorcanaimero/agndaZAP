@@ -16,6 +16,12 @@ export interface PublicClinic {
   address: string | null;
   timezone: string;
   locale: string;
+  /**
+   * Número de WhatsApp de la clínica (dígitos, para `https://wa.me/`).
+   * TODO backend: `GET /api/public/clinics/:slug` todavía no lo expone;
+   * el link en /gracias queda condicionado a que exista.
+   */
+  whatsappPhone?: string | null;
   services: Array<{
     id: string;
     name: string;

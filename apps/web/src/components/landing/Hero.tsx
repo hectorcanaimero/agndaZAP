@@ -7,6 +7,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { whatsappSalesLink } from '@/lib/whatsapp-sales';
 import { FadeIn } from './motion/FadeIn';
 import { WhatsAppMock } from './WhatsAppMock';
 
@@ -19,6 +20,8 @@ const TRUST_ITEMS = [
 
 export function Hero() {
   const t = useTranslations('landing.hero');
+  // Primera vía: WhatsApp (si hay número configurado). El form pasa a segunda.
+  const waLink = whatsappSalesLink(t('whatsappMessage'));
 
   return (
     <section
@@ -68,21 +71,50 @@ export function Hero() {
               {t('subheadline')}
             </p>
 
-            <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+              {waLink ? (
+                <Button
+                  asChild
+                  size="lg"
+                  className="group relative h-14 overflow-hidden rounded-full bg-brand-navy px-7 text-base font-semibold text-white shadow-warm-lg transition-transform duration-300 ease-out-soft hover:-translate-y-0.5 hover:shadow-warm-xl"
+                >
+                  <a
+                    href={waLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-analytics="cta_click"
+                    data-analytics-location="hero-whatsapp"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="absolute inset-0 -z-10 bg-gradient-to-r from-brand-navy via-brand-navy to-brand-teal/40 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+                    />
+                    <MessageCircle className="h-4 w-4" aria-hidden="true" />
+                    {t('whatsappCta')}
+                  </a>
+                </Button>
+              ) : null}
               <Button
                 asChild
                 size="lg"
-                className="group relative h-14 overflow-hidden rounded-full bg-brand-navy px-7 text-base font-semibold text-white shadow-warm-lg transition-transform duration-300 ease-out-soft hover:-translate-y-0.5 hover:shadow-warm-xl"
+                variant={waLink ? 'outline' : 'default'}
+                className={
+                  waLink
+                    ? 'group h-14 rounded-full border-brand-navy/25 bg-white/70 px-7 text-base font-semibold text-brand-navy shadow-warm-sm transition-transform duration-300 ease-out-soft hover:-translate-y-0.5 hover:bg-white'
+                    : 'group relative h-14 overflow-hidden rounded-full bg-brand-navy px-7 text-base font-semibold text-white shadow-warm-lg transition-transform duration-300 ease-out-soft hover:-translate-y-0.5 hover:shadow-warm-xl'
+                }
               >
                 <a
                   href="#cta"
                   data-analytics="cta_click"
                   data-analytics-location="hero"
                 >
-                  <span
-                    aria-hidden="true"
-                    className="absolute inset-0 -z-10 bg-gradient-to-r from-brand-navy via-brand-navy to-brand-teal/40 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
-                  />
+                  {waLink ? null : (
+                    <span
+                      aria-hidden="true"
+                      className="absolute inset-0 -z-10 bg-gradient-to-r from-brand-navy via-brand-navy to-brand-teal/40 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+                    />
+                  )}
                   {t('primaryCta')}
                   <ArrowRight
                     className="ml-1 h-4 w-4 transition-transform duration-300 ease-out-soft group-hover:translate-x-1"

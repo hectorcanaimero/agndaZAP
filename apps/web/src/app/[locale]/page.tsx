@@ -37,7 +37,7 @@ export default async function LandingPage({
   return (
     <div className="min-h-screen bg-white text-neutral-900">
       <Nav />
-      <main>
+      <main id="main" tabIndex={-1}>
         <Hero />
         <ProblemSection />
         <HowItWorksSection />

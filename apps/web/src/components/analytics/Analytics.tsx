@@ -17,7 +17,7 @@ const CLICK_EVENTS = new Set<AnalyticsEvent>(['cta_click']);
  * Carga Plausible (si está configurado) y captura por delegación:
  *
  * - Clicks: cualquier elemento con `data-analytics="cta_click"` y opcional
- *   `data-analytics-location="hero|nav|pricing|final"`. Así los CTAs de los
+ *   `data-analytics-location="hero|hero-whatsapp|nav|pricing|final|final-whatsapp"`. Así los CTAs de los
  *   server components del landing se instrumentan sin volverlos client.
  * - Vistas: elementos con `data-analytics-view="hero_view|lead_form_view"`,
  *   disparadas una sola vez cuando el 50% entra en viewport.

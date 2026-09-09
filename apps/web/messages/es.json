@@ -1,12 +1,20 @@
 {
   "common": {
+    "error": {
+      "title": "Algo salió mal",
+      "description": "No pudimos cargar esta sección. Probá de nuevo; si el problema sigue, avisanos.",
+      "retry": "Reintentar",
+      "reference": "Referencia: {digest}"
+    },
+    "skipToContent": "Saltar al contenido",
     "cancel": "Cancelar",
     "search": "Buscar",
     "columns": "Columnas",
     "page": "Página",
     "empty": "Sin resultados",
     "previous": "Anterior",
-    "next": "Siguiente"
+    "next": "Siguiente",
+    "loading": "Cargando…"
   },
   "page": {
     "title": "Agendá tu cita",
@@ -18,6 +26,13 @@
       "title": "Rápido y por WhatsApp",
       "quick": "Reservá en menos de un minuto.",
       "whatsapp": "Confirmación y recordatorios por WhatsApp."
+    },
+    "summary": {
+      "title": "Tu elección",
+      "service": "Servicio",
+      "professional": "Profesional",
+      "when": "Fecha y hora",
+      "pending": "Sin elegir"
     }
   },
   "form": {
@@ -75,13 +90,25 @@
         "title": "Tus datos",
         "description": "Los usamos para confirmar tu cita."
       }
+    },
+    "steps": {
+      "label": "Paso {step} de {total}"
     }
   },
   "thanks": {
     "title": "¡Listo, {name}!",
     "subtitle": "Tu cita quedó agendada para el {date} a las {time}.",
     "whatsappNote": "Te vamos a mandar un WhatsApp para confirmar.",
-    "backLink": "Volver a agendar"
+    "backLink": "Volver a agendar",
+    "addToCalendar": "Agregar al calendario",
+    "calendarTitle": "Cita en {clinic}",
+    "whatsappLink": "Escribir a la clínica por WhatsApp",
+    "summary": {
+      "service": "Servicio",
+      "professional": "Profesional",
+      "when": "Fecha y hora",
+      "address": "Dirección"
+    }
   },
   "login": {
     "title": "Iniciá sesión",
@@ -1151,7 +1178,9 @@
         "botConfirm": "Listo. Cita confirmada para el martes 12 a las 9:30. ✅",
         "reminderBadge": "Recordatorio automático 24h antes",
         "reminderText": "Hola María, te esperamos mañana a las 9:30. Responde SÍ para confirmar, REAGENDAR para cambiar."
-      }
+      },
+      "whatsappCta": "Escribinos por WhatsApp",
+      "whatsappMessage": "Hola, quiero saber más sobre Showly para mi clínica."
     },
     "problem": {
       "eyebrow": "El problema",
@@ -1354,7 +1383,7 @@
         },
         "price": {
           "question": "¿Cuánto cuesta?",
-          "answer": "Estamos en fase piloto. Solicita una demo y armamos condiciones a la medida de tu clínica."
+          "answer": "Gratis mientras dure el piloto: sin tarjeta y sin compromiso. Cuando salgamos del piloto, el plan base va a costar menos que un no-show a la semana, y te avisamos 30 días antes. Ni un centavo antes de eso."
         }
       }
     },
@@ -1394,7 +1423,10 @@
           "validation": "Revisá los datos e intentá de nuevo.",
           "generic": "No pudimos enviar el mensaje. Probá de nuevo."
         }
-      }
+      },
+      "whatsappCta": "Escribinos por WhatsApp",
+      "whatsappMessage": "Hola, quiero probar Showly en mi clínica.",
+      "orForm": "O dejanos tus datos y te escribimos nosotros."
     },
     "footer": {
       "brand": "Showly",

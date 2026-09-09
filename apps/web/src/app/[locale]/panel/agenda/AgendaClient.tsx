@@ -311,11 +311,10 @@ export function AgendaClient({
         {/* Fila principal — título del período + navegación + tabs de vista */}
         <div className="flex flex-col gap-3 border-b border-border/60 p-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 rounded-lg border border-border bg-background p-0.5">
+            <div className="flex items-center gap-0.5 rounded-lg border border-border bg-background">
               <Button
                 variant="ghost"
-                size="icon"
-                className="h-8 w-8"
+                className="h-11 w-11 p-0"
                 onClick={() => shiftPeriod(-1)}
                 aria-label={t('prevPeriod')}
               >
@@ -323,8 +322,7 @@ export function AgendaClient({
               </Button>
               <Button
                 variant="ghost"
-                size="icon"
-                className="h-8 w-8"
+                className="h-11 w-11 p-0"
                 onClick={() => shiftPeriod(1)}
                 aria-label={t('nextPeriod')}
               >
@@ -334,7 +332,7 @@ export function AgendaClient({
             <Button
               variant="outline"
               size="sm"
-              className="h-9"
+              className="min-h-11"
               onClick={goToday}
             >
               {t('today')}
@@ -362,16 +360,16 @@ export function AgendaClient({
                 });
               }}
             >
-              <TabsList className="h-9">
-                <TabsTrigger value="month" className="gap-1.5 px-3">
+              <TabsList className="h-11 p-0">
+                <TabsTrigger value="month" className="min-h-11 gap-1.5 px-3">
                   <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
                   {t('viewMonth')}
                 </TabsTrigger>
-                <TabsTrigger value="week" className="gap-1.5 px-3">
+                <TabsTrigger value="week" className="min-h-11 gap-1.5 px-3">
                   <Rows3 className="h-3.5 w-3.5" aria-hidden="true" />
                   {t('viewWeek')}
                 </TabsTrigger>
-                <TabsTrigger value="day" className="gap-1.5 px-3">
+                <TabsTrigger value="day" className="min-h-11 gap-1.5 px-3">
                   <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
                   {t('viewDay')}
                 </TabsTrigger>
@@ -379,7 +377,7 @@ export function AgendaClient({
             </Tabs>
             <Button
               size="sm"
-              className="h-9 gap-1.5"
+              className="min-h-11 gap-1.5"
               onClick={() => setCreateOpen(true)}
             >
               <Plus className="h-4 w-4" aria-hidden="true" />
@@ -422,7 +420,7 @@ export function AgendaClient({
                 }
               }}
               placeholder={t('filters.searchPlaceholder')}
-              className="h-9 w-full pl-8"
+              className="h-11 w-full pl-8"
               aria-label={t('filters.search')}
             />
           </div>
@@ -439,7 +437,7 @@ export function AgendaClient({
                 })
               }
             >
-              <SelectTrigger id="agenda-professional" className="h-9 text-sm">
+              <SelectTrigger id="agenda-professional" className="h-11 text-sm">
                 <SelectValue placeholder={t('filters.allProfessionals')} />
               </SelectTrigger>
               <SelectContent>
@@ -461,7 +459,7 @@ export function AgendaClient({
               variant="ghost"
               size="sm"
               onClick={clearAllFilters}
-              className="h-9 shrink-0 text-muted-foreground hover:text-foreground"
+              className="min-h-11 min-w-11 shrink-0 text-muted-foreground hover:text-foreground"
             >
               <X className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
               <span className="hidden sm:inline">{t('filters.clearAll')}</span>
@@ -774,7 +772,7 @@ function StatusFilterDropdown({
           type="button"
           variant="outline"
           size="sm"
-          className="h-9 shrink-0 gap-2"
+          className="min-h-11 shrink-0 gap-2"
         >
           <Filter className="h-3.5 w-3.5" aria-hidden="true" />
           <span>{t('filters.status')}</span>
