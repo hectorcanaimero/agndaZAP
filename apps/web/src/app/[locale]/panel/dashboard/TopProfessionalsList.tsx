@@ -1,3 +1,4 @@
+import { CHART_SERIES_TOKENS } from '@/components/ui/tokens';
 import type { DashboardMetrics } from './types';
 import { LucideIcon } from './LucideIcon';
 
@@ -23,7 +24,7 @@ export interface TopProfessionalsListProps {
   };
 }
 
-const FALLBACK_COLOR = '#0F2A4A'; // brand navy
+const FALLBACK_COLOR = CHART_SERIES_TOKENS.navy.color; // brand navy
 
 export function TopProfessionalsList({
   data,
