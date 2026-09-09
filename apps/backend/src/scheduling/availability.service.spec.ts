@@ -16,12 +16,13 @@ describe('AvailabilityService', () => {
   const serviceId = 'svc-1';
   const professionalId = 'prof-1';
 
-  function makeService() {
+  function makeService(overrides: Partial<{ durationMin: number; bufferMin: number }> = {}) {
     return {
       id: serviceId,
       clinicId,
       durationMin: 60,
       bufferMin: 0,
+      ...overrides,
     };
   }
 
@@ -39,15 +40,27 @@ describe('AvailabilityService', () => {
       endMinutes: number;
       professionalId: string | null;
     }>;
+    service?: ReturnType<typeof makeService>;
+    appointments?: Array<{
+      startAt: Date;
+      endAt: Date;
+      service: { bufferMin: number };
+    }>;
   }) {
     return {
       clinic: { findUniqueOrThrow: jest.fn().mockResolvedValue(makeClinic()) },
-      service: { findUniqueOrThrow: jest.fn().mockResolvedValue(makeService()) },
+      service: {
+        findUniqueOrThrow: jest
+          .fn()
+          .mockResolvedValue(overrides.service ?? makeService()),
+      },
       businessHour: {
         findMany: jest.fn().mockResolvedValue(overrides.businessHours),
       },
       timeOff: { findMany: jest.fn().mockResolvedValue([]) },
-      appointment: { findMany: jest.fn().mockResolvedValue([]) },
+      appointment: {
+        findMany: jest.fn().mockResolvedValue(overrides.appointments ?? []),
+      },
     } as unknown as PrismaService;
   }
 
@@ -163,5 +176,68 @@ describe('AvailabilityService', () => {
 
     // 3 slots de 1h: 9, 10, 11.
     expect(slots).toHaveLength(3);
+  });
+
+  describe('bufferMin de citas ocupadas', () => {
+    it('no ofrece el slot pegado a una cita con buffer; sí el siguiente', async () => {
+      // Servicio de 15 min sin buffer propio; horario lunes 10:00-12:00.
+      // Cita existente 10:00-10:30 (local, -04:00) con bufferMin=15 →
+      // ocupado hasta 10:45. El slot 10:30 NO se ofrece; 10:45 sí.
+      const prisma = makePrisma({
+        businessHours: [
+          {
+            weekday: 1,
+            startMinutes: 10 * 60,
+            endMinutes: 12 * 60,
+            professionalId: null,
+          },
+        ],
+        service: makeService({ durationMin: 15, bufferMin: 0 }),
+        appointments: [
+          {
+            startAt: new Date('2099-01-05T14:00:00Z'), // 10:00 Caracas
+            endAt: new Date('2099-01-05T14:30:00Z'), // 10:30 Caracas
+            service: { bufferMin: 15 },
+          },
+        ],
+      });
+
+      const availability = new AvailabilityService(prisma);
+      const slots = await availability.getSlots({
+        clinicId,
+        serviceId,
+        professionalId,
+        fromISO: monday2099,
+        days: 1,
+        limit: 50,
+      });
+
+      const startsUtc = slots.map((s) => s.startAt.toISOString());
+      expect(startsUtc).not.toContain('2099-01-05T14:00:00.000Z'); // 10:00
+      expect(startsUtc).not.toContain('2099-01-05T14:15:00.000Z'); // 10:15
+      expect(startsUtc).not.toContain('2099-01-05T14:30:00.000Z'); // 10:30 (buffer)
+      expect(startsUtc).toContain('2099-01-05T14:45:00.000Z'); // 10:45
+    });
+
+    it('pide bufferMin del servicio de cada cita al consultar ocupación', async () => {
+      const prisma = makePrisma({
+        businessHours: [],
+      });
+      const availability = new AvailabilityService(prisma);
+      await availability.getSlots({
+        clinicId,
+        serviceId,
+        professionalId,
+        fromISO: monday2099,
+        days: 1,
+      });
+      expect(
+        (prisma.appointment.findMany as jest.Mock).mock.calls[0][0].select,
+      ).toEqual(
+        expect.objectContaining({
+          service: { select: { bufferMin: true } },
+        }),
+      );
+    });
   });
 });

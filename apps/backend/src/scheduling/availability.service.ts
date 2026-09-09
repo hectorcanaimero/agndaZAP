@@ -80,6 +80,13 @@ export class AvailabilityService {
     // Citas ocupadas (no canceladas) del profesional en el rango.
     // Excluimos la cita que se está reagendando (si aplica) para que su slot
     // actual no aparezca como "ocupado por sí misma".
+    //
+    // Traemos `service.bufferMin` de CADA cita: el buffer post-cita (limpieza,
+    // notas) forma parte del tiempo ocupado. Sin esto un slot podía pegarse a
+    // `endAt` de una cita ignorando su buffer. El filtro `endAt > rangeStart`
+    // no incluye el buffer, pero el rango arranca en startOf('day') y el
+    // primer slot posible es ≥ ese instante, así que una cita que termina
+    // antes de rangeStart no puede solapar aunque su buffer sí lo hiciera.
     const taken = await this.prisma.appointment.findMany({
       where: {
         professionalId,
@@ -88,13 +95,20 @@ export class AvailabilityService {
         endAt: { gt: rangeStart.toJSDate() },
         ...(excludeAppointmentId ? { id: { not: excludeAppointmentId } } : {}),
       },
-      select: { startAt: true, endAt: true },
+      select: {
+        startAt: true,
+        endAt: true,
+        service: { select: { bufferMin: true } },
+      },
     });
 
+    // Intervalo ocupado = [startAt, endAt + bufferMin de esa cita).
     const takenIntervals = taken.map((a) =>
       Interval.fromDateTimes(
         DateTime.fromJSDate(a.startAt),
-        DateTime.fromJSDate(a.endAt),
+        DateTime.fromJSDate(a.endAt).plus({
+          minutes: a.service?.bufferMin ?? 0,
+        }),
       ),
     );
     const offIntervals = timeOff.map((t) =>
