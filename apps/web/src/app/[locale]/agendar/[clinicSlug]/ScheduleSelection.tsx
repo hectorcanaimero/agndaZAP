@@ -35,6 +35,9 @@ interface Ctx {
 
 const ScheduleSelectionContext = createContext<Ctx | null>(null);
 
+/** Fallback sin provider, hoisteado: identidad estable entre renders. */
+const NOOP_CTX: Ctx = { selection: EMPTY, setSelection: () => {} };
+
 export function ScheduleSelectionProvider({ children }: { children: ReactNode }) {
   const [selection, setSelection] = useState<ScheduleSelection>(EMPTY);
   const value = useMemo(() => ({ selection, setSelection }), [selection]);
@@ -48,7 +51,7 @@ export function ScheduleSelectionProvider({ children }: { children: ReactNode })
 /** Tolerante a la ausencia del provider (tests, reuso del form aislado). */
 export function useScheduleSelection(): Ctx {
   const ctx = useContext(ScheduleSelectionContext);
-  return ctx ?? { selection: EMPTY, setSelection: () => {} };
+  return ctx ?? NOOP_CTX;
 }
 
 /**

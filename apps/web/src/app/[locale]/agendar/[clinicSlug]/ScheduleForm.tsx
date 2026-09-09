@@ -135,7 +135,7 @@ function formatSlotTime(iso: string, timezone: string, locale: string): string {
     timeZone: timezone,
     hour: '2-digit',
     minute: '2-digit',
-    hour12: false,
+    hourCycle: 'h23',
   }).format(new Date(iso));
 }
 
@@ -371,6 +371,8 @@ export function ScheduleForm(props: ScheduleFormProps) {
     () => groupSlotsByDay(slots, timezone, locale),
     [slots, timezone, locale],
   );
+  const selectedSlotExists =
+    Boolean(selectedSlot) && slots.some((s) => s.startAt === selectedSlot);
 
   // Cuando el paciente elige un slot nuevo, limpiar cualquier submitError
   // stale (típicamente "slot tomado" post-409): la nueva elección invalida
@@ -398,7 +400,7 @@ export function ScheduleForm(props: ScheduleFormProps) {
           month: 'short',
           hour: '2-digit',
           minute: '2-digit',
-          hour12: false,
+          hourCycle: 'h23',
         }).format(new Date(selectedSlot))
       : null;
     setSelection({ service, professional, when });
@@ -414,9 +416,17 @@ export function ScheduleForm(props: ScheduleFormProps) {
   ]);
 
   /**
-   * Navegación por flechas dentro del radiogroup de horarios (WAI-ARIA
-   * radio pattern, versión básica): ←/↑ anterior, →/↓ siguiente, Home/End.
-   * Sólo mueve el foco; la selección sigue siendo con Enter/Espacio/click.
+   * Navegación por flechas dentro del radiogroup de horarios: ←/↑ anterior,
+   * →/↓ siguiente, Home/End.
+   *
+   * Decisión: las flechas SÓLO mueven el foco; seleccionar sigue siendo
+   * Enter/Espacio/click. El patrón Radio Group de WAI-ARIA APG
+   * (https://www.w3.org/WAI/ARIA/apg/patterns/radio/) recomienda que las
+   * flechas también seleccionen, pero acá cada selección dispara el evento
+   * de analytics `slot_selected` y un cambio de estado del form; recorrer
+   * 12 horarios con el teclado generaría 12 eventos falsos. Es la variante
+   * "roving tabindex + activación explícita" que el mismo APG admite para
+   * grupos donde seleccionar tiene efectos secundarios.
    */
   const handleSlotsKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
@@ -543,6 +553,10 @@ export function ScheduleForm(props: ScheduleFormProps) {
 
     if (result.status === 409) {
       setSubmitError(t('errors.slotTaken'));
+      // El slot elegido ya no existe: lo soltamos ANTES del refetch para que
+      // el roving tabindex vuelva al primer radio (si quedara apuntando a un
+      // startAt ausente, todos los radios tendrían tabIndex=-1).
+      setValue('startAtISO', '');
       await refetchSlots();
       // Foco al primer slot reofrecido — WCAG 2.4.3 Focus Order + reduce
       // fricción cognitiva: el paciente no tiene que "cazar" con el mouse
@@ -725,9 +739,10 @@ export function ScheduleForm(props: ScheduleFormProps) {
                       );
                       const isSelected = selectedSlot === slot.startAt;
                       const isFirst = groupIdx === 0 && slotIdx === 0;
-                      const tabbable = selectedSlot
-                        ? isSelected
-                        : isFirst;
+                      // Defensa: si selectedSlot apunta a un slot que ya no
+                      // está en la lista (p. ej. post-409), el primero vuelve
+                      // a ser tabulable.
+                      const tabbable = selectedSlotExists ? isSelected : isFirst;
                       return (
                         <button
                           key={slot.startAt}
