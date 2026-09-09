@@ -114,7 +114,7 @@ export class PublicController {
    * el form.
    */
   @Get(':slug')
-  @UseGuards(RateLimit(30))
+  @UseGuards(RateLimit(30, 'public-clinic'))
   async getClinic(@Param('slug', SlugValidationPipe) slug: string): Promise<{
     id: string;
     name: string;
@@ -189,7 +189,7 @@ export class PublicController {
    * - `days` (default 7).
    */
   @Get(':slug/availability')
-  @UseGuards(RateLimit(30))
+  @UseGuards(RateLimit(30, 'public-availability'))
   async getAvailability(
     @Param('slug', SlugValidationPipe) slug: string,
     @Query('serviceId') serviceId: string,
@@ -245,7 +245,7 @@ export class PublicController {
    * 400 aprendería a dejar el campo vacío.
    */
   @Post(':slug/appointments')
-  @UseGuards(RateLimit(5))
+  @UseGuards(RateLimit(5, 'public-book'))
   @HttpCode(201)
   async createAppointment(
     @Param('slug', SlugValidationPipe) slug: string,
