@@ -1,6 +1,9 @@
+import { createHash } from 'node:crypto';
+import { Logger } from '@nestjs/common';
+import type Redis from 'ioredis';
 import { BotService } from '../bot/bot.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { WebhookController } from './webhook.controller';
+import { WahaWebhookBody, WebhookController } from './webhook.controller';
 
 /**
  * Tests del WebhookController: dedup de eventos por `payload.id` (WAHA
@@ -15,10 +18,23 @@ describe('WebhookController', () => {
 
   let prisma: { clinic: { findUnique: jest.Mock; update: jest.Mock } };
   let bot: { handleIncoming: jest.Mock };
-  let redis: { set: jest.Mock };
+  let redis: jest.Mocked<Pick<Redis, 'set' | 'del'>>;
   let controller: WebhookController;
 
-  function messageEvent(id: string | undefined, from = '584141234567@c.us') {
+  const PHONE = '584141234567';
+  const FROM = `${PHONE}@c.us`;
+  // Forma real de los ids de WAHA: contienen el teléfono.
+  const MSG_ID = `false_${FROM}_3EB0ABCDEF`;
+
+  function expectedKey(from: string, id: string) {
+    const digest = createHash('sha256').update(`${from}|${id}`).digest('hex');
+    return `waha:evt:clinic-a:${digest}`;
+  }
+
+  function messageEvent(
+    id: string | undefined,
+    from = FROM,
+  ): WahaWebhookBody {
     return {
       event: 'message',
       session: 'clinic-a',
@@ -31,13 +47,8 @@ describe('WebhookController', () => {
     };
   }
 
-  async function post(body: unknown) {
-    return controller.handleWaha(
-      body as any,
-      { rawBody: undefined },
-      TOKEN,
-      undefined,
-    );
+  async function post(body: WahaWebhookBody) {
+    return controller.handleWaha(body, { rawBody: undefined }, TOKEN, undefined);
   }
 
   beforeEach(() => {
@@ -52,11 +63,14 @@ describe('WebhookController', () => {
       },
     };
     bot = { handleIncoming: jest.fn().mockResolvedValue(undefined) };
-    redis = { set: jest.fn().mockResolvedValue('OK') };
+    redis = {
+      set: jest.fn().mockResolvedValue('OK'),
+      del: jest.fn().mockResolvedValue(1),
+    } as unknown as jest.Mocked<Pick<Redis, 'set' | 'del'>>;
     controller = new WebhookController(
       prisma as unknown as PrismaService,
       bot as unknown as BotService,
-      redis as any,
+      redis as unknown as Redis,
     );
   });
 
@@ -64,24 +78,50 @@ describe('WebhookController', () => {
     process.env = { ...originalEnv };
   });
 
-  it('primer evento con id: marca en Redis (SET NX EX 86400) y procesa', async () => {
-    await post(messageEvent('msg-1'));
+  it('primer evento con id: marca en Redis (SET NX EX 86400) con clave hasheada y procesa', async () => {
+    await post(messageEvent(MSG_ID));
     expect(redis.set).toHaveBeenCalledWith(
-      'waha:evt:clinic-a:msg-1',
+      expectedKey(FROM, MSG_ID),
       '1',
       'EX',
       86_400,
       'NX',
     );
+    // La clave NO contiene el teléfono ni el id crudo.
+    const key = redis.set.mock.calls[0][0] as string;
+    expect(key).not.toContain(PHONE);
+    expect(key).not.toContain('3EB0ABCDEF');
     expect(bot.handleIncoming).toHaveBeenCalledTimes(1);
   });
 
-  it('segundo evento con el mismo id NO llama a bot.handleIncoming', async () => {
+  it('segundo evento con el mismo id NO llama a bot.handleIncoming y no loguea PHI', async () => {
+    const debugSpy = jest.spyOn(Logger.prototype, 'debug');
     redis.set.mockResolvedValueOnce('OK').mockResolvedValueOnce(null);
-    await post(messageEvent('msg-1'));
-    const result = await post(messageEvent('msg-1'));
+    await post(messageEvent(MSG_ID));
+    const result = await post(messageEvent(MSG_ID));
     expect(result).toEqual({ ok: true });
     expect(bot.handleIncoming).toHaveBeenCalledTimes(1);
+    for (const call of debugSpy.mock.calls) {
+      const msg = String(call[0]);
+      expect(msg).not.toContain(PHONE);
+      expect(msg).not.toContain(MSG_ID);
+    }
+  });
+
+  it('bot lanza → libera la clave y relanza; el reintento sí se procesa', async () => {
+    bot.handleIncoming.mockRejectedValueOnce(new Error('bot down'));
+    await expect(post(messageEvent(MSG_ID))).rejects.toThrow('bot down');
+    expect(redis.del).toHaveBeenCalledWith(expectedKey(FROM, MSG_ID));
+
+    // Reintento de WAHA: la clave ya no existe → SET NX vuelve a dar OK.
+    await post(messageEvent(MSG_ID));
+    expect(bot.handleIncoming).toHaveBeenCalledTimes(2);
+  });
+
+  it('bot lanza y Redis falla el DEL → igual relanza (best-effort)', async () => {
+    bot.handleIncoming.mockRejectedValueOnce(new Error('bot down'));
+    redis.del.mockRejectedValueOnce(new Error('redis down'));
+    await expect(post(messageEvent(MSG_ID))).rejects.toThrow('bot down');
   });
 
   it('sin payload.id procesa normal y no toca Redis', async () => {
