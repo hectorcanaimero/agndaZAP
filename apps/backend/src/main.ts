@@ -9,6 +9,7 @@ import express from 'express';
 import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
 import { initSentry, isSentryEnabled } from './common/sentry/sentry.config';
+import { validateProdEnv } from './common/env.util';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
 import { WahaService } from './whatsapp/waha.service';
@@ -33,43 +34,12 @@ async function bootstrap(): Promise<void> {
   // Nest (ahorra logs confusos y evita que arranque a medias). En dev seguimos con
   // defaults sensatos para no fricción local.
   if (process.env.NODE_ENV === 'production') {
-    // `CORS_ORIGINS` es obligatoria en prod: sin whitelist explícita, `enableCors`
-    // bloquea todo lo cross-origin. Si el ops se olvida de setearla, mejor fallar
-    // temprano acá que dejar el panel/página pública sin poder pegarle al API.
-    const required = [
-      'DATABASE_URL',
-      'REDIS_URL',
-      'WAHA_BASE_URL',
-      'WAHA_API_KEY',
-      'CORS_ORIGINS',
-      // Sin JWT_SECRET no podemos firmar tokens — mejor fallar al bootstrap
-      // que arrancar y tirar 500 en el primer login.
-      'JWT_SECRET',
-    ];
-    const missing = required.filter((k) => !process.env[k]);
-    if (missing.length) {
-      throw new Error(`Faltan env vars en producción: ${missing.join(', ')}`);
-    }
-
-    // Refuerzo específico sobre JWT_SECRET: no basta con "existe", tiene que
-    // ser SUFICIENTEMENTE FUERTE. Un secret corto o con prefijo `dev-` es un
-    // smell obvio de olvido de rotación al pasar a prod.
-    // - `< 32 chars` → HS256 pierde entropía útil. Recomendado 48+ bytes base64.
-    // - `startsWith('dev-')` → el default del repo; en prod es error fatal.
-    const jwtSecret = process.env.JWT_SECRET ?? '';
-    if (jwtSecret.length < 32) {
-      throw new Error(
-        'JWT_SECRET debe tener al menos 32 caracteres en producción',
-      );
-    }
-    if (jwtSecret.startsWith('dev-')) {
-      throw new Error('JWT_SECRET no puede tener prefijo "dev-" en producción');
-    }
-
-    // Observabilidad: en prod SENTRY_DSN no es opcional. Sin él quedamos
-    // ciegos frente a errores en las 40 clínicas del piloto.
-    if (!process.env.SENTRY_DSN) {
-      throw new Error('SENTRY_DSN es obligatoria en producción');
+    // Lista + reglas en `common/env.util.ts` (pura, con tests). Incluye los
+    // secretos del webhook WAHA: sin WEBHOOK_HMAC_SECRET ni WEBHOOK_TOKEN el
+    // backend arrancaría pero rechazaría todos los webhooks con 403.
+    const errors = validateProdEnv(process.env);
+    if (errors.length) {
+      throw new Error(errors.join('\n'));
     }
   }
 
