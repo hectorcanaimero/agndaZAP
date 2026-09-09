@@ -129,8 +129,10 @@ export class PublicController {
     }>;
     professionals: Array<{ id: string; name: string; serviceIds: string[] }>;
   }> {
-    const clinic = await this.prisma.clinic.findUnique({
-      where: { slug },
+    // `findFirst` + `status: 'ACTIVE'`: una clínica SUSPENDED/ARCHIVED responde
+    // 404 igual que una inexistente. `findUnique` no admite filtros extra.
+    const clinic = await this.prisma.clinic.findFirst({
+      where: { slug, status: 'ACTIVE' },
       include: {
         services: {
           where: { active: true },
@@ -201,8 +203,8 @@ export class PublicController {
     }
     this.assertValidAvailabilityFrom(from);
 
-    const clinic = await this.prisma.clinic.findUnique({
-      where: { slug },
+    const clinic = await this.prisma.clinic.findFirst({
+      where: { slug, status: 'ACTIVE' },
       select: { id: true },
     });
     if (!clinic) {
@@ -264,8 +266,8 @@ export class PublicController {
     }
 
     // 2) Resolvemos clínica por slug.
-    const clinic = await this.prisma.clinic.findUnique({
-      where: { slug },
+    const clinic = await this.prisma.clinic.findFirst({
+      where: { slug, status: 'ACTIVE' },
       select: { id: true },
     });
     if (!clinic) {

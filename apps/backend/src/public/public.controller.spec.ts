@@ -115,7 +115,7 @@ describe('PublicController', () => {
   beforeEach(() => {
     prisma = {
       clinic: {
-        findUnique: jest.fn().mockResolvedValue({
+        findFirst: jest.fn().mockResolvedValue({
           id: 'clinic-A',
           name: 'Clínica A',
           slug: 'clinica-a',
@@ -188,9 +188,22 @@ describe('PublicController', () => {
     });
 
     it('tira 404 si el slug no existe', async () => {
-      prisma.clinic.findUnique.mockResolvedValueOnce(null);
+      prisma.clinic.findFirst.mockResolvedValueOnce(null);
       await expect(controller.getClinic('no-existe')).rejects.toBeInstanceOf(
         NotFoundException,
+      );
+    });
+
+    it('filtra por status ACTIVE (clínica SUSPENDED → 404)', async () => {
+      // Prisma no devuelve la fila si no cumple el where; simulamos eso.
+      prisma.clinic.findFirst.mockResolvedValueOnce(null);
+      await expect(controller.getClinic('suspendida')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(prisma.clinic.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { slug: 'suspendida', status: 'ACTIVE' },
+        }),
       );
     });
   });
@@ -206,10 +219,23 @@ describe('PublicController', () => {
     };
 
     it('tira 404 si el slug no existe', async () => {
-      prisma.clinic.findUnique.mockResolvedValueOnce(null);
+      prisma.clinic.findFirst.mockResolvedValueOnce(null);
       await expect(
         controller.createAppointment('no-existe', { ...dto }),
       ).rejects.toBeInstanceOf(NotFoundException);
+      expect(scheduling.createAppointment).not.toHaveBeenCalled();
+    });
+
+    it('clínica SUSPENDED → 404 y no crea cita', async () => {
+      prisma.clinic.findFirst.mockResolvedValueOnce(null);
+      await expect(
+        controller.createAppointment('suspendida', { ...dto }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.clinic.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { slug: 'suspendida', status: 'ACTIVE' },
+        }),
+      );
       expect(scheduling.createAppointment).not.toHaveBeenCalled();
     });
 
@@ -221,7 +247,7 @@ describe('PublicController', () => {
       expect(result).toEqual({ ok: true });
       expect(scheduling.createAppointment).not.toHaveBeenCalled();
       // Tampoco resolvimos la clínica en Prisma (respondemos antes).
-      expect(prisma.clinic.findUnique).not.toHaveBeenCalled();
+      expect(prisma.clinic.findFirst).not.toHaveBeenCalled();
     });
 
     it('happy path: crea la cita con source="PUBLIC"', async () => {
@@ -347,7 +373,7 @@ describe('PublicController', () => {
 
   describe('GET :slug/availability', () => {
     it('tira 404 si el slug no existe', async () => {
-      prisma.clinic.findUnique.mockResolvedValueOnce(null);
+      prisma.clinic.findFirst.mockResolvedValueOnce(null);
       await expect(
         controller.getAvailability(
           'no-existe',
@@ -357,6 +383,25 @@ describe('PublicController', () => {
           '7',
         ),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('clínica SUSPENDED → 404 sin consultar slots', async () => {
+      prisma.clinic.findFirst.mockResolvedValueOnce(null);
+      await expect(
+        controller.getAvailability(
+          'suspendida',
+          'svc-1',
+          'prof-1',
+          '2030-06-01',
+          '7',
+        ),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.clinic.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { slug: 'suspendida', status: 'ACTIVE' },
+        }),
+      );
+      expect(availability.getSlots).not.toHaveBeenCalled();
     });
 
     it('tira 400 si falta serviceId/professionalId/from', async () => {
