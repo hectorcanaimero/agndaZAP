@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -11,6 +12,19 @@ import { InvitationsService } from '../invitations/invitations.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClinicStatusCache } from '../common/redis/clinic-status.cache';
+import { normalizeE164 } from '../common/phone.util';
+
+/**
+ * Canoniza el WhatsApp público de la clínica: `''`/undefined → null (no se
+ * expone), valor → E.164 con `+`. Un valor que no normaliza tras pasar el DTO
+ * es un bug → 400 defensivo (mismo criterio que `ClinicsController`).
+ */
+function toPublicWhatsappPhone(raw: string | undefined): string | null {
+  if (raw === undefined || raw === '') return null;
+  const normalized = normalizeE164(raw);
+  if (!normalized) throw new BadRequestException('publicWhatsappPhone inválido');
+  return normalized;
+}
 
 // ─── Tipos de entrada ────────────────────────────────────────────────────────
 
@@ -21,6 +35,8 @@ export interface CreateClinicInput {
   locale?: string;
   wahaSession: string;
   address?: string;
+  /** Opt-in; se canoniza a E.164 (`normalizeE164`). '' = null. */
+  publicWhatsappPhone?: string;
   admin: {
     email: string;
     name: string;
@@ -49,6 +65,8 @@ export interface UpdateClinicInput {
   timezone?: string;
   locale?: string;
   address?: string;
+  /** Opt-in; se canoniza a E.164 (`normalizeE164`). '' = null. */
+  publicWhatsappPhone?: string;
 }
 
 // ─── Tipos de salida ─────────────────────────────────────────────────────────
@@ -125,6 +143,7 @@ export interface GetClinicResult {
     suspendedAt: Date | null;
     suspendedReason: string | null;
     address: string | null;
+    publicWhatsappPhone: string | null;
   };
   metrics: ClinicMetrics;
 }
@@ -180,6 +199,7 @@ export class AdminClinicsService {
           locale: input.locale ?? 'es',
           wahaSession: input.wahaSession,
           address: input.address ?? null,
+          publicWhatsappPhone: toPublicWhatsappPhone(input.publicWhatsappPhone),
         },
         select: {
           id: true,
@@ -320,6 +340,7 @@ export class AdminClinicsService {
         suspendedAt: true,
         suspendedReason: true,
         address: true,
+        publicWhatsappPhone: true,
       },
     });
 
@@ -347,6 +368,9 @@ export class AdminClinicsService {
         ...(input.timezone !== undefined ? { timezone: input.timezone } : {}),
         ...(input.locale !== undefined ? { locale: input.locale } : {}),
         ...(input.address !== undefined ? { address: input.address } : {}),
+        ...(input.publicWhatsappPhone !== undefined
+          ? { publicWhatsappPhone: toPublicWhatsappPhone(input.publicWhatsappPhone) }
+          : {}),
       },
     });
 

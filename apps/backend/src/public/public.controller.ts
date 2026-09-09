@@ -109,9 +109,14 @@ export class PublicController {
    * con la relación entre ambos (para que el frontend filtre `professionalId` por
    * el `serviceId` elegido).
    *
-   * NO exponemos: teléfonos, emails, config interna (wahaSession, autoConfirm),
-   * usuarios, ni datos de otras clínicas. Solo lo estrictamente necesario para
-   * el form.
+   * NO exponemos: teléfonos de profesionales/usuarios/pacientes, emails,
+   * config interna (wahaSession, autoConfirm), usuarios, ni datos de otras
+   * clínicas. Solo lo estrictamente necesario para el form.
+   *
+   * Única excepción (opt-in): `whatsappPhone` = `Clinic.publicWhatsappPhone`,
+   * el número de WhatsApp de la clínica que el operador configuró en
+   * /panel/ajustes para que /gracias muestre "Escribir a la clínica". Si no lo
+   * configuró, devolvemos `null` — nunca inferimos uno desde la sesión WAHA.
    */
   @Get(':slug')
   @UseGuards(RateLimit(30, 'public-clinic'))
@@ -122,6 +127,7 @@ export class PublicController {
     address: string | null;
     timezone: string;
     locale: string;
+    whatsappPhone: string | null;
     services: Array<{
       id: string;
       name: string;
@@ -167,6 +173,7 @@ export class PublicController {
       address: clinic.address,
       timezone: clinic.timezone,
       locale: clinic.locale,
+      whatsappPhone: clinic.publicWhatsappPhone ?? null,
       services: clinic.services,
       professionals: clinic.professionals.map((p) => ({
         id: p.id,

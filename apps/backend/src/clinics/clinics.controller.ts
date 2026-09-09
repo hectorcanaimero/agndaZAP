@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -12,6 +13,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { tenantWhere, type AuthUser } from '../auth/tenant-context.util';
+import { normalizeE164 } from '../common/phone.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateClinicDto } from './dto/update-clinic.dto';
 
@@ -47,6 +49,7 @@ export class ClinicsController {
         locale: true,
         currency: true,
         address: true,
+        publicWhatsappPhone: true,
         autoConfirm: true,
         reminderOffsetsH: true,
         confirmThresholdH: true,
@@ -79,10 +82,26 @@ export class ClinicsController {
     });
     if (!before) throw new NotFoundException('clínica no encontrada');
 
+    // Opt-in del WhatsApp público: '' → NULL (dejar de exponer); si viene
+    // valor lo canonizamos a E.164 con `+`. Un null tras pasar el DTO es un
+    // bug, no un caso de usuario → 400 defensivo (mismo criterio que Patient).
+    let publicWhatsappPhone: string | null | undefined;
+    if (dto.publicWhatsappPhone !== undefined) {
+      if (dto.publicWhatsappPhone === '') {
+        publicWhatsappPhone = null;
+      } else {
+        publicWhatsappPhone = normalizeE164(dto.publicWhatsappPhone);
+        if (!publicWhatsappPhone) {
+          throw new BadRequestException('publicWhatsappPhone inválido');
+        }
+      }
+    }
+
     const updated = await this.prisma.clinic.update({
       where: { id: scope.clinicId },
       data: {
         ...(dto.name !== undefined ? { name: dto.name } : {}),
+        ...(publicWhatsappPhone !== undefined ? { publicWhatsappPhone } : {}),
         ...(dto.address !== undefined ? { address: dto.address } : {}),
         ...(dto.timezone !== undefined ? { timezone: dto.timezone } : {}),
         ...(dto.locale !== undefined ? { locale: dto.locale } : {}),
@@ -117,6 +136,7 @@ export class ClinicsController {
         locale: true,
         currency: true,
         address: true,
+        publicWhatsappPhone: true,
         autoConfirm: true,
         reminderOffsetsH: true,
         confirmThresholdH: true,

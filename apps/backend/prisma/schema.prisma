@@ -27,6 +27,12 @@ model Clinic {
   wahaSession   String       @unique          // nombre de instancia WAHA
   wahaConnected Boolean      @default(false)
   address       String?
+  /// Número de WhatsApp de la clínica que se muestra al paciente en la página
+  /// pública (ej. /gracias → link wa.me). Opt-in: NULL = no se expone nada.
+  /// Se guarda SIEMPRE normalizado a E.164 con `+` (`normalizeE164`).
+  /// Es el único teléfono que sale por `GET /api/public/clinics/:slug` —
+  /// nunca teléfonos de profesionales, usuarios ni pacientes.
+  publicWhatsappPhone String?
   // Config de recordatorios (horas antes de la cita)
   reminderOffsetsH Int[]     @default([24, 3])
   // Umbral (horas) sin confirmar tras el cual la cita pasa a EN_RIESGO
