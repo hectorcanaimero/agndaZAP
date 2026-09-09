@@ -63,6 +63,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[notas/2026-08-14-impersonation-flow|2026-08-14 — Impersonation flow: cookies, redirects y edge cases]]
 - [[notas/2026-08-19-observabilidad-implementada|2026-08-19 — Observabilidad Pino+Axiom+Sentry implementada + smoke tests]]
 - [[notas/2026-08-18-sprint-completo-40-clinicas|2026-08-18 — Sprint completo pre-lanzamiento 40 clínicas (CIERRE)]]
+- [[notas/2026-09-09-analytics-plausible|2026-09-09 — Analytics de producto con Plausible (eventos del embudo)]]
 - [[notas/2026-09-09-nestjs-pino-inject-con-contexto|2026-09-09 — nestjs-pino: `@InjectPinoLogger(Nombre)` rompe el bootstrap en prod]]
 
 ## Flujo de trabajo
