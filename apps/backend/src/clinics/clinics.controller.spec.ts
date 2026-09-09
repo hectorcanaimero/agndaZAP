@@ -148,6 +148,13 @@ describe('ClinicsController', () => {
       expect(call.data.publicWhatsappPhone).toBeNull();
     });
 
+    it('null → NULL (equivalente a "")', async () => {
+      const dto = new UpdateClinicDto();
+      (dto as { publicWhatsappPhone: unknown }).publicWhatsappPhone = null;
+      await controller.update(adminA, dto);
+      expect(prisma.clinic.update.mock.calls[0][0].data.publicWhatsappPhone).toBeNull();
+    });
+
     it('NO toca publicWhatsappPhone cuando el DTO no lo incluye (patch parcial)', async () => {
       const dto = plainToInstance(UpdateClinicDto, { name: 'Otra' });
       await controller.update(adminA, dto);

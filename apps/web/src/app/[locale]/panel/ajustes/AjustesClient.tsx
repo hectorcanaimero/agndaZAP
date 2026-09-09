@@ -356,8 +356,12 @@ function GeneralForm({ clinic }: { clinic: ClinicSettings }) {
       .mutateAsync({
         name: values.name,
         address: values.address || undefined,
-        // '' se manda tal cual: el backend lo interpreta como "borrar" (NULL).
-        publicWhatsappPhone: values.publicWhatsappPhone.trim(),
+        // Sólo si cambió (evita ensuciar el trail de auditoría). '' se manda
+        // tal cual: el backend lo interpreta como "borrar" (NULL).
+        publicWhatsappPhone:
+          values.publicWhatsappPhone.trim() !== (clinic.publicWhatsappPhone ?? '')
+            ? values.publicWhatsappPhone.trim()
+            : undefined,
         timezone: values.timezone,
         locale: values.locale,
         currency: values.currency,

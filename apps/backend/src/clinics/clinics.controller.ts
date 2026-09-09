@@ -17,6 +17,11 @@ import { normalizeE164 } from '../common/phone.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateClinicDto } from './dto/update-clinic.dto';
 
+/** `+5804121234567` → `...4567`; null → `none`. Para logs sin PII completa. */
+function maskPhone(phone: string | null): string {
+  return phone ? `...${phone.slice(-4)}` : 'none';
+}
+
 /**
  * Meta-info de la clínica del usuario.
  *
@@ -78,7 +83,7 @@ export class ClinicsController {
     const scope = tenantWhere(user);
     const before = await this.prisma.clinic.findUnique({
       where: { id: scope.clinicId },
-      select: { timezone: true },
+      select: { timezone: true, publicWhatsappPhone: true },
     });
     if (!before) throw new NotFoundException('clínica no encontrada');
 
@@ -87,7 +92,8 @@ export class ClinicsController {
     // bug, no un caso de usuario → 400 defensivo (mismo criterio que Patient).
     let publicWhatsappPhone: string | null | undefined;
     if (dto.publicWhatsappPhone !== undefined) {
-      if (dto.publicWhatsappPhone === '') {
+      // `null` en JSON pasa @IsOptional; lo tratamos igual que '' (borrar).
+      if (dto.publicWhatsappPhone === '' || dto.publicWhatsappPhone === null) {
         publicWhatsappPhone = null;
       } else {
         publicWhatsappPhone = normalizeE164(dto.publicWhatsappPhone);
@@ -146,6 +152,16 @@ export class ClinicsController {
         botTone: true,
       },
     });
+
+    if (
+      publicWhatsappPhone !== undefined &&
+      publicWhatsappPhone !== before.publicWhatsappPhone
+    ) {
+      // Trail "de qué a qué" sin loguear el número completo: sólo últimos 4.
+      this.logger.warn(
+        `clinic public whatsapp change clinicId=${scope.clinicId} ${maskPhone(before.publicWhatsappPhone)}->${maskPhone(publicWhatsappPhone)} by=${user.userId}`,
+      );
+    }
 
     if (dto.timezone && dto.timezone !== before.timezone) {
       // Log específico — cambios de TZ afectan cómo se ven citas futuras.
