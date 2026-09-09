@@ -10,6 +10,7 @@ import { Testimonial } from '@/components/landing/Testimonial';
 import { ForWhomSection } from '@/components/landing/ForWhomSection';
 import { SecurityStrip } from '@/components/landing/SecurityStrip';
 import { FaqSection } from '@/components/landing/FaqSection';
+import { FaqJsonLd } from '@/components/landing/FaqJsonLd';
 import { FinalCta } from '@/components/landing/FinalCta';
 import { Footer } from '@/components/landing/Footer';
 
@@ -52,6 +53,7 @@ export default async function LandingPage({
         <PricingSection />
         <SecurityStrip />
         <FaqSection />
+        <FaqJsonLd />
         <FinalCta />
       </main>
       <Footer />

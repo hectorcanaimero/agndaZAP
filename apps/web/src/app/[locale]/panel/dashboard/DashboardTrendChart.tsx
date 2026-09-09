@@ -14,6 +14,14 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from '@/components/ui/chart';
+import { CHART_SERIES_TOKENS } from '@/components/ui/tokens';
+
+const NAVY = CHART_SERIES_TOKENS.navy.color;
+const TEAL = CHART_SERIES_TOKENS.teal.color;
+const DESTRUCTIVE = CHART_SERIES_TOKENS.destructive.color;
+const MUTED = CHART_SERIES_TOKENS.muted.color;
+const GRID = CHART_SERIES_TOKENS.grid.color;
+const CURSOR = CHART_SERIES_TOKENS.cursor.color;
 
 interface TrendPoint {
   date: string;
@@ -52,48 +60,52 @@ export function DashboardTrendChart({ trend, labels }: Props) {
   const chartConfig = {
     created: {
       label: labels.created,
-      color: 'hsl(213 66% 17%)', // brand navy
+      color: NAVY,
     },
     confirmed: {
       label: labels.confirmed,
-      color: 'hsl(170 71% 45%)', // brand teal
+      color: TEAL,
     },
     noShow: {
       label: labels.noShow,
-      color: 'hsl(var(--destructive))',
+      color: DESTRUCTIVE,
     },
   } satisfies ChartConfig;
 
   return (
     <>
       {/* Leyenda arriba del chart — muted, prosa. Uso dots + dashes para que
-          también se distingan en print/monochrome. */}
-      <div
-        className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600"
-        aria-hidden="true"
+          también se distingan en print/monochrome. Es accesible (sin
+          aria-hidden): el chart es role="img" y la leyenda es la única forma
+          textual de saber qué serie es cuál; los dots sí son decorativos. */}
+      <ul
+        className="mb-3 flex list-none flex-wrap items-center gap-x-4 gap-y-1 p-0 text-xs text-gray-600"
       >
-        <span className="inline-flex items-center gap-1.5">
+        <li className="inline-flex items-center gap-1.5">
           <span
             className="inline-block h-2.5 w-2.5 rounded-full"
-            style={{ backgroundColor: 'hsl(213 66% 17%)' }}
+            style={{ backgroundColor: NAVY }}
+            aria-hidden="true"
           />
           {labels.created}
-        </span>
-        <span className="inline-flex items-center gap-1.5">
+        </li>
+        <li className="inline-flex items-center gap-1.5">
           <span
             className="inline-block h-2.5 w-2.5 rounded-full"
-            style={{ backgroundColor: 'hsl(170 71% 45%)' }}
+            style={{ backgroundColor: TEAL }}
+            aria-hidden="true"
           />
           {labels.confirmed}
-        </span>
-        <span className="inline-flex items-center gap-1.5">
+        </li>
+        <li className="inline-flex items-center gap-1.5">
           <span
             className="inline-block h-2.5 w-2.5 rounded-sm"
-            style={{ backgroundColor: 'hsl(var(--destructive))' }}
+            style={{ backgroundColor: DESTRUCTIVE }}
+            aria-hidden="true"
           />
           {labels.noShow}
-        </span>
-      </div>
+        </li>
+      </ul>
 
       <ChartContainer
         config={chartConfig}
@@ -107,42 +119,42 @@ export function DashboardTrendChart({ trend, labels }: Props) {
         >
           <defs>
             <linearGradient id="area-created" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="hsl(213 66% 17%)" stopOpacity={0.28} />
-              <stop offset="100%" stopColor="hsl(213 66% 17%)" stopOpacity={0} />
+              <stop offset="0%" stopColor={NAVY} stopOpacity={0.28} />
+              <stop offset="100%" stopColor={NAVY} stopOpacity={0} />
             </linearGradient>
             <linearGradient id="area-confirmed" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="hsl(170 71% 45%)" stopOpacity={0.18} />
-              <stop offset="100%" stopColor="hsl(170 71% 45%)" stopOpacity={0} />
+              <stop offset="0%" stopColor={TEAL} stopOpacity={0.18} />
+              <stop offset="100%" stopColor={TEAL} stopOpacity={0} />
             </linearGradient>
           </defs>
           <CartesianGrid
             vertical={false}
             strokeDasharray="3 3"
-            stroke="hsl(0 0% 89%)"
+            stroke={GRID}
           />
           <XAxis
             dataKey="label"
             tickLine={false}
             axisLine={false}
-            tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+            tick={{ fontSize: 10, fill: MUTED }}
             interval="preserveStartEnd"
             minTickGap={12}
           />
           <YAxis
             tickLine={false}
             axisLine={false}
-            tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+            tick={{ fontSize: 10, fill: MUTED }}
             allowDecimals={false}
             width={28}
           />
           <ChartTooltip
-            cursor={{ fill: 'hsl(0 0% 96%)', opacity: 0.6 }}
+            cursor={{ fill: CURSOR, opacity: 0.6 }}
             content={<ChartTooltipContent indicator="dot" />}
           />
           <Area
             type="monotone"
             dataKey="created"
-            stroke="hsl(213 66% 17%)"
+            stroke={NAVY}
             strokeWidth={2}
             fill="url(#area-created)"
             dot={false}
@@ -151,7 +163,7 @@ export function DashboardTrendChart({ trend, labels }: Props) {
           <Area
             type="monotone"
             dataKey="confirmed"
-            stroke="hsl(170 71% 45%)"
+            stroke={TEAL}
             strokeWidth={1.5}
             strokeDasharray="4 3"
             fill="url(#area-confirmed)"
@@ -160,7 +172,7 @@ export function DashboardTrendChart({ trend, labels }: Props) {
           />
           <Bar
             dataKey="noShow"
-            fill="hsl(var(--destructive))"
+            fill={DESTRUCTIVE}
             radius={[3, 3, 0, 0]}
             maxBarSize={14}
             opacity={0.9}

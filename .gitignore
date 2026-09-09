@@ -47,6 +47,8 @@ coverage/
 .claude/skills/
 .claude/tasks/
 .claude/*.log
+# Worktrees locales de git (uno por sesión de agente); nunca se commitean
+.claude/worktrees/
 
 # Mirror local de skills (gestionado fuera del repo)
 .agents/

@@ -1,6 +1,9 @@
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import { APPOINTMENT_STATUS_TOKENS } from '@/components/ui/tokens';
+import {
+  APPOINTMENT_STATUS_TOKENS,
+  CHART_SERIES_TOKENS,
+} from '@/components/ui/tokens';
 import type { DashboardMetrics } from './types';
 import { LucideIcon } from './LucideIcon';
 
@@ -155,7 +158,7 @@ function ProgressRing({
           cy={size / 2}
           r={r}
           fill="none"
-          stroke="hsl(0 0% 92%)"
+          stroke={CHART_SERIES_TOKENS.grid.color}
           strokeWidth={stroke}
         />
         <circle
@@ -163,7 +166,7 @@ function ProgressRing({
           cy={size / 2}
           r={r}
           fill="none"
-          stroke="hsl(170 71% 45%)"
+          stroke={CHART_SERIES_TOKENS.teal.color}
           strokeWidth={stroke}
           strokeLinecap="round"
           strokeDasharray={c}

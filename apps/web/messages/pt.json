@@ -1721,5 +1721,123 @@
       "cannotImpersonateNonActive": "Não é possível personificar uma clínica que não está ativa.",
       "startFailed": "Não foi possível iniciar a personificação. Tente novamente."
     }
+  },
+  "legal": {
+    "common": {
+      "noticeTitle": "Documento em revisão jurídica, versão piloto",
+      "noticeBody": "Este texto é um rascunho honesto para a fase piloto do Showly. Ainda não foi revisado por um advogado e pode mudar. Se tiver dúvidas, escreva para hola@showly.tech.",
+      "updatedAt": "Última atualização: 9 de setembro de 2026",
+      "contactLabel": "Contato",
+      "contactEmail": "hola@showly.tech",
+      "backToHome": "Voltar ao início",
+      "seeAlsoPrivacy": "Ver Política de privacidade",
+      "seeAlsoTerms": "Ver Termos de uso",
+      "seeAlsoSecurity": "Ver Segurança e dados"
+    },
+    "privacy": {
+      "metaTitle": "Política de privacidade | Showly",
+      "metaDescription": "Quais dados o Showly trata, para quê, com quem compartilha, por quanto tempo guarda e como exercer seus direitos (LGPD / GDPR). Versão piloto.",
+      "eyebrow": "Privacidade",
+      "title": "Política de privacidade",
+      "intro": "O Showly é um sistema de agendamento por WhatsApp para clínicas. Aqui contamos, sem letras miúdas, quais dados passam pelo sistema e o que fazemos com eles.",
+      "sections": {
+        "controller": {
+          "title": "Quem é o responsável",
+          "body": "O Showly (contato: hola@showly.tech) opera a plataforma. Cada clínica que usa o Showly é responsável pelos dados dos seus próprios pacientes e decide quais informações pede; o Showly os trata por conta da clínica para prestar o serviço. Durante o piloto, essa relação é documentada em um acordo de responsabilidade conjunta com cada clínica."
+        },
+        "data": {
+          "title": "Quais dados tratamos",
+          "body": "Somente o necessário para agendar e lembrar consultas:",
+          "items": {
+            "name": "Nome e sobrenome do paciente.",
+            "phone": "Número de WhatsApp (em formato internacional).",
+            "messages": "As mensagens de WhatsApp que o paciente troca com o número da clínica.",
+            "appointments": "Dados da consulta: serviço, profissional, data, horário e status (confirmada, cancelada, não compareceu).",
+            "health": "Dados de saúde apenas se o paciente os escrever por conta própria (por exemplo, o motivo da consulta). Não pedimos nem inferimos esses dados."
+          }
+        },
+        "purpose": {
+          "title": "Para que usamos",
+          "body": "Para gerenciar as consultas da clínica: criar, confirmar, remarcar e cancelar horários, enviar lembretes e responder perguntas frequentes pelo WhatsApp. Não usamos os dados de pacientes para publicidade nem os vendemos a terceiros."
+        },
+        "sharing": {
+          "title": "Com quem compartilhamos",
+          "body": "Para o serviço funcionar, alguns dados passam por fornecedores externos:",
+          "items": {
+            "whatsapp": "Fornecedor de conexão com o WhatsApp. No piloto usamos o WAHA, uma integração não oficial do WhatsApp, com uma sessão dedicada por clínica.",
+            "ai": "Fornecedores de inteligência artificial de terceiros (DeepSeek, Google, OpenAI) que processam o texto das mensagens para entender a intenção e responder consultas. Eles recebem a mensagem exatamente como o paciente escreveu.",
+            "hosting": "Fornecedores de hospedagem e banco de dados onde a plataforma roda, com criptografia em trânsito e em disco."
+          }
+        },
+        "retention": {
+          "title": "Por quanto tempo guardamos",
+          "body": "Enquanto a clínica for cliente do Showly e até 12 meses depois do fim do serviço, para atender reclamações ou solicitações. As mensagens de WhatsApp ficam na sessão da clínica. Ao fim do piloto, a clínica pode pedir a exclusão completa dos seus dados."
+        },
+        "rights": {
+          "title": "Seus direitos (LGPD / GDPR)",
+          "body": "Como paciente, você pode pedir a qualquer momento:",
+          "items": {
+            "access": "Acessar os dados que temos sobre você.",
+            "rectify": "Corrigi-los se estiverem incompletos ou desatualizados.",
+            "delete": "Que sejam excluídos, salvo se a clínica precisar mantê-los por obrigação legal.",
+            "portability": "Receber uma cópia em formato legível.",
+            "revoke": "Revogar o consentimento para o processamento com IA; nesse caso, o bot encaminha a conversa para uma pessoa da clínica."
+          }
+        },
+        "exercise": {
+          "title": "Como exercê-los",
+          "body": "Escreva para a clínica onde você se consulta ou diretamente para hola@showly.tech informando seu número de WhatsApp. Respondemos em até 15 dias. Para solicitações que envolvam fornecedores de IA, encaminhamos o pedido a eles e confirmamos quando estiver resolvido."
+        },
+        "changes": {
+          "title": "Mudanças nesta política",
+          "body": "Esta é uma versão piloto. Quando o texto mudar, atualizamos a data desta página e avisamos as clínicas ativas por e-mail."
+        }
+      }
+    },
+    "terms": {
+      "metaTitle": "Termos de uso | Showly",
+      "metaDescription": "Condições de uso do Showly durante o piloto: serviço gratuito, sem garantia de disponibilidade, responsabilidades da clínica e cancelamento.",
+      "eyebrow": "Termos",
+      "title": "Termos de uso",
+      "intro": "Estas condições valem para as clínicas e consultórios que usam o Showly durante a fase piloto. São curtas de propósito: descrevem o que existe, não o que gostaríamos de ter.",
+      "sections": {
+        "service": {
+          "title": "O que é o serviço",
+          "body": "O Showly oferece agendamento de consultas pelo WhatsApp, uma página pública de agendamento e lembretes automáticos para reduzir faltas. A clínica configura seus serviços, profissionais e horários no painel."
+        },
+        "pilot": {
+          "title": "Piloto gratuito",
+          "body": "Durante o piloto, o Showly é gratuito. Não cobramos nem pedimos dados de pagamento. Quando definirmos preços, avisaremos com antecedência e nenhuma clínica passará a pagar sem aceitar de forma explícita."
+        },
+        "availability": {
+          "title": "Sem garantia de disponibilidade",
+          "body": "O serviço é oferecido como está. Pode ter interrupções, erros ou mudanças sem aviso prévio. A conexão com o WhatsApp depende de uma integração não oficial (WAHA) que o WhatsApp pode limitar ou bloquear. Recomendamos que a clínica mantenha um canal alternativo para confirmar consultas caso o Showly não responda."
+        },
+        "clinic": {
+          "title": "Responsabilidade da clínica",
+          "body": "A clínica é responsável pela relação com seus pacientes: por informá-los sobre como seus dados são usados, por obter consentimento quando necessário, pela exatidão da agenda e pelo atendimento médico. O Showly não presta serviços de saúde nem interfere em decisões clínicas."
+        },
+        "acceptableUse": {
+          "title": "Uso aceitável",
+          "body": "A clínica se compromete a usar o Showly apenas para gerenciar consultas com pacientes que entraram em contato, a não enviar mensagens em massa não solicitadas e a não cadastrar dados de terceiros sem autorização. Podemos suspender uma conta que coloque em risco o número de WhatsApp, outros clientes ou a plataforma."
+        },
+        "data": {
+          "title": "Dados e privacidade",
+          "body": "O tratamento dos dados de pacientes está descrito na Política de privacidade. Cada clínica só enxerga os próprios dados: o isolamento por clínica é um padrão obrigatório no código."
+        },
+        "cancellation": {
+          "title": "Cancelamento",
+          "body": "A clínica pode parar de usar o Showly a qualquer momento escrevendo para hola@showly.tech. Desconectamos o número de WhatsApp e, se solicitado, excluímos seus dados em até 30 dias. O Showly também pode encerrar o piloto avisando com pelo menos 15 dias de antecedência."
+        },
+        "liability": {
+          "title": "Limite de responsabilidade",
+          "body": "Na medida permitida pela lei, o Showly não responde por consultas perdidas, mensagens não entregues nem perdas decorrentes de interrupções do serviço durante o piloto. Respondemos, sim, por fazer o que dizemos: isolar os dados por clínica, não expor dados de pacientes nos logs e avisar se houver um incidente de segurança."
+        },
+        "changes": {
+          "title": "Mudanças nestes termos",
+          "body": "Podemos atualizar estes termos durante o piloto. Avisamos as clínicas ativas por e-mail e atualizamos a data desta página. Continuar usando o serviço após o aviso implica aceitar a nova versão."
+        }
+      }
+    }
   }
 }

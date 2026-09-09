@@ -106,3 +106,48 @@ export const TREND_CHART_COLORS: TrendChartColors = {
   noShow: 'fill-red-500',
   neutral: 'fill-slate-400',
 };
+
+// ---------------------------------------------------------------------------
+// Chart series — colores del brand para Recharts / SVG inline.
+// ---------------------------------------------------------------------------
+// Recharts recibe strings CSS (`stroke`, `fill`, `stopColor`), no clases
+// Tailwind, así que acá exponemos los valores HSL del brand como fuente única.
+// `navy`/`teal` replican `tailwind.config.ts` (brand.navy #0F2A4A, brand.teal
+// #28D9B9; el teal baja a L=45% para contraste sobre blanco). `destructive`,
+// `muted` y `grid` reutilizan las CSS vars de shadcn para respetar dark mode.
+//
+// Cualquier hex/HSL de brand en el panel DEBE salir de aquí.
+
+export interface ChartSeriesToken {
+  /** Triplete HSL sin `hsl()` — para componer alpha: `hsl(${hsl} / 0.2)`. */
+  hsl: string;
+  /** Color listo para `stroke`/`fill`/`backgroundColor`. */
+  color: string;
+}
+
+export const CHART_SERIES_TOKENS = {
+  navy: { hsl: '213 66% 17%', color: 'hsl(213 66% 17%)' },
+  teal: { hsl: '170 71% 45%', color: 'hsl(170 71% 45%)' },
+  destructive: {
+    hsl: 'var(--destructive)',
+    color: 'hsl(var(--destructive))',
+  },
+  muted: {
+    hsl: 'var(--muted-foreground)',
+    color: 'hsl(var(--muted-foreground))',
+  },
+  /** Líneas de grilla / track de anillos de progreso. */
+  grid: { hsl: 'var(--border)', color: 'hsl(var(--border))' },
+  /** Fondo del cursor del tooltip. */
+  cursor: { hsl: 'var(--muted)', color: 'hsl(var(--muted))' },
+} as const satisfies Record<string, ChartSeriesToken>;
+
+export type ChartSeriesTokenName = keyof typeof CHART_SERIES_TOKENS;
+
+/** `hsl(<token> / alpha)` — para gradientes y fills translúcidos. */
+export function chartColorWithAlpha(
+  name: ChartSeriesTokenName,
+  alpha: number,
+): string {
+  return `hsl(${CHART_SERIES_TOKENS[name].hsl} / ${alpha})`;
+}

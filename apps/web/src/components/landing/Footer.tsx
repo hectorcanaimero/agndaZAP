@@ -85,7 +85,7 @@ export function Footer() {
               </li>
               <li>
                 <Link
-                  href="/login"
+                  href="/privacidad"
                   className="text-neutral-700 transition-colors hover:text-brand-navy"
                 >
                   {t('columns.company.links.privacy')}
@@ -93,7 +93,7 @@ export function Footer() {
               </li>
               <li>
                 <Link
-                  href="/login"
+                  href="/terminos"
                   className="text-neutral-700 transition-colors hover:text-brand-navy"
                 >
                   {t('columns.company.links.terms')}

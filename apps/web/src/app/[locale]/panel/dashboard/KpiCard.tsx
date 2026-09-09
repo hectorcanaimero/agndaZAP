@@ -2,6 +2,10 @@
 
 import { Area, AreaChart, ResponsiveContainer } from 'recharts';
 import { cn } from '@/lib/utils';
+import {
+  CHART_SERIES_TOKENS,
+  chartColorWithAlpha,
+} from '@/components/ui/tokens';
 import { DeltaBadge } from './DeltaBadge';
 import { LucideIcon, type IconName } from './LucideIcon';
 
@@ -39,16 +43,18 @@ const TONE_STYLES: Record<
   NonNullable<KpiCardProps['tone']>,
   { line: string; from: string; to: string; iconClass: string }
 > = {
+  // teal/navy salen de CHART_SERIES_TOKENS (brand); rose/amber son tonos
+  // semánticos de Tailwind (no brand) y se quedan como hex.
   teal: {
-    line: '#14b8a6',
-    from: 'rgba(20, 184, 166, 0.28)',
-    to: 'rgba(20, 184, 166, 0)',
-    iconClass: 'text-teal-500',
+    line: CHART_SERIES_TOKENS.teal.color,
+    from: chartColorWithAlpha('teal', 0.28),
+    to: chartColorWithAlpha('teal', 0),
+    iconClass: 'text-brand-teal',
   },
   navy: {
-    line: '#1e3a8a',
-    from: 'rgba(30, 58, 138, 0.24)',
-    to: 'rgba(30, 58, 138, 0)',
+    line: CHART_SERIES_TOKENS.navy.color,
+    from: chartColorWithAlpha('navy', 0.24),
+    to: chartColorWithAlpha('navy', 0),
     iconClass: 'text-brand-navy',
   },
   rose: {

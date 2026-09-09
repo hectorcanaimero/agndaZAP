@@ -226,7 +226,10 @@ export function LeadsClient({ locale, initial }: Props) {
           <EmptyState />
         ) : (
           <>
-          <div className="h-full overflow-y-auto p-3 md:hidden">
+          {/* Móvil (< sm): cards con los mismos datos y acciones que la tabla.
+              Mismo patrón que FeedbackClient: `sm:hidden` + `hidden sm:block`.
+              El link a wa.me mantiene min-h-11 (44 px) como touch target. */}
+          <div className="h-full overflow-y-auto p-3 sm:hidden">
             <div className="space-y-3">
               {items.map((lead) => (
                 <article
@@ -285,7 +288,7 @@ export function LeadsClient({ locale, initial }: Props) {
               ))}
             </div>
           </div>
-          <div className="hidden h-full overflow-auto md:block">
+          <div className="hidden h-full overflow-auto sm:block">
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-card">
                 <TableRow>
