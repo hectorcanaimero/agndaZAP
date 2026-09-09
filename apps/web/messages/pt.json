@@ -1177,7 +1177,9 @@
         "botConfirm": "Pronto. Consulta confirmada para terça 12 às 9:30. ✅",
         "reminderBadge": "Lembrete automático 24h antes",
         "reminderText": "Oi Maria, esperamos você amanhã às 9:30. Responda SIM para confirmar, REMARCAR para trocar."
-      }
+      },
+      "whatsappCta": "Fale com a gente pelo WhatsApp",
+      "whatsappMessage": "Olá, quero saber mais sobre o Showly para a minha clínica."
     },
     "problem": {
       "eyebrow": "O problema",
@@ -1420,7 +1422,10 @@
           "validation": "Confira os dados e tente novamente.",
           "generic": "Não conseguimos enviar a mensagem. Tente novamente."
         }
-      }
+      },
+      "whatsappCta": "Fale com a gente pelo WhatsApp",
+      "whatsappMessage": "Olá, quero testar o Showly na minha clínica.",
+      "orForm": "Ou deixe seus dados e nós entramos em contato."
     },
     "footer": {
       "brand": "Showly",

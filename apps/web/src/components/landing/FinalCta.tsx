@@ -1,9 +1,14 @@
 import { useTranslations } from 'next-intl';
+import { MessageCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { whatsappSalesLink } from '@/lib/whatsapp-sales';
 import { LeadForm } from './LeadForm';
 import { FadeIn } from './motion/FadeIn';
 
 export function FinalCta() {
   const t = useTranslations('landing.cta');
+  // Primera vía: WhatsApp (si hay número). El LeadForm queda como segunda.
+  const waLink = whatsappSalesLink(t('whatsappMessage'));
 
   return (
     <section id="cta" className="bg-cream-100 py-28 md:py-36">
@@ -29,6 +34,27 @@ export function FinalCta() {
               <p className="mt-6 max-w-lg text-lg leading-relaxed text-white/85">
                 {t('subheadline')}
               </p>
+              {waLink ? (
+                <div className="mt-8">
+                  <Button
+                    asChild
+                    size="lg"
+                    className="h-14 w-full rounded-full bg-brand-teal px-7 text-base font-semibold text-brand-navy shadow-warm-lg transition-transform duration-300 ease-out-soft hover:-translate-y-0.5 hover:bg-brand-teal/90 sm:w-auto"
+                  >
+                    <a
+                      href={waLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      data-analytics="cta_click"
+                      data-analytics-location="final-whatsapp"
+                    >
+                      <MessageCircle className="h-4 w-4" aria-hidden="true" />
+                      {t('whatsappCta')}
+                    </a>
+                  </Button>
+                  <p className="mt-3 text-sm text-white/70">{t('orForm')}</p>
+                </div>
+              ) : null}
               <p className="mt-8 text-sm text-white/70">{t('trust')}</p>
             </div>
 
