@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Calendar, MessageSquare, Stethoscope, User } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { Link } from '@/i18n/routing';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -758,7 +759,20 @@ export function ScheduleForm(props: ScheduleFormProps) {
             htmlFor="consent"
             className="cursor-pointer text-sm font-normal leading-relaxed text-gray-700"
           >
-            {t('labels.consent')}
+            {/* ADR 0004 §7: el consent nombra explícitamente a los proveedores
+                de IA de terceros y linkea a /seguridad. */}
+            {t.rich('labels.consent', {
+              link: (chunks) => (
+                <Link
+                  href="/seguridad"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline underline-offset-2 hover:text-gray-900"
+                >
+                  {chunks}
+                </Link>
+              ),
+            })}
           </Label>
         </div>
         {errors.consent ? (

@@ -28,7 +28,7 @@
       "service": "Serviço",
       "professional": "Profissional",
       "slot": "Horário",
-      "consent": "Autorizo o uso dos meus dados para agendar a consulta.",
+      "consent": "Autorizo o uso dos meus dados para agendar a consulta. Minhas mensagens podem ser processadas por serviços de IA de terceiros (DeepSeek, Google, OpenAI) para responder e agendar; não são compartilhadas para publicidade. <link>Saiba mais</link>",
       "submit": "Confirmar consulta",
       "submitting": "Confirmando..."
     },
@@ -361,7 +361,7 @@
         "noSlots": "Sem horários disponíveis na semana. Tente a próxima.",
         "prevWeek": "Semana anterior",
         "nextWeek": "Próxima semana",
-        "consentLabel": "O paciente autorizou o uso dos seus dados para agendamento e envio de lembretes (LGPD/GDPR).",
+        "consentLabel": "O paciente autorizou o uso dos seus dados para agendamento e envio de lembretes, incluindo o processamento das suas mensagens por serviços de IA de terceiros (DeepSeek, Google, OpenAI) (LGPD/GDPR).",
         "createSubmit": "Criar consulta",
         "rescheduleSubmit": "Confirmar novo horário",
         "submitting": "Salvando…",
@@ -1003,7 +1003,7 @@
         "offsets": "Você pode configurar até 5 lembretes. Ex: 24 (um dia antes) e 3 (três horas antes).",
         "threshold": "Horas antes da consulta sem confirmação após as quais a consulta passa para EM_RISCO.",
         "tone": "Modula o estilo das respostas do bot (só afeta o como, não o quê).",
-        "botGreeting": "Quando o paciente cumprimenta (\"olá\", \"oi\", \"boas\"). Placeholders: {clinicName}, {patientName}.",
+        "botGreeting": "Quando o paciente cumprimenta (\"olá\", \"oi\", \"boas\"). Placeholders: {clinicName}, {patientName}. O aviso de que quem atende é um assistente com IA de terceiros é sempre adicionado ao final (compliance).",
         "botFallback": "Quando o bot não entende a intenção da mensagem. Placeholders: {clinicName}, {patientName}.",
         "botHandoffMsg": "Quando a conversa passa para uma pessoa da equipe. Placeholders: {clinicName}, {patientName}."
       },

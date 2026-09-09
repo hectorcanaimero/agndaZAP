@@ -28,7 +28,7 @@
       "service": "Servicio",
       "professional": "Profesional",
       "slot": "Horario",
-      "consent": "Autorizo el uso de mis datos para gestionar la cita.",
+      "consent": "Autorizo el uso de mis datos para gestionar la cita. Mis mensajes pueden procesarse con servicios de IA de terceros (DeepSeek, Google, OpenAI) para responder y agendar; no se comparten para publicidad. <link>Más info</link>",
       "submit": "Confirmar cita",
       "submitting": "Confirmando..."
     },
@@ -361,7 +361,7 @@
         "noSlots": "Sin horarios disponibles en la semana. Probá con la siguiente.",
         "prevWeek": "Semana anterior",
         "nextWeek": "Semana siguiente",
-        "consentLabel": "El paciente autorizó el uso de sus datos para agendar y recibir recordatorios (LGPD/GDPR).",
+        "consentLabel": "El paciente autorizó el uso de sus datos para agendar y recibir recordatorios, incluido el procesamiento de sus mensajes con servicios de IA de terceros (DeepSeek, Google, OpenAI) (LGPD/GDPR).",
         "createSubmit": "Crear cita",
         "rescheduleSubmit": "Confirmar nuevo horario",
         "submitting": "Guardando…",
@@ -1003,7 +1003,7 @@
         "offsets": "Podés configurar hasta 5 recordatorios. Ej: 24 (un día antes) y 3 (tres horas antes).",
         "threshold": "Horas antes de la cita sin confirmar tras las cuales la cita pasa a EN_RIESGO.",
         "tone": "Modula el estilo de las respuestas del bot (solo afecta el cómo, no el qué).",
-        "botGreeting": "Cuando el paciente saluda (\"hola\", \"buenas\"). Placeholders: {clinicName}, {patientName}.",
+        "botGreeting": "Cuando el paciente saluda (\"hola\", \"buenas\"). Placeholders: {clinicName}, {patientName}. El aviso de que atiende un asistente con IA de terceros se agrega siempre al final (compliance).",
         "botFallback": "Cuando el bot no entiende la intención del mensaje. Placeholders: {clinicName}, {patientName}.",
         "botHandoffMsg": "Cuando la conversación pasa a una persona del equipo. Placeholders: {clinicName}, {patientName}."
       },
