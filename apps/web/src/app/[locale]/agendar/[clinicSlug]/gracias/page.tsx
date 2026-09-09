@@ -7,6 +7,8 @@ import {
   Stethoscope,
   User,
 } from 'lucide-react';
+import { createHash } from 'node:crypto';
+import { DateTime } from 'luxon';
 import Link from 'next/link';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { Card, CardContent } from '@/components/ui/card';
@@ -19,7 +21,9 @@ import { ThanksName } from './ThanksName';
  *
  * Query params (ninguno es PII del paciente):
  * - `date`, `time`: ya formateados en la TZ de la clínica (texto).
- * - `start`, `end`: ISO 8601 para el .ics.
+ * - `start`, `end`: ISO 8601 con offset/Z para el .ics (validados con Luxon;
+ *   nunca `Date` naive).
+ * - `appt`: id opaco de la cita → UID estable del .ics.
  * - `service`, `professional`: IDs (datos públicos de la clínica); se
  *   resuelven a nombre contra el snapshot público. Si no resuelven (p. ej.
  *   servicio desactivado) simplemente no se muestran.
@@ -47,6 +51,7 @@ export default async function GraciasPage({
   const time = str('time');
   const startISO = str('start');
   const endISO = str('end');
+  const appointmentId = str('appt');
 
   // Fail-open: si el backend no responde, la confirmación igual se muestra.
   let clinic: Awaited<ReturnType<typeof fetchClinic>> = null;
@@ -62,8 +67,21 @@ export default async function GraciasPage({
     null;
   const whatsappPhone = clinic?.whatsappPhone?.replace(/\D/g, '') || null;
 
-  const validISO = (v: string) => Boolean(v) && !Number.isNaN(Date.parse(v));
+  // Sólo ISO 8601 con zona explícita (Z u offset): sin ella Luxon la
+  // interpretaría en la TZ del servidor y el .ics quedaría corrido.
+  const ISO_WITH_ZONE =
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+  const validISO = (v: string) =>
+    ISO_WITH_ZONE.test(v) && DateTime.fromISO(v, { setZone: true }).isValid;
   const canAddToCalendar = validISO(startISO) && validISO(endISO);
+  // UID estable: id de la cita si viene; si no, hash determinista de la
+  // combinación (misma cita → mismo UID → el calendario no la duplica).
+  const calendarUid = appointmentId
+    ? `${appointmentId}@showly`
+    : `${createHash('sha256')
+        .update(`${startISO}|${str('service')}|${str('professional')}`)
+        .digest('hex')
+        .slice(0, 32)}@showly`;
 
   const summaryRows = [
     { key: 'summary.service', Icon: Stethoscope, value: serviceName },
@@ -128,6 +146,7 @@ export default async function GraciasPage({
                 title={t('calendarTitle', { clinic: clinic?.name ?? clinicSlug })}
                 startISO={startISO}
                 endISO={endISO}
+                uid={calendarUid}
                 location={clinic?.address}
                 description={
                   [serviceName, professionalName].filter(Boolean).join(' · ') ||

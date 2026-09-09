@@ -526,12 +526,14 @@ export function ScheduleForm(props: ScheduleFormProps) {
         }
       }
       // start/end (ISO) alimentan el .ics; service/professional son IDs
-      // públicos de la clínica que /gracias resuelve a nombre. Sin PII.
+      // públicos de la clínica que /gracias resuelve a nombre; appt es el id
+      // opaco de la cita (UID estable del .ics). Sin PII.
       const qs = new URLSearchParams({
         date: dateFmt,
         time: timeFmt,
         start: startISO,
         end: result.data.endAt,
+        appt: result.data.id,
         service: values.serviceId,
         professional: values.professionalId,
       });

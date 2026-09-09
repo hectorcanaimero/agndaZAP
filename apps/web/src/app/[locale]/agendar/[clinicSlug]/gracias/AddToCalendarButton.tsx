@@ -7,9 +7,15 @@ import { Button } from '@/components/ui/button';
 interface Props {
   /** Título del evento, ej. "Cita en Clínica Aurora". */
   title: string;
-  /** ISO 8601 (con offset o Z). */
+  /** ISO 8601 con offset o Z (validado en /gracias con Luxon). */
   startISO: string;
   endISO: string;
+  /**
+   * UID estable del evento (RFC 5545 §3.8.4.7): descargar dos veces el .ics
+   * actualiza el mismo evento en vez de duplicarlo. Lo calcula /gracias a
+   * partir del id de la cita (o de un hash determinista como fallback).
+   */
+  uid: string;
   location?: string | null;
   description?: string | null;
 }
@@ -19,17 +25,41 @@ function toICSDate(iso: string): string {
   return new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
 }
 
-/** RFC 5545: escapar ; , \ y saltos de línea en valores de texto. */
-function escapeICS(value: string): string {
+/** RFC 5545 §3.3.11: escapar `\`, `;`, `,` y saltos de línea en TEXT. */
+export function escapeICS(value: string): string {
   return value
     .replace(/\\/g, '\\\\')
-    .replace(/;/g, '\;')
+    .replace(/;/g, '\\;')
     .replace(/,/g, '\\,')
     .replace(/\r?\n/g, '\\n');
 }
 
+/**
+ * RFC 5545 §3.1: líneas de máximo 75 octetos; la continuación empieza con
+ * un espacio. Contamos bytes UTF-8 (no chars) y nunca partimos un code
+ * point a la mitad.
+ */
+export function foldICSLine(line: string): string {
+  const encoder = new TextEncoder();
+  const out: string[] = [];
+  let current = '';
+  let currentBytes = 0;
+  for (const ch of line) {
+    const size = encoder.encode(ch).length;
+    const limit = out.length === 0 ? 75 : 74; // la continuación gasta 1 en el espacio
+    if (currentBytes + size > limit) {
+      out.push(current);
+      current = '';
+      currentBytes = 0;
+    }
+    current += ch;
+    currentBytes += size;
+  }
+  out.push(current);
+  return out.map((l, i) => (i === 0 ? l : ` ${l}`)).join('\r\n');
+}
+
 export function buildICS(p: Props): string {
-  const uid = `${toICSDate(p.startISO)}-${Math.random().toString(36).slice(2)}@showly`;
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -37,7 +67,7 @@ export function buildICS(p: Props): string {
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',
-    `UID:${uid}`,
+    `UID:${p.uid}`,
     `DTSTAMP:${toICSDate(new Date().toISOString())}`,
     `DTSTART:${toICSDate(p.startISO)}`,
     `DTEND:${toICSDate(p.endISO)}`,
@@ -47,7 +77,7 @@ export function buildICS(p: Props): string {
     'END:VEVENT',
     'END:VCALENDAR',
   ].filter((l): l is string => Boolean(l));
-  return lines.join('\r\n') + '\r\n';
+  return lines.map(foldICSLine).join('\r\n') + '\r\n';
 }
 
 /**
