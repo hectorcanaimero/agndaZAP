@@ -19,6 +19,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { tenantWhere, type AuthUser } from '../auth/tenant-context.util';
 import { FollowUpsService } from '../follow-ups/follow-ups.service';
+import { normalizeE164 } from '../common/phone.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { RemindersService } from '../reminders/reminders.service';
 import { AvailabilityService } from '../scheduling/availability.service';
@@ -396,10 +397,11 @@ export class AppointmentsController {
     @Body() dto: CreatePanelAppointmentDto,
   ) {
     const scope = tenantWhere(user);
-    // Normalizamos phone: agregamos `+` si no lo trae (E.164 estricto).
-    const normalizedPhone = dto.phone.startsWith('+')
-      ? dto.phone
-      : `+${dto.phone}`;
+    // Normalizamos phone a E.164 con `+` (helper único, ver phone.util).
+    const normalizedPhone = normalizeE164(dto.phone);
+    if (!normalizedPhone) {
+      throw new BadRequestException('phone inválido');
+    }
     // Consent SIEMPRE obligatorio — no negociable. El rol interno
     // (SUPERADMIN incluido) no otorga consent en nombre del paciente. Es un
     // requisito legal (LGPD/GDPR datos de salud) que se materializa por acto

@@ -10,6 +10,7 @@ import {
 import { Public } from '../auth/decorators/public.decorator';
 import { BotService } from '../bot/bot.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { normalizeE164 } from '../common/phone.util';
 import { verifyWebhookAuthFromEnv } from './webhook-auth.util';
 
 /**
@@ -139,9 +140,13 @@ export class WebhookController {
       // `@c.us` (phone-based) o `@lid` (LID de privacidad). Guardamos ambos por
       // separado para poder mostrar el número real cuando lo conocemos y no
       // ensuciar la columna `phone` con LIDs.
+      // `phone` pasa por `normalizeE164` (con `+`) para que coincida con el
+      // formato con el que la página pública y el panel guardan `Patient.phone`.
+      // Si WAHA manda algo que no es un número válido, tratamos el contacto
+      // como sin phone (misma rama que `@lid`).
       const bareId = from.replace(/@(c\.us|lid|s\.whatsapp\.net)$/, '');
       const isLid = from.endsWith('@lid');
-      const phone = isLid ? null : bareId;
+      const phone = isLid ? null : normalizeE164(bareId);
       const lid = isLid ? bareId : null;
       // pushName: WAHA lo expone como `notifyName` top-level o dentro de `_data`.
       const contactName =

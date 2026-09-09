@@ -317,6 +317,9 @@ export class BotService {
 
     // Upsert de la conversación. En update solo tocamos `contactName` si vino
     // uno nuevo (WhatsApp permite cambiarlo) — evita clobbears innecesarios.
+    // `phone` también se refresca cuando lo conocemos: conversaciones creadas
+    // antes de normalizar a E.164 (sin `+`) quedan corregidas al próximo
+    // mensaje, sin migración de datos.
     const convo = await this.prisma.conversation.upsert({
       where: { clinicId_chatId: { clinicId, chatId } },
       create: {
@@ -327,7 +330,10 @@ export class BotService {
         contactName,
         state: 'BOT',
       },
-      update: contactName ? { contactName } : {},
+      update: {
+        ...(contactName ? { contactName } : {}),
+        ...(phone ? { phone } : {}),
+      },
     });
     await this.prisma.message.create({
       data: { conversationId: convo.id, direction: 'IN', body: text },

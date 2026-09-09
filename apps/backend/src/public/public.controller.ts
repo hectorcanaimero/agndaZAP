@@ -24,6 +24,7 @@ import { Public } from '../auth/decorators/public.decorator';
 import { CreatePublicAppointmentDto } from './dto/create-public-appointment.dto';
 import { RateLimit } from './rate-limit.guard';
 import { SlugValidationPipe } from './slug.pipe';
+import { normalizeE164 } from '../common/phone.util';
 
 /**
  * PublicController — Bloque 3 del roadmap.
@@ -302,10 +303,11 @@ export class PublicController {
       conversationId = session.conversationId;
     }
 
-    // 4) Normalizamos phone: agregamos `+` si no lo trae (E.164 estricto).
-    const normalizedPhone = dto.phone.startsWith('+')
-      ? dto.phone
-      : `+${dto.phone}`;
+    // 4) Normalizamos phone a E.164 con `+` (helper único, ver phone.util).
+    const normalizedPhone = normalizeE164(dto.phone);
+    if (!normalizedPhone) {
+      throw new BadRequestException('phone inválido');
+    }
 
     // 5) Delegamos. SchedulingService tira ConflictException / NotFoundException
     // / BadRequestException con sus mensajes internos; el endpoint público
