@@ -239,13 +239,9 @@ describe('RemindersProcessor (createRemindersWorker)', () => {
       },
     );
 
-    // BUG: el processor solo filtra CANCELADA/NO_SHOW. Si la cita ya fue
-    // marcada ATENDIDA (ej. paciente llegó antes o la recepción marcó asistencia
-    // en el momento y el reminder de 3h aún estaba pendiente), se le manda al
-    // paciente "te recordamos tu cita... responde SÍ para confirmar" de una
-    // cita ya atendida. Falta `ATENDIDA` en la lista de exclusión de
-    // reminders.processor.ts (`['CANCELADA', 'NO_SHOW'].includes(appt.status)`).
-    it.skip('no envía si la cita ya está ATENDIDA', async () => {
+    // Regresión: antes el processor sólo filtraba CANCELADA/NO_SHOW y una
+    // cita ya ATENDIDA recibía "te recordamos tu cita… responde SÍ".
+    it('no envía si la cita ya está ATENDIDA', async () => {
       prisma.reminder.findUnique.mockResolvedValue(
         makeReminder({ appointment: makeAppointment({ status: 'ATENDIDA' }) }),
       );
