@@ -3,14 +3,17 @@ import {
   Controller,
   Headers,
   HttpCode,
+  Inject,
   Logger,
   Post,
   Req,
 } from '@nestjs/common';
+import type Redis from 'ioredis';
 import { Public } from '../auth/decorators/public.decorator';
 import { BotService } from '../bot/bot.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizeE164 } from '../common/phone.util';
+import { REDIS_CLIENT } from '../public/rate-limit.guard';
 import { verifyWebhookAuthFromEnv } from './webhook-auth.util';
 
 /**
@@ -34,6 +37,8 @@ interface WahaWebhookBody {
  * en algunas versiones, se cubren ambos abajo).
  */
 interface WahaMessagePayload {
+  /** Id del mensaje en WAHA. Lo usamos para deduplicar reintentos. */
+  id?: string;
   fromMe?: boolean;
   from?: string;
   body?: string;
@@ -63,10 +68,46 @@ interface WahaSessionStatusPayload {
 export class WebhookController {
   private readonly logger = new Logger(WebhookController.name);
 
+  /** TTL del marcador de dedup: WAHA reintenta en minutos, 24h es de sobra. */
+  private static readonly DEDUP_TTL_SEC = 86_400;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly bot: BotService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
+
+  /**
+   * Dedup de eventos `message`: WAHA reintenta el webhook si no recibe 200 a
+   * tiempo y puede entregar el mismo mensaje dos veces (→ doble respuesta del
+   * bot / doble cita). `SET NX` atómico por (session, payload.id).
+   *
+   * - Devuelve `true` si es la PRIMERA vez que vemos el id (procesar).
+   * - Sin `payload.id` no podemos deduplicar → procesar.
+   * - Fail-open: si Redis falla, procesar (mejor un duplicado que perder
+   *   mensajes). Log `warn` sin PII.
+   */
+  private async claimMessage(
+    session: string,
+    messageId: string | undefined,
+  ): Promise<boolean> {
+    if (!messageId) return true;
+    try {
+      const result = await this.redis.set(
+        `waha:evt:${session}:${messageId}`,
+        '1',
+        'EX',
+        WebhookController.DEDUP_TTL_SEC,
+        'NX',
+      );
+      return result !== null;
+    } catch (e) {
+      this.logger.warn(
+        `dedup webhook falló (redis) session=${session}: ${(e as Error).message}`,
+      );
+      return true;
+    }
+  }
 
   // Convención de webhooks: 200 OK aunque el evento no aplique. Evita reintentos
   // agresivos del emisor por códigos "raros" (Nest devuelve 201 por default en @Post).
@@ -120,6 +161,15 @@ export class WebhookController {
       const from = msg?.from ?? '';
       const body = msg?.body ?? '';
       if (!from) return { ok: true };
+
+      const messageId = typeof msg?.id === 'string' ? msg.id : undefined;
+      if (!(await this.claimMessage(session, messageId))) {
+        // Reintento de WAHA: ya lo procesamos. Sin chatId ni body en el log.
+        this.logger.debug(
+          `webhook duplicado ignorado session=${session} msgId=${messageId}`,
+        );
+        return { ok: true };
+      }
 
       // WhatsApp está migrando de <phone>@c.us a <lid>@lid (Linked ID) para
       // privacidad. Cuando llega un LID no tenemos forma pública de resolverlo
