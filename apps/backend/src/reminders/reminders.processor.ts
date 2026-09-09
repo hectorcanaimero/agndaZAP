@@ -99,7 +99,10 @@ export function createRemindersWorker(
       if (!reminder || reminder.status !== 'SCHEDULED') return;
 
       const appt = reminder.appointment;
-      if (['CANCELADA', 'NO_SHOW'].includes(appt.status)) return;
+      // Estados terminales: no tiene sentido recordar una cita cancelada,
+      // perdida ni ya atendida (el reminder de 3h puede seguir en cola si
+      // la recepción marcó asistencia temprano). Sprint 2, test-engineer.
+      if (['CANCELADA', 'NO_SHOW', 'ATENDIDA'].includes(appt.status)) return;
 
       const zone = appt.clinic.timezone;
       const when = DateTime.fromJSDate(appt.startAt)
