@@ -10,6 +10,7 @@ import { hashPassword } from '../auth/password.util';
 import { InvitationsService } from '../invitations/invitations.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ClinicStatusCache } from '../common/redis/clinic-status.cache';
 
 // ─── Tipos de entrada ────────────────────────────────────────────────────────
 
@@ -142,6 +143,7 @@ export class AdminClinicsService {
     private readonly prisma: PrismaService,
     private readonly invitations: InvitationsService,
     private readonly mail: MailService,
+    private readonly clinicStatus: ClinicStatusCache,
   ) {}
 
   /**
@@ -370,6 +372,8 @@ export class AdminClinicsService {
         suspendedReason: reason,
       },
     });
+    // Corta de inmediato los tokens de impersonation vivos (JwtStrategy).
+    await this.clinicStatus.invalidate(id);
 
     return { id };
   }
@@ -393,6 +397,7 @@ export class AdminClinicsService {
         suspendedReason: null,
       },
     });
+    await this.clinicStatus.invalidate(id);
 
     return { id };
   }

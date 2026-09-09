@@ -3,6 +3,7 @@ import { ClinicStatus } from '@prisma/client';
 import type { InvitationsService } from '../invitations/invitations.service';
 import type { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ClinicStatusCache } from '../common/redis/clinic-status.cache';
 import { AdminClinicsService, type CreateClinicInput } from './admin-clinics.service';
 
 // ─── Stubs de Prisma ──────────────────────────────────────────────────────────
@@ -83,6 +84,7 @@ describe('AdminClinicsService', () => {
   let stub: PrismaStub;
   let invitationsMock: { create: jest.Mock };
   let mailMock: { sendClinicInvitation: jest.Mock };
+  let clinicStatusMock: { invalidate: jest.Mock };
   let service: AdminClinicsService;
 
   beforeEach(() => {
@@ -98,10 +100,12 @@ describe('AdminClinicsService', () => {
         .fn()
         .mockResolvedValue({ ok: true, messageId: 'msg-1' }),
     };
+    clinicStatusMock = { invalidate: jest.fn().mockResolvedValue(undefined) };
     service = new AdminClinicsService(
       stub as unknown as PrismaService,
       invitationsMock as unknown as InvitationsService,
       mailMock as unknown as MailService,
+      clinicStatusMock as unknown as ClinicStatusCache,
     );
   });
 
@@ -397,6 +401,8 @@ describe('AdminClinicsService', () => {
       expect(updateCall.data['status']).toBe(ClinicStatus.SUSPENDED);
       expect(updateCall.data['suspendedAt']).toBeInstanceOf(Date);
       expect(updateCall.data['suspendedReason']).toBe('pago vencido');
+      // Invalida el cache de status → los tokens de impersonation vivos caen.
+      expect(clinicStatusMock.invalidate).toHaveBeenCalledWith('clinic-1');
     });
   });
 
@@ -428,6 +434,7 @@ describe('AdminClinicsService', () => {
       expect(updateCall.data['status']).toBe(ClinicStatus.ACTIVE);
       expect(updateCall.data['suspendedAt']).toBeNull();
       expect(updateCall.data['suspendedReason']).toBeNull();
+      expect(clinicStatusMock.invalidate).toHaveBeenCalledWith('clinic-1');
     });
 
     it('retorna { id } tras la reactivación', async () => {

@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import Redis from 'ioredis';
 import { parseRedis } from '../../reminders/reminders.module';
 import { REDIS_CLIENT } from '../../public/rate-limit.guard';
+import { ClinicStatusCache } from './clinic-status.cache';
 
 /**
  * RedisModule — provider global de un `ioredis` singleton compartido por todo
@@ -31,7 +32,10 @@ import { REDIS_CLIENT } from '../../public/rate-limit.guard';
           lazyConnect: false,
         }),
     },
+    // Cache de `Clinic.status` (JwtStrategy + admin). Vive acá porque el
+    // módulo es global y así no hay que importar nada para usarlo.
+    ClinicStatusCache,
   ],
-  exports: [REDIS_CLIENT],
+  exports: [REDIS_CLIENT, ClinicStatusCache],
 })
 export class RedisModule {}
