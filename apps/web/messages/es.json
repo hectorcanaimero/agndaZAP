@@ -1,5 +1,11 @@
 {
   "common": {
+    "error": {
+      "title": "Algo salió mal",
+      "description": "No pudimos cargar esta sección. Probá de nuevo; si el problema sigue, avisanos.",
+      "retry": "Reintentar",
+      "reference": "Referencia: {digest}"
+    },
     "skipToContent": "Saltar al contenido",
     "cancel": "Cancelar",
     "search": "Buscar",
