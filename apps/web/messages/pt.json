@@ -98,7 +98,16 @@
     "title": "Pronto, {name}!",
     "subtitle": "Sua consulta ficou agendada para o dia {date} às {time}.",
     "whatsappNote": "Vamos te mandar um WhatsApp para confirmar.",
-    "backLink": "Voltar a agendar"
+    "backLink": "Voltar a agendar",
+    "addToCalendar": "Adicionar ao calendário",
+    "calendarTitle": "Consulta em {clinic}",
+    "whatsappLink": "Falar com a clínica pelo WhatsApp",
+    "summary": {
+      "service": "Serviço",
+      "professional": "Profissional",
+      "when": "Data e hora",
+      "address": "Endereço"
+    }
   },
   "login": {
     "title": "Entrar",

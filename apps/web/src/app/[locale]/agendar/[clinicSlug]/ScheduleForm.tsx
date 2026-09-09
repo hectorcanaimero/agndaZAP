@@ -525,9 +525,15 @@ export function ScheduleForm(props: ScheduleFormProps) {
           // No es crítico — la página /gracias muestra un fallback.
         }
       }
+      // start/end (ISO) alimentan el .ics; service/professional son IDs
+      // públicos de la clínica que /gracias resuelve a nombre. Sin PII.
       const qs = new URLSearchParams({
         date: dateFmt,
         time: timeFmt,
+        start: startISO,
+        end: result.data.endAt,
+        service: values.serviceId,
+        professional: values.professionalId,
       });
       router.push(`/${locale}/agendar/${clinicSlug}/gracias?${qs.toString()}`);
       return;
