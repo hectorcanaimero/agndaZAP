@@ -30,7 +30,7 @@ export default async function SeguridadPage({
   return (
     <div className="min-h-screen bg-white text-neutral-900">
       <Nav />
-      <main>
+      <main id="main" tabIndex={-1}>
         <SecuritySection />
       </main>
       <Footer />

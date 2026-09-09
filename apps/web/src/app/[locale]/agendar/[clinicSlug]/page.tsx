@@ -75,7 +75,7 @@ export default async function AgendarPage({
     .join('');
 
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-8 md:py-12">
+    <main id="main" tabIndex={-1} className="min-h-screen bg-gray-50 px-4 py-8 md:py-12">
       <div className="mx-auto max-w-5xl">
         <div className="grid gap-8 md:grid-cols-[320px_1fr]">
           {/* Sidebar — info clínica. Sticky en desktop para que quede visible

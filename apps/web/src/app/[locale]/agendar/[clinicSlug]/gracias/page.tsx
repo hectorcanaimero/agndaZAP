@@ -29,7 +29,7 @@ export default async function GraciasPage({
   const time = typeof sp.time === 'string' ? sp.time : '';
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-8">
+    <main id="main" tabIndex={-1} className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-8">
       <Card className="w-full max-w-md shadow-sm">
         <CardContent className="p-8 text-center">
           {/* Icono principal — verde brand-600 sobre halo brand-50 para

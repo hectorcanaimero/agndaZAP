@@ -8,6 +8,7 @@ import { routing } from '@/i18n/routing';
 import { QueryProvider } from '@/lib/query-provider';
 import { Toaster } from '@/components/ui/sonner';
 import { Analytics } from '@/components/analytics/Analytics';
+import { SkipToContent } from '@/components/a11y/SkipToContent';
 import '../globals.css';
 
 // Inter — body/UI en TODO el sistema (landing, panel, admin).
@@ -88,6 +89,7 @@ export default async function LocaleLayout({
       <body className="antialiased font-sans" suppressHydrationWarning>
         <QueryProvider>
           <NextIntlClientProvider messages={messages} locale={locale}>
+            <SkipToContent />
             {children}
             <Toaster richColors position="top-right" />
             <Analytics />

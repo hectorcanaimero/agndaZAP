@@ -1,5 +1,6 @@
 {
   "common": {
+    "skipToContent": "Saltar al contenido",
     "cancel": "Cancelar",
     "search": "Buscar",
     "columns": "Columnas",
