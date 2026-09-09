@@ -255,6 +255,8 @@ Ver [`.env.example`](./.env.example) para la lista completa. Las críticas:
 | `ICAL_SECRET`       | Firma de los feeds iCal `/ical/professionals/:id` (sin Bearer) |
 | `WEB_BASE_URL`      | URL pública del web; el bot la usa para armar `…/agendar/slug?t=<token>` |
 | `NEXT_PUBLIC_PLAUSIBLE_DOMAIN` | Dominio en Plausible (build-time). Vacío → analytics apagado |
+| `NEXT_PUBLIC_WHATSAPP_SALES` | Número de ventas para el CTA "Escribinos por WhatsApp" del landing (build-time). Vacío → el CTA no se muestra |
+| `NEXT_PUBLIC_WEB_URL` | URL canónica del web para sitemap, robots y JSON-LD (build-time). Default `https://showly.tech` |
 | `SENTRY_DSN` + `AXIOM_*` | Observabilidad. `SENTRY_DSN` es fail-fast en prod aunque `SENTRY_ENABLED=false` |
 | `RESEND_API_KEY`    | Envío de invitaciones por email                        |
 | `WAHA_BASE_URL` + `WAHA_API_KEY` | Cliente WAHA para enviar mensajes         |
