@@ -55,7 +55,13 @@ export function Nav() {
             size="sm"
             className="group rounded-full bg-brand-navy px-5 text-sm font-semibold text-white shadow-warm-md transition-transform duration-300 ease-out-soft hover:-translate-y-0.5 hover:shadow-warm-lg hover:bg-brand-navy/95"
           >
-            <a href="#cta">{t('primaryCta')}</a>
+            <a
+              href="#cta"
+              data-analytics="cta_click"
+              data-analytics-location="nav"
+            >
+              {t('primaryCta')}
+            </a>
           </Button>
         </div>
 
@@ -92,6 +98,8 @@ export function Nav() {
             </Link>
             <a
               href="#cta"
+              data-analytics="cta_click"
+              data-analytics-location="nav-mobile"
               onClick={() => setOpen(false)}
               className="mt-2 inline-flex items-center justify-center rounded-full bg-brand-navy px-4 py-3 text-base font-semibold text-white shadow-warm-md"
             >

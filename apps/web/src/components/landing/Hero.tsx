@@ -21,7 +21,10 @@ export function Hero() {
   const t = useTranslations('landing.hero');
 
   return (
-    <section className="relative isolate overflow-hidden bg-cream-50">
+    <section
+      className="relative isolate overflow-hidden bg-cream-50"
+      data-analytics-view="hero_view"
+    >
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 -z-20 bg-mesh-hero"
@@ -71,7 +74,11 @@ export function Hero() {
                 size="lg"
                 className="group relative h-14 overflow-hidden rounded-full bg-brand-navy px-7 text-base font-semibold text-white shadow-warm-lg transition-transform duration-300 ease-out-soft hover:-translate-y-0.5 hover:shadow-warm-xl"
               >
-                <a href="#cta">
+                <a
+                  href="#cta"
+                  data-analytics="cta_click"
+                  data-analytics-location="hero"
+                >
                   <span
                     aria-hidden="true"
                     className="absolute inset-0 -z-10 bg-gradient-to-r from-brand-navy via-brand-navy to-brand-teal/40 opacity-0 transition-opacity duration-500 group-hover:opacity-100"

@@ -1,5 +1,7 @@
 'use client';
 
+import { track } from '@/lib/analytics';
+
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Calendar, MessageSquare, Stethoscope, User } from 'lucide-react';
@@ -432,6 +434,10 @@ export function ScheduleForm(props: ScheduleFormProps) {
     });
 
     if (result.ok) {
+      track('appointment_created', {
+        clinic: clinicSlug,
+        source: prefill?.token ? 'whatsapp' : 'web',
+      });
       const startISO = result.data.startAt;
       const dateFmt = new Intl.DateTimeFormat(locale, {
         timeZone: timezone,
@@ -645,7 +651,10 @@ export function ScheduleForm(props: ScheduleFormProps) {
                           // que el paciente cambie de slot mid-flight y termine
                           // con estado inconsistente cliente/servidor.
                           disabled={submitting}
-                          onClick={() => setValue('startAtISO', slot.startAt)}
+                          onClick={() => {
+                            setValue('startAtISO', slot.startAt);
+                            track('slot_selected', { clinic: clinicSlug });
+                          }}
                           className={`rounded-md border px-3 py-2 text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ${
                             isSelected
                               ? // bg-brand-600 sobre text-white = 4.83:1 → WCAG AA

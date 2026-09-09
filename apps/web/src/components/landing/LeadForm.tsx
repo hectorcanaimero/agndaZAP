@@ -1,5 +1,7 @@
 'use client';
 
+import { track } from '@/lib/analytics';
+
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
 import { ArrowRight, CheckCircle2 } from 'lucide-react';
@@ -125,6 +127,11 @@ export function LeadForm() {
 
     if (result.ok) {
       setSucceeded(true);
+      // Sin PII: sólo locale y el tipo de clínica (enum).
+      track('lead_submitted', {
+        locale,
+        clinicType: values.clinicType || 'unspecified',
+      });
       toast.success(t('successToast'));
       reset();
       return;
@@ -173,6 +180,7 @@ export function LeadForm() {
       onSubmit={handleSubmit(onSubmit)}
       className="rounded-2xl bg-white p-6 shadow-lg sm:p-8"
       noValidate
+      data-analytics-view="lead_form_view"
     >
       {/* Honeypot invisible. Idéntico patrón al ScheduleForm. */}
       <div className="sr-only" aria-hidden="true">
