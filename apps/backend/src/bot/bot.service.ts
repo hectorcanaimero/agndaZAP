@@ -267,7 +267,7 @@ export class BotService {
   async handleIncoming(input: {
     clinicId: string;
     chatId: string;
-    /** E.164 sin sufijo, o null si `chatId` es un @lid (no conocemos el phone). */
+    /** E.164 con `+` (ver `normalizeE164`), o null si `chatId` es un @lid. */
     phone: string | null;
     /** LID de WhatsApp sin sufijo, si el chatId venia como @lid. */
     lid?: string | null;
