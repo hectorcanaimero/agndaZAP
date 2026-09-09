@@ -48,6 +48,11 @@ Todas las rutas de negocio requieren JWT con `clinicId` y `role`. Prefijo `/api`
   profesional no define horario), no interseca ninguna cita activa del profesional, no interseca
   ningún `TimeOff`, y su inicio es futuro respecto al `now` en la TZ de la clínica.
 - El paso entre slots es `durationMin + bufferMin` del servicio.
+- `bufferMin` es tiempo ocupado **a ambos lados**: una cita existente ocupa
+  `[startAt, endAt + bufferMin de su servicio)` y el slot candidato ocupa
+  `[start, start + durationMin + bufferMin del servicio nuevo)`; ninguno de los dos
+  intervalos puede intersecar al otro. Contra `TimeOff` y el cierre del horario sólo cuenta
+  `durationMin` (el buffer puede caer en un bloqueo o fuera de horario).
 - Toda hora se calcula en la TZ de la clínica.
 
 ### Creación de cita
