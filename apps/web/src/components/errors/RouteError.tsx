@@ -29,7 +29,6 @@ export function RouteError({
 
   return (
     <div
-      role="alert"
       className="mx-auto flex w-full max-w-lg flex-col items-center gap-4 rounded-xl border border-border bg-card px-6 py-10 text-center shadow-sm"
     >
       <span className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
@@ -39,7 +38,9 @@ export function RouteError({
         <h1 className="text-xl font-semibold tracking-tight text-foreground">
           {t('title')}
         </h1>
-        <p className="text-sm text-muted-foreground">{t('description')}</p>
+        <p role="alert" className="text-sm text-muted-foreground">
+          {t('description')}
+        </p>
       </div>
       {showDetails ? (
         <pre className="max-w-full overflow-x-auto rounded-md bg-muted p-3 text-left text-xs text-muted-foreground">

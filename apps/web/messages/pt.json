@@ -13,7 +13,8 @@
     "page": "Página",
     "empty": "Sem resultados",
     "previous": "Anterior",
-    "next": "Próximo"
+    "next": "Próximo",
+    "loading": "Carregando…"
   },
   "page": {
     "title": "Agende sua consulta",

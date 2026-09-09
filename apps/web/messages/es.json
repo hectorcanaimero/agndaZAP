@@ -13,7 +13,8 @@
     "page": "Página",
     "empty": "Sin resultados",
     "previous": "Anterior",
-    "next": "Siguiente"
+    "next": "Siguiente",
+    "loading": "Cargando…"
   },
   "page": {
     "title": "Agendá tu cita",

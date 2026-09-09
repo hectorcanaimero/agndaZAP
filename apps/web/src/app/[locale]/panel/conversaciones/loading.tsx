@@ -1,13 +1,16 @@
+import { getTranslations } from 'next-intl/server';
 import { Skeleton } from '@/components/ui/skeleton';
 
 /** Skeleton con el patrón de la bandeja: header + split lista/chat. */
-export default function ConversationsLoading() {
+export default async function ConversationsLoading() {
+  const t = await getTranslations('common');
   return (
     <div
       className="flex h-full min-h-0 flex-col gap-4"
       aria-busy="true"
       aria-live="polite"
     >
+      <span className="sr-only">{t('loading')}</span>
       <div className="shrink-0 space-y-2">
         <Skeleton className="h-7 w-48" />
         <Skeleton className="h-4 w-80 max-w-full" />

@@ -116,11 +116,15 @@ export default async function InvitePage({
  * ni del panel — es una page-level shell mínima. */
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-muted/40 px-4 py-12">
+    <main
+      id="main"
+      tabIndex={-1}
+      className="flex min-h-dvh items-center justify-center bg-muted/40 px-4 py-12 outline-none"
+    >
       <div className="w-full max-w-md rounded-xl border border-border bg-card p-8 shadow-sm">
         {children}
       </div>
-    </div>
+    </main>
   );
 }
 

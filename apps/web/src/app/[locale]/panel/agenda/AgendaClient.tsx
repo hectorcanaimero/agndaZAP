@@ -314,8 +314,7 @@ export function AgendaClient({
             <div className="flex items-center gap-0.5 rounded-lg border border-border bg-background">
               <Button
                 variant="ghost"
-                size="icon"
-                className="min-h-11 min-w-11"
+                className="h-11 w-11 p-0"
                 onClick={() => shiftPeriod(-1)}
                 aria-label={t('prevPeriod')}
               >
@@ -323,8 +322,7 @@ export function AgendaClient({
               </Button>
               <Button
                 variant="ghost"
-                size="icon"
-                className="min-h-11 min-w-11"
+                className="h-11 w-11 p-0"
                 onClick={() => shiftPeriod(1)}
                 aria-label={t('nextPeriod')}
               >

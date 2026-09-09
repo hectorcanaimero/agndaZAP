@@ -1,9 +1,12 @@
+import { getTranslations } from 'next-intl/server';
 import { Skeleton } from '@/components/ui/skeleton';
 
 /** Skeleton con el patrón de la agenda: header + toolbar + grid mensual. */
-export default function AgendaLoading() {
+export default async function AgendaLoading() {
+  const t = await getTranslations('common');
   return (
     <div className="w-full space-y-6" aria-busy="true" aria-live="polite">
+      <span className="sr-only">{t('loading')}</span>
       <div className="space-y-2">
         <Skeleton className="h-7 w-40" />
         <Skeleton className="h-4 w-72 max-w-full" />
