@@ -918,4 +918,252 @@ describe('BotService — FSM de agendamiento', () => {
       );
     });
   });
+
+  // ───────────── Respuestas deterministas al recordatorio (SPEC §Recordatorios) ─────────────
+  // SÍ / CANCELAR / REAGENDAR se resuelven SIN LLM y fuera de la FSM.
+  describe('respuesta del paciente al recordatorio (sin FSM activa)', () => {
+    const patient = {
+      id: 'pat-1',
+      clinicId: 'clinic-A',
+      phone: '+584141234567',
+      name: 'Ana',
+    };
+    const upcoming = {
+      id: 'appt-7',
+      clinicId: 'clinic-A',
+      patientId: 'pat-1',
+      status: 'PENDIENTE',
+      startAt: tomorrow10.toJSDate(),
+      endAt: tomorrow1030.toJSDate(),
+    };
+
+    beforeEach(() => {
+      prisma.patient.findUnique.mockResolvedValue(patient);
+      prisma.appointment.findFirst.mockResolvedValue(upcoming);
+      prisma.appointment.update = jest.fn().mockResolvedValue({ ...upcoming, status: 'CANCELADA' });
+      reminders.confirmAppointment.mockResolvedValue(undefined);
+      reminders.cancelForAppointment.mockResolvedValue(undefined);
+    });
+
+    async function say(text: string) {
+      await bot.handleIncoming({
+        clinicId: 'clinic-A',
+        chatId: convoState.chatId,
+        phone: convoState.phone,
+        text,
+      });
+    }
+
+    it('busca la próxima cita dentro del tenant (clinicId + patientId, estados abiertos, futura)', async () => {
+      await say('sí');
+
+      expect(prisma.patient.findUnique).toHaveBeenCalledWith({
+        where: { clinicId_phone: { clinicId: 'clinic-A', phone: '+584141234567' } },
+      });
+      const where = prisma.appointment.findFirst.mock.calls[0][0].where;
+      expect(where.clinicId).toBe('clinic-A');
+      expect(where.patientId).toBe('pat-1');
+      expect(where.status).toEqual({ in: ['PENDIENTE', 'EN_RIESGO', 'CONFIRMADA'] });
+      expect(where.startAt.gte).toBeInstanceOf(Date);
+    });
+
+    it.each(['sí', 'SI', 'Confirmo', 'ok', 'dale'])(
+      '"%s" → confirma la cita vía RemindersService y no invoca al LLM',
+      async (text) => {
+        await say(text);
+
+        expect(reminders.confirmAppointment).toHaveBeenCalledWith('appt-7');
+        expect(reminders.cancelForAppointment).not.toHaveBeenCalled();
+        expect(intent.detect).not.toHaveBeenCalled();
+        expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/confirmada/i);
+      },
+    );
+
+    it.each(['cancelar', 'CANCELAR', 'cancelo', 'anular'])(
+      '"%s" → marca la cita CANCELADA con canceledAt y elimina sus recordatorios',
+      async (text) => {
+        await say(text);
+
+        expect(prisma.appointment.update).toHaveBeenCalledWith({
+          where: { id: 'appt-7' },
+          data: expect.objectContaining({ status: 'CANCELADA', canceledAt: expect.any(Date) }),
+        });
+        expect(reminders.cancelForAppointment).toHaveBeenCalledWith('appt-7');
+        expect(reminders.confirmAppointment).not.toHaveBeenCalled();
+        expect(intent.detect).not.toHaveBeenCalled();
+        expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/cancelada/i);
+      },
+    );
+
+    it.each(['reagendar', 'reprogramar'])(
+      '"%s" → detiene los recordatorios, deriva a recepción (NEEDS_HUMAN) y NO mueve la cita',
+      async (text) => {
+        await say(text);
+
+        expect(reminders.cancelForAppointment).toHaveBeenCalledWith('appt-7');
+        expect(prisma.appointment.update).not.toHaveBeenCalled();
+        expect(convoState.state).toBe('NEEDS_HUMAN');
+        expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/recepción/i);
+      },
+    );
+
+    it('Intent.REPROGRAMAR del LLM sigue el mismo camino que "reagendar"', async () => {
+      intent.detect.mockResolvedValue(Intent.REPROGRAMAR);
+
+      await say('quiero mover mi turno de la semana que viene');
+
+      expect(reminders.cancelForAppointment).toHaveBeenCalledWith('appt-7');
+      expect(convoState.state).toBe('NEEDS_HUMAN');
+    });
+
+    it('sin cita próxima: responde que no la encontró y no toca reminders', async () => {
+      prisma.appointment.findFirst.mockResolvedValue(null);
+
+      await say('sí');
+
+      expect(reminders.confirmAppointment).not.toHaveBeenCalled();
+      expect(reminders.cancelForAppointment).not.toHaveBeenCalled();
+      expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/No encontré una cita/i);
+    });
+
+    it('paciente desconocido en este tenant: no cruza a otras clínicas', async () => {
+      prisma.patient.findUnique.mockResolvedValue(null);
+
+      await say('cancelar');
+
+      expect(prisma.appointment.findFirst).not.toHaveBeenCalled();
+      expect(prisma.appointment.update).not.toHaveBeenCalled();
+      expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/No encontré una cita/i);
+    });
+
+    it('chat @lid sin teléfono: no puede asociar cita → deriva a recepción', async () => {
+      await bot.handleIncoming({
+        clinicId: 'clinic-A',
+        chatId: 'abc123@lid',
+        phone: null,
+        lid: 'abc123',
+        text: 'sí',
+      });
+
+      expect(prisma.appointment.findFirst).not.toHaveBeenCalled();
+      expect(reminders.confirmAppointment).not.toHaveBeenCalled();
+      expect(convoState.state).toBe('NEEDS_HUMAN');
+    });
+
+    it('"sí" con la FSM activa NO se interpreta como confirmación de recordatorio', async () => {
+      convoState.flowStep = 'ASK_NAME';
+      convoState.flowData = { serviceId: 'svc-1', professionalId: 'prof-1', startAtISO: tomorrow10.toISO() };
+
+      await say('sí');
+
+      expect(reminders.confirmAppointment).not.toHaveBeenCalled();
+    });
+
+    it('"sin turno para hoy?" no matchea el prefijo "si" (word boundary)', async () => {
+      intent.detect.mockResolvedValue(Intent.PREGUNTA_FAQ);
+
+      await say('sin turno para hoy?');
+
+      expect(reminders.confirmAppointment).not.toHaveBeenCalled();
+      expect(intent.detect).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ───────────── Sub-FSM de satisfacción post-atención (ADR 0012) ─────────────
+  describe('sub-FSM AWAITING_NPS_SCORE / AWAITING_NPS_COMMENT', () => {
+    beforeEach(() => {
+      convoState.flowStep = 'AWAITING_NPS_SCORE';
+      convoState.flowData = { feedbackAppointmentId: 'appt-9' };
+      (prisma as any).feedback = { update: jest.fn().mockResolvedValue({}) };
+    });
+
+    async function say(text: string) {
+      await bot.handleIncoming({
+        clinicId: 'clinic-A',
+        chatId: convoState.chatId,
+        phone: convoState.phone,
+        text,
+      });
+    }
+
+    it.each([
+      ['5', 5],
+      ['1', 1],
+      ['cinco', 5],
+      ['3 estrellas', 3],
+    ])('"%s" → registra score %s con clinicId y pasa a AWAITING_NPS_COMMENT', async (text, score) => {
+      await say(text);
+
+      expect(followUps.recordFeedback).toHaveBeenCalledWith('clinic-A', 'appt-9', score);
+      expect(convoState.flowStep).toBe('AWAITING_NPS_COMMENT');
+      expect(convoState.flowData).toEqual({ feedbackAppointmentId: 'appt-9', feedbackScore: score });
+      expect(intent.detect).not.toHaveBeenCalled();
+      expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/Gracias/);
+    });
+
+    it.each(['0', '6', '10', 'excelente'])(
+      '"%s" fuera de rango → pide corregir y se queda en AWAITING_NPS_SCORE',
+      async (text) => {
+        await say(text);
+
+        expect(followUps.recordFeedback).not.toHaveBeenCalled();
+        expect(convoState.flowStep).toBe('AWAITING_NPS_SCORE');
+        expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/número del \*1\* al \*5\*/);
+      },
+    );
+
+    it('"cancelar" durante el score NO aborta la sub-FSM ni cancela citas', async () => {
+      await say('cancelar');
+
+      expect(convoState.flowStep).toBe('AWAITING_NPS_SCORE');
+      expect(reminders.cancelForAppointment).not.toHaveBeenCalled();
+      expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/No entendí/);
+    });
+
+    it('segunda respuesta (created=false) → agradece y cierra la sub-FSM sin pedir comentario', async () => {
+      followUps.recordFeedback.mockResolvedValue({ created: false });
+
+      await say('4');
+
+      expect(convoState.flowStep).toBeNull();
+      expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/Gracias por tu respuesta/);
+    });
+
+    it('flowData corrupto (sin feedbackAppointmentId) → resetea sin registrar nada', async () => {
+      convoState.flowData = {};
+
+      await say('5');
+
+      expect(followUps.recordFeedback).not.toHaveBeenCalled();
+      expect(convoState.flowStep).toBeNull();
+    });
+
+    it('AWAITING_NPS_COMMENT: texto libre se guarda como comment (máx 1000) y cierra', async () => {
+      convoState.flowStep = 'AWAITING_NPS_COMMENT';
+      convoState.flowData = { feedbackAppointmentId: 'appt-9', feedbackScore: 5 };
+      const long = 'x'.repeat(1500);
+
+      await say(`  ${long}  `);
+
+      expect(prisma.feedback.update).toHaveBeenCalledWith({
+        where: { appointmentId: 'appt-9' },
+        data: { comment: 'x'.repeat(1000) },
+      });
+      expect(convoState.flowStep).toBeNull();
+      expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/Muchas gracias/);
+    });
+
+    it.each(['no', 'Nada', 'listo', 'OK'])(
+      'AWAITING_NPS_COMMENT: "%s" cierra sin guardar comentario',
+      async (text) => {
+        convoState.flowStep = 'AWAITING_NPS_COMMENT';
+        convoState.flowData = { feedbackAppointmentId: 'appt-9', feedbackScore: 5 };
+
+        await say(text);
+
+        expect(prisma.feedback.update).not.toHaveBeenCalled();
+        expect(convoState.flowStep).toBeNull();
+      },
+    );
+  });
 });
