@@ -109,6 +109,16 @@ export function pinoConfig(): Params {
         orgId: process.env.AXIOM_ORG_ID ?? '',
       },
     });
+    // Con un transport explícito Pino deja de escribir a stdout: `docker logs`
+    // del backend quedaba vacío en producción y el diagnóstico del webhook
+    // (2026-09-10) se hizo a ciegas. Mantenemos JSON por stdout además de Axiom.
+    if (process.env.LOG_PRETTY !== 'true') {
+      targets.push({
+        target: 'pino/file',
+        level,
+        options: { destination: 1 },
+      });
+    }
   }
 
   return {

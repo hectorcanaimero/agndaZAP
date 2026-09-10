@@ -37,6 +37,20 @@ Coolify parsea el compose y crea una entrada vacía por cada `${VAR}`; el bulk s
 
 Reglas aprendidas:
 
+- **No usar `is_literal: true` en NINGUNA variable de esta app**: Coolify la escribe
+  entrecomillada. Con `NEXT_PUBLIC_API_URL` la comilla se horneó en el bundle y el
+  login del panel apuntaba a `/es/'https://api…'/api/auth/login` (2026-09-10).
+  Excepción histórica: `POSTGRES_PASSWORD` sigue literal porque la DB se inicializó con
+  la contraseña entrecomillada; para limpiarla: `ALTER USER showly PASSWORD '<valor>'`
+  en el contenedor `db` y luego pasar la variable a no-literal.
+- **Sin `WEBHOOK_HMAC_SECRET` con WAHA community**: esa edición no firma los webhooks; si
+  la variable existe el backend exige HMAC y responde 403 a todo (el bot no contesta,
+  `wahaConnected` nunca pasa a `true`). Sólo `WEBHOOK_TOKEN` hasta migrar a WAHA Plus
+  (ADR 0017).
+- **Nunca inyectar eventos `message` sintéticos en producción**: el bot responde por
+  WhatsApp real al `from` del evento. Probar el webhook con `session.status` o con el
+  número propio.
+
 - **No usar `is_literal: true`** en variables que el compose interpola en healthchecks o
   en `initdb` (`POSTGRES_USER`, `POSTGRES_DB`): Coolify las escribe entrecomilladas en el
   `.env` y Postgres falla con `invalid character in extension owner`.
