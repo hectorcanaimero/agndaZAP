@@ -111,9 +111,10 @@ export function createRemindersWorker(
         .toFormat("cccc d 'de' LLLL, HH:mm");
 
       const text =
-        `Hola${appt.patient.name ? ' ' + appt.patient.name : ''}, te recordamos tu cita ` +
-        `de ${appt.service.name} en ${appt.clinic.name} el ${when}.\n\n` +
-        `Responde *SÍ* para confirmar, *REAGENDAR* para cambiarla o *CANCELAR*.`;
+        `Hola${appt.patient.name ? ' ' + appt.patient.name : ''}, reservaste una cita ` +
+        `de ${appt.service.name} en ${appt.clinic.name} para el ${when}. ¿Confirmas que vas?\n\n` +
+        `Responde *SÍ* para confirmar, *REAGENDAR* para cambiarla o *CANCELAR* si no puedes ir, ` +
+        `así liberamos el turno para otro paciente.`;
 
       await waha.sendText(appt.clinic.wahaSession, appt.patient.phone, text);
 

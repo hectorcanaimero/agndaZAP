@@ -28,15 +28,22 @@ export const EMBEDDING_DIMS = 1536;
 
 /**
  * Distancia coseno máxima (pgvector `<=>` en `[0, 2]`) para considerar un chunk
- * como match confiable. Umbral MVP: 0.5 (aprox. similitud >= 0.75).
+ * como match confiable. Umbral: 0.65.
  *
- * Rationale: en test empírico con `text-embedding-3-small`, chunks de FAQ
- * temáticamente relacionados suelen caer en `[0.15, 0.45]`; chunks irrelevantes
- * suben rápido a `> 0.6`. Con 0.5 preferimos hacer handoff antes que inventar.
- * Ajustable via `retrieve({ maxDistance })` cuando la base crezca y podamos
- * calibrar contra queries reales.
+ * Calibración 2026-09-10 con `text-embedding-3-small` contra las 12 FAQ de la
+ * clínica demo (preguntas cortas y coloquiales, como escribe un paciente):
+ *   relevantes → "atienden niños" 0.454 · "me duele una muela" 0.467 ·
+ *                "cuánto cuesta una limpieza" 0.488 · "qué horario tienen" 0.515 ·
+ *                "Donde están ubicados" 0.619
+ *   irrelevantes → "tienen estacionamiento" 0.608 (cae en ubicación, aceptable) ·
+ *                  "quiero comprar un carro" 0.723 · "hola que tal" 0.730
+ * Con el umbral anterior (0.5) la pregunta de ubicación hacía handoff aunque el
+ * chunk correcto era el primero. 0.65 deja pasar lo relevante y sigue cortando
+ * lo claramente ajeno; el segundo filtro es el LLM, que devuelve `NULL_ANSWER`
+ * si las fuentes no responden. Ajustable via `retrieve({ maxDistance })`.
+ * Ver docs/notas/2026-09-10-rag-umbral-distancia.md.
  */
-export const DEFAULT_MAX_DISTANCE = 0.5;
+export const DEFAULT_MAX_DISTANCE = 0.65;
 
 /** Formato de un match retornado por `retrieve()`. */
 export interface FaqMatch {

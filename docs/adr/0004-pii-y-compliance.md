@@ -219,3 +219,19 @@ Cada item de deuda debe:
 1. Tener issue abierta en el tracker (Plane / Notion).
 2. Al cerrar, actualizar la sección correspondiente de este ADR con
    `**Estado (YYYY-MM-DD)**: cerrado — ver commit / PR / migración`.
+
+### §7.1 Copy del aviso en el bot (actualizado 2026-09-10)
+
+El saludo del bot de WhatsApp ya **no** lista los proveedores de IA. El
+`AI_DISCLOSURE` que se concatena a todo greeting quedó en una línea:
+
+> "Soy un asistente automático. Si prefieres hablar con una persona, escribe *humano*."
+
+Motivo: el consentimiento explícito con la lista de proveedores (DeepSeek,
+Google, OpenAI) ya se recoge en el form público (`publicSchedule.consent`) y en
+la política de privacidad; repetirlo en el primer mensaje del bot pesaba tanto
+como el saludo y generaba desconfianza sin aportar garantía legal adicional.
+El texto legal completo sigue siendo el de §7.
+
+Además, todos los textos que ven pacientes van en **español latinoamericano
+neutro (tuteo)**, nunca voseo. Ver [[notas/2026-09-10-tono-espanol-neutro]].

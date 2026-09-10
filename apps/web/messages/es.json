@@ -57,7 +57,7 @@
     "hints": {
       "phone": "Usá el formato internacional: +58, +55, etc.",
       "phoneFromWhatsapp": "Tomamos tu número desde WhatsApp — dejalo así para que sigamos en contacto por este chat.",
-      "selectServiceFirst": "Primero elegí un servicio."
+      "selectServiceFirst": "Primero elige un servicio."
     },
     "errors": {
       "required": "Este campo es obligatorio.",
@@ -80,7 +80,7 @@
     "sections": {
       "service": {
         "title": "Servicio",
-        "description": "Elegí qué necesitás y con quién."
+        "description": "Elige qué necesitas y con quién."
       },
       "slot": {
         "title": "Horario",
@@ -118,7 +118,7 @@
       "password": "Contraseña"
     },
     "placeholders": {
-      "email": "vos@clinica.com"
+      "email": "tu@clinica.com"
     },
     "submit": "Entrar",
     "submitting": "Ingresando...",
@@ -233,7 +233,7 @@
         "eyebrow": "Hoy",
         "description": "Tus próximas citas y cómo va el día.",
         "empty": "Sin citas para hoy",
-        "emptyHint": "Cuando alguien reserve, aparece acá.",
+        "emptyHint": "Cuando alguien reserve, aparecerá aquí.",
         "viewAgendaCta": "Ir a la agenda completa",
         "progress": "Completadas",
         "remaining": "Faltan",
@@ -314,7 +314,7 @@
       "empty": "No hay citas en el rango seleccionado.",
       "emptyState": {
         "title": "No hay citas para este día",
-        "description": "Cuando alguien agende, va a aparecer acá."
+        "description": "Cuando alguien agende, aparecerá aquí."
       },
       "viewMonth": "Mes",
       "viewDay": "Día",
@@ -448,7 +448,7 @@
       },
       "hints": {
         "phone": "El teléfono es el identificador del paciente. Para cambiarlo, la persona tiene que crear una ficha nueva desde el bot.",
-        "consent": "Marcá cuando el paciente lo confirme por WhatsApp o de forma presencial. Una vez otorgado no se puede revocar desde acá.",
+        "consent": "Marca cuando el paciente lo confirme por WhatsApp o de forma presencial. Una vez otorgado no se puede revocar desde aquí.",
         "consentGranted": "El paciente ya otorgó consent. Para revocarlo, contactá a soporte."
       },
       "convState": {
@@ -526,7 +526,7 @@
       },
       "panelEmpty": {
         "title": "Elegí una respuesta",
-        "description": "Seleccioná una respuesta de la lista para ver el detalle. Abajo tenés el resumen agregado de todas las puntuaciones recibidas."
+        "description": "Selecciona una respuesta de la lista para ver el detalle. Abajo tienes el resumen agregado de todas las puntuaciones recibidas."
       },
       "stats": {
         "total": {
@@ -581,7 +581,7 @@
       "noResultsHint": "No encontramos nada para \"{query}\".",
       "needsAttention": "Nuevo",
       "live": "En vivo",
-      "outbound": "Enviado por vos",
+      "outbound": "Enviado por ti",
       "backToList": "Volver a la bandeja",
       "composerHint": "Enter para salto de línea · ⌘↵ para enviar",
       "filters": {
@@ -945,7 +945,7 @@
       "untitled": "Sin título",
       "empty": {
         "title": "Elegí un artículo o creá uno nuevo",
-        "description": "Los artículos son la base de conocimiento del bot. Cuando un paciente pregunta algo, el bot busca acá para responder.",
+        "description": "Los artículos son la base de conocimiento del bot. Cuando un paciente pregunta algo, el bot busca aquí para responder.",
         "cta": "Crear artículo"
       },
       "selectOrCreate": "Seleccioná un artículo o creá uno nuevo.",
@@ -1248,7 +1248,7 @@
         },
         "handoff": {
           "title": "Tu equipo toma el chat cuando quiere",
-          "body": "Cuando el paciente pide una persona o vos querés entrar, tu equipo toma la conversación y Showly se calla."
+          "body": "Cuando el paciente pide una persona o tú quieres entrar, tu equipo toma la conversación y Showly se calla."
         },
         "multiPro": {
           "title": "Cada profesional con su agenda",
@@ -1426,7 +1426,7 @@
           "phoneInvalid": "Formato inválido. Ej: +52 55 1234 5678.",
           "consent": "Necesitamos tu autorización para contactarte.",
           "rateLimit": "Recibimos muchas solicitudes. Probá de nuevo en un minuto.",
-          "validation": "Revisá los datos e intentá de nuevo.",
+          "validation": "Revisa los datos e intenta de nuevo.",
           "generic": "No pudimos enviar el mensaje. Probá de nuevo."
         }
       },
@@ -1686,7 +1686,7 @@
     },
     "submit": "Activar cuenta",
     "submitting": "Activando…",
-    "success": "Cuenta activada. Ya podés ingresar con tu email y contraseña.",
+    "success": "Cuenta activada. Ya puedes ingresar con tu email y contraseña.",
     "goToLogin": "Ir al login",
     "invalid": {
       "title": "Enlace inválido",

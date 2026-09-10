@@ -522,9 +522,16 @@
   El nombre real es `WHATSAPP_HOOK_CUSTOM_HEADERS` (formato `name:value;name2:value2`, `split(':')`,
   sin espacios). Ídem `WHATSAPP_HOOK_HMAC` → `WHATSAPP_HOOK_HMAC_KEY`.
 - **Fix** en repo: renombradas ambas vars en los tres compose, `.env.example`, ADR 0005, nota de
-  auth, onboarding y spec HMAC. Pendiente: **redeploy en Coolify** (app `lcl2f6…`, hoy parada) para
-  que el cambio llegue a prod.
+  auth, onboarding y spec HMAC. Desplegado en Coolify (deploy `wgou9su…`, main `fe9c3ed`, 19:49 UTC): WAHA ya
+  manda el header y el backend responde 200; sesión `demo-session` WORKING.
 - **Gotcha HMAC**: WAHA firma con sha512 por defecto y `webhook-auth.util.ts` verifica sha256. Mientras
   no se alineen, `WEBHOOK_HMAC_SECRET` debe quedar vacío en prod y autenticar sólo por token.
 - **Dev local**: healthcheck de WAHA colgaba `compose --wait` (ver
   [[notas/2026-09-10-waha-healthcheck-wget]]). Base local migrada y sembrada con `scripts/dev-up.sh`.
+
+## 2026-09-10 — Tono de voz: español LATAM neutro + aviso de IA corto
+- Todos los textos de paciente pasan a tuteo neutro (bot, `public.controller`, 13 claves de `es.json`). Ver [[notas/2026-09-10-tono-espanol-neutro]].
+- Copy del bot rediseñado con principios de psicología (saludo con link y con contexto de cita, progreso, errores sin culpa, cierre con servicio+profesional, recordatorio como compromiso). Detalle en la nota.
+- `AI_DISCLOSURE` del bot queda en una línea sin listar proveedores; el consent del form sigue nombrándolos. ADR 0004 §7.1.
+- Palabra de escape unificada: `escribe *humano*`.
+- RAG: umbral de distancia 0.5 → 0.65 tras calibrar con preguntas reales (la pregunta de ubicación hacía handoff). Ver [[notas/2026-09-10-rag-umbral-distancia]].
