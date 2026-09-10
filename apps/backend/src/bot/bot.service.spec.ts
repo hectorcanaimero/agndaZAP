@@ -843,11 +843,11 @@ describe('BotService — FSM de agendamiento', () => {
       );
     });
 
-    it('greeting: agrega SIEMPRE el aviso de IA de terceros (ADR 0004 §7), también con custom', () => {
+    it('greeting: agrega SIEMPRE el aviso de asistente automático (ADR 0004 §7.1), también con custom', () => {
       const custom = makeClinic({ botGreeting: 'Hola, soy {clinicName}' });
       const fromCustom = (bot as any).resolveBotMessage(custom, 'greeting');
       expect(fromCustom).toContain(BotService.AI_DISCLOSURE);
-      expect(fromCustom).toContain('DeepSeek');
+      expect(fromCustom).not.toContain('DeepSeek'); // proveedores solo en el consent del form (ADR 0004 §7.1)
       expect(fromCustom).toContain('*humano*');
 
       const fromDefault = (bot as any).resolveBotMessage(
@@ -886,8 +886,77 @@ describe('BotService — FSM de agendamiento', () => {
       });
       const msg = waha.sendText.mock.calls.at(-1)![2];
       expect(msg).toContain('Clínica A'); // {clinicName} en el default
-      expect(msg).toContain('IA de terceros'); // aviso ADR 0004 §7
+      expect(msg).toContain('asistente automático'); // aviso ADR 0004 §7.1
       expect(intent.detect).not.toHaveBeenCalled();
+    });
+
+    it('greeting: incluye el link público de agendamiento sin token', async () => {
+      const prev = process.env.WEB_BASE_URL;
+      process.env.WEB_BASE_URL = 'https://showly.us/';
+      try {
+        await bot.handleIncoming({
+          clinicId: 'clinic-A',
+          chatId: '5804141234567@c.us',
+          phone: '+5804141234567',
+          text: 'buenas',
+        });
+        const msg = waha.sendText.mock.calls.at(-1)![2];
+        expect(msg).toContain('https://showly.us/es/agendar/clinica-a');
+        expect(msg).not.toContain('?t=');
+        expect(msg).toContain('*agendar*');
+      } finally {
+        if (prev === undefined) delete process.env.WEB_BASE_URL;
+        else process.env.WEB_BASE_URL = prev;
+      }
+    });
+
+    it('greeting con cita próxima: ofrece confirmar/reagendar/cancelar en vez del menú', async () => {
+      prisma.patient.findUnique.mockResolvedValue({
+        id: 'pat-1',
+        clinicId: 'clinic-A',
+        phone: '+5804141234567',
+        name: 'Ana',
+      });
+      prisma.appointment.findFirst.mockResolvedValue({
+        id: 'appt-1',
+        status: 'PENDIENTE',
+        startAt: new Date('2026-09-12T14:00:00.000Z'),
+        service: { name: 'Limpieza dental' },
+        patient: { name: 'Ana' },
+      });
+      await bot.handleIncoming({
+        clinicId: 'clinic-A',
+        chatId: '5804141234567@c.us',
+        phone: '+5804141234567',
+        text: 'hola',
+      });
+      const msg = waha.sendText.mock.calls.at(-1)![2];
+      expect(msg).toMatch(/^Hola Ana\./);
+      expect(msg).toContain('Limpieza dental');
+      expect(msg).toMatch(/\*SÍ\*/);
+      expect(msg).toMatch(/\*REAGENDAR\*/);
+      expect(msg).toContain('asistente automático');
+      expect(msg).not.toContain('/agendar/');
+      expect(intent.detect).not.toHaveBeenCalled();
+    });
+
+    it('greeting con cita CONFIRMADA: lo dice y no vuelve a pedir confirmación como novedad', async () => {
+      prisma.patient.findUnique.mockResolvedValue({ id: 'pat-1', clinicId: 'clinic-A', phone: '+5804141234567', name: null });
+      prisma.appointment.findFirst.mockResolvedValue({
+        id: 'appt-1',
+        status: 'CONFIRMADA',
+        startAt: new Date('2026-09-12T14:00:00.000Z'),
+        service: { name: 'Limpieza dental' },
+        patient: { name: null },
+      });
+      await bot.handleIncoming({
+        clinicId: 'clinic-A',
+        chatId: '5804141234567@c.us',
+        phone: '+5804141234567',
+        text: 'hola',
+      });
+      const msg = waha.sendText.mock.calls.at(-1)![2];
+      expect(msg).toMatch(/^Hola\. Tu cita de Limpieza dental .* ya está confirmada/);
     });
   });
 
@@ -1137,7 +1206,7 @@ describe('BotService — FSM de agendamiento', () => {
 
       expect(convoState.flowStep).toBe('AWAITING_NPS_SCORE');
       expect(reminders.cancelForAppointment).not.toHaveBeenCalled();
-      expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/No entendí/);
+      expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/no te entendí/i);
     });
 
     it('segunda respuesta (created=false) → agradece y cierra la sub-FSM sin pedir comentario', async () => {

@@ -207,7 +207,7 @@ describe('RemindersProcessor (createRemindersWorker)', () => {
       await process(makeJob('send-reminder', { reminderId: 'rem-1' }));
 
       const text = waha.sendText.mock.calls[0][2];
-      expect(text).toMatch(/^Hola, te recordamos/);
+      expect(text).toMatch(/^Hola, reservaste/);
     });
 
     it('es idempotente: si el Reminder ya no está SCHEDULED (ej. SENT) no reenvía', async () => {

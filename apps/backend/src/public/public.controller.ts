@@ -296,7 +296,7 @@ export class PublicController {
       const session = await this.sessions.consume(dto.token);
       if (!session) {
         throw new BadRequestException(
-          'el link expiró o ya fue usado — pedí uno nuevo por WhatsApp',
+          'el link expiró o ya fue usado — pide uno nuevo por WhatsApp',
         );
       }
       if (session.clinicSlug !== slug) {
