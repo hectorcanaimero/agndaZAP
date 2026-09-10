@@ -513,3 +513,18 @@
 - **Decisión**: el backend arranca sin WAHA (el health-monitor sólo loguea `waha.health.error`), así que no hace falta stub: `WAHA_BASE_URL` a un puerto discard + intervalo 60 min. `NODE_ENV=test` para esquivar `validateProdEnv` y habilitar el seed. Detalle en [[smoke-e2e]] §12.
 - **Bug detectado, no corregido**: el rate-limit público usa una sola clave Redis por `slug+ip+minuto` compartida entre GET (30/min) y POST (5/min), así que los GETs de página/slots consumen el presupuesto de 5 del POST → un paciente normal puede recibir 429 al confirmar. El spec de API espera al próximo bucket de minuto para no chocar. Fix sugerido: `scope`/endpoint en la clave.
 - Corrida local sobre `fix/body-parser-express5` (sin ese hotfix todo POST JSON devuelve 500): **3/3 verdes** en 56 s.
+
+## 2026-09-10 (noche) — webhook WAHA en prod: nombre de env equivocado
+
+- **Bug**: el bot no respondía en prod. WAHA hacía el POST a `/webhooks/waha` sin `x-webhook-token`
+  y el backend devolvía 403 en los 15 reintentos. Causa: los compose (`docker-compose.coolify.yml`,
+  `docker-compose.prod.yml`, local) y los docs usaban `WHATSAPP_HOOK_HEADERS`, que WAHA no lee.
+  El nombre real es `WHATSAPP_HOOK_CUSTOM_HEADERS` (formato `name:value;name2:value2`, `split(':')`,
+  sin espacios). Ídem `WHATSAPP_HOOK_HMAC` → `WHATSAPP_HOOK_HMAC_KEY`.
+- **Fix** en repo: renombradas ambas vars en los tres compose, `.env.example`, ADR 0005, nota de
+  auth, onboarding y spec HMAC. Pendiente: **redeploy en Coolify** (app `lcl2f6…`, hoy parada) para
+  que el cambio llegue a prod.
+- **Gotcha HMAC**: WAHA firma con sha512 por defecto y `webhook-auth.util.ts` verifica sha256. Mientras
+  no se alineen, `WEBHOOK_HMAC_SECRET` debe quedar vacío en prod y autenticar sólo por token.
+- **Dev local**: healthcheck de WAHA colgaba `compose --wait` (ver
+  [[notas/2026-09-10-waha-healthcheck-wget]]). Base local migrada y sembrada con `scripts/dev-up.sh`.

@@ -206,7 +206,7 @@ El backend recibe eventos de WAHA en `POST /webhooks/waha` (protegido por
 `WHATSAPP_HOOK_URL=http://backend:4000/webhooks/waha`.
 
 Si estás usando WAHA aparte (no via nuestro compose), configurá también
-`WHATSAPP_HOOK_HEADERS='x-webhook-token: <MISMO_TOKEN_QUE_WEBHOOK_TOKEN>'`
+`WHATSAPP_HOOK_CUSTOM_HEADERS='x-webhook-token:<MISMO_TOKEN_QUE_WEBHOOK_TOKEN>'`
 para que el backend valide el header custom.
 
 ---

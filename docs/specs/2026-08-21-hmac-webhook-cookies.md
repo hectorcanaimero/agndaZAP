@@ -120,7 +120,7 @@ ALLOW_WEBHOOK_WITHOUT_TOKEN="false"           # opt-in explícito para skip auth
 
 En docker-compose.prod.yml:
 - Sumar `WEBHOOK_HMAC_SECRET` al backend env
-- Sumar `WHATSAPP_HOOK_HMAC: ${WEBHOOK_HMAC_SECRET}` al service `waha`
+- Sumar `WHATSAPP_HOOK_HMAC_KEY: ${WEBHOOK_HMAC_SECRET}` al service `waha`
 
 ## Definition of Done
 

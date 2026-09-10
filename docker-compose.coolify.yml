@@ -76,8 +76,12 @@ services:
       WAHA_API_KEY: ${WAHA_API_KEY}
       WHATSAPP_HOOK_URL: http://backend:4000/webhooks/waha
       WHATSAPP_HOOK_EVENTS: message,session.status
-      WHATSAPP_HOOK_HEADERS: "x-webhook-token: ${WEBHOOK_TOKEN}"
-      WHATSAPP_HOOK_HMAC: ${WEBHOOK_HMAC_SECRET}
+      # WAHA sólo lee WHATSAPP_HOOK_CUSTOM_HEADERS (formato name:value;name2:value2, sin espacios).
+      # WHATSAPP_HOOK_HEADERS no existe y se ignora en silencio → 403 en el backend.
+      WHATSAPP_HOOK_CUSTOM_HEADERS: "x-webhook-token:${WEBHOOK_TOKEN}"
+      # Nombre real: WHATSAPP_HOOK_HMAC_KEY. OJO: WAHA firma con sha512 y el backend
+      # verifica sha256, así que WEBHOOK_HMAC_SECRET debe quedar vacío hasta alinear algoritmos.
+      WHATSAPP_HOOK_HMAC_KEY: ${WEBHOOK_HMAC_SECRET}
       WHATSAPP_RESTART_ALL_SESSIONS: "true"
       WAHA_DASHBOARD_ENABLED: "true"
       WAHA_DASHBOARD_USERNAME: ${WAHA_DASHBOARD_USERNAME}

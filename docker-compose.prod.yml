@@ -76,11 +76,11 @@ services:
       WAHA_API_KEY: ${WAHA_API_KEY}
       WHATSAPP_HOOK_URL: http://backend:4000/webhooks/waha
       WHATSAPP_HOOK_EVENTS: message,session.status
-      WHATSAPP_HOOK_HEADERS: "x-webhook-token: ${WEBHOOK_TOKEN}"
+      WHATSAPP_HOOK_CUSTOM_HEADERS: "x-webhook-token:${WEBHOOK_TOKEN}"
       # HMAC-SHA256 sobre el body raw. Si WAHA Plus está disponible, esto es
       # el mecanismo primario de auth del webhook. En community WAHA no lo
       # firma — el backend cae al fallback WEBHOOK_TOKEN.
-      WHATSAPP_HOOK_HMAC: ${WEBHOOK_HMAC_SECRET}
+      WHATSAPP_HOOK_HMAC_KEY: ${WEBHOOK_HMAC_SECRET}
       WHATSAPP_RESTART_ALL_SESSIONS: "true"
       # Dashboard admin (protegido por auth básica).
       WAHA_DASHBOARD_ENABLED: "true"
