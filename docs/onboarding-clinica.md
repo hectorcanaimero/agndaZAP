@@ -473,3 +473,19 @@ Otras deudas detectadas en la auditoría F1.5.T4:
   la invitación del primer admin está pendiente/aceptada/expirada).
 
 Referencias: [[SPEC]] §1 (Clínicas), [[adr/0005-auth-mvp-y-deuda]], [[notas/2026-08-14-invitation-flow]].
+
+## Demo odontológica (Puerto Ordaz)
+
+`apps/backend/prisma/seed-demo-dental.js` convierte la clínica `demo` en **Clínica Dental
+Sonrisa Guayana** (Puerto Ordaz, `America/Caracas`, es): 8 servicios, 4 profesionales (uno
+con horario propio), horarios L-V + sábado, 2 bloqueos, 14 pacientes ficticios, ~78 citas
+entre los últimos 30 días y la próxima semana con recordatorios y feedback coherentes, y 3
+conversaciones de ejemplo. Idempotente (marca `[demo-dental:v1]` / `demodental-`).
+
+```bash
+# dentro del contenedor del backend (Coolify) o con DATABASE_URL local
+node prisma/seed-demo-dental.js
+```
+
+Las FAQ no las crea el script porque necesitan embedding: cargarlas con `POST /api/faq`
+autenticado como admin de la clínica (10 preguntas dentales, ver bitácora 2026-09-10).
