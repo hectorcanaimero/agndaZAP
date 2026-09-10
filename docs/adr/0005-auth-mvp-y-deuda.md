@@ -117,7 +117,7 @@ sin justificación.
 - Antes: el chequeo estaba comentado y el webhook aceptaba requests sin token.
 - Ahora: en `NODE_ENV=production` sin `WEBHOOK_TOKEN` seteado → 403 en el
   handler ("WEBHOOK_TOKEN no configurado en producción"). Fail-closed.
-- WAHA debe configurarse con `WHATSAPP_HOOK_HEADERS='x-webhook-token: <token>'`
+- WAHA debe configurarse con `WHATSAPP_HOOK_CUSTOM_HEADERS='x-webhook-token:<token>'`
   para enviar el header custom que validamos.
 - **Deuda**: migrar a `WEBHOOK_HMAC` (firma) cuando WAHA lo soporte estable.
 

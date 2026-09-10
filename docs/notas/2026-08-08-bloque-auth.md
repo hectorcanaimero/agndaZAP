@@ -64,7 +64,7 @@ Todas validadas en `main.ts` con fail-fast para `NODE_ENV=production`:
   a una sola bucket porque `req.ip` es la IP del proxy.
 - `WEBHOOK_TOKEN` — obligatorio en producción. Sin token seteado, el
   `WebhookController` devuelve 403 fail-closed. WAHA debe configurarse
-  con `WHATSAPP_HOOK_HEADERS='x-webhook-token: <token>'`.
+  con `WHATSAPP_HOOK_CUSTOM_HEADERS='x-webhook-token:<token>'`.
 
 Ver `.env.example` en la raíz del monorepo para el listado completo con
 comentarios (recién creado post-audit; `.gitignore` en la raíz asegura que

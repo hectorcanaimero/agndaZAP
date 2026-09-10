@@ -67,6 +67,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[notas/2026-09-09-nestjs-pino-inject-con-contexto|2026-09-09 — nestjs-pino: `@InjectPinoLogger(Nombre)` rompe el bootstrap en prod]]
 - [[notas/2026-09-09-formato-phone-e164-y-dedup-webhook|2026-09-09 — Formato canónico de `phone` (E.164 con `+`) y dedup del webhook WAHA]]
 - [[notas/2026-09-09-whatsapp-publico-clinica-opt-in|2026-09-09 — WhatsApp público de la clínica (opt-in) en el snapshot para /gracias]]
+- [[notas/2026-09-10-waha-healthcheck-wget|2026-09-10 — Healthcheck de WAHA: la imagen no trae `wget`, usar `curl`]]
 
 ## Flujo de trabajo
 - [[skills-y-flujo|Skills, agentes y flujo de trabajo]]
