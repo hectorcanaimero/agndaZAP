@@ -22,6 +22,7 @@ import {
 import { createRemindersWorker } from './reminders/reminders.processor';
 import { parseRedis } from './reminders/reminders.module';
 import { createFollowUpsWorker } from './follow-ups/follow-ups.processor';
+import { createHandoffWorker } from './conversations/handoff.processor';
 import { SchedulingSessionService } from './scheduling/scheduling-session.service';
 import {
   createBotInboundWorker,
@@ -164,6 +165,14 @@ async function bootstrap(): Promise<void> {
   // distinta — así el failure de uno no arrastra al otro.
   const followUpsWorker = createFollowUpsWorker(parseRedis(), prisma, waha);
   followUpsWorker.on('ready', () => logger.log('FollowUpsWorker listo'));
+
+  // Worker del retorno automático tras un handoff (M7). Cola propia por el
+  // mismo motivo que las otras: que el fallo de una no arrastre a las demás.
+  const handoffWorker = createHandoffWorker(parseRedis(), prisma, waha);
+  handoffWorker.on('ready', () => logger.log('HandoffWorker listo'));
+  handoffWorker.on('failed', (job, err) => {
+    logger.error(`Job de handoff ${job?.id} falló: ${err?.message ?? 'unknown'}`);
+  });
   followUpsWorker.on('failed', (job, err) => {
     logger.error(
       `FollowUp job ${job?.id} falló: ${err?.message ?? 'unknown'}`,

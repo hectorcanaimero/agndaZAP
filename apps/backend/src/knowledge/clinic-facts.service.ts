@@ -4,24 +4,12 @@ import type Redis from 'ioredis';
 import { DateTime } from 'luxon';
 import { PrismaService } from '../prisma/prisma.service';
 import { REDIS_CLIENT } from '../public/rate-limit.guard';
+import { formatSchedule } from '../common/business-hours.util';
 
 /** Tope duro del bloque cacheable (clínica + horario + servicios + profesionales). */
 const MAX_CHARS = 2000;
 
 /** `weekday` de `BusinessHour`: 0=domingo … 6=sábado (ver schema.prisma). */
-const WEEKDAY_NAMES: Record<number, string> = {
-  0: 'Domingo',
-  1: 'Lunes',
-  2: 'Martes',
-  3: 'Miércoles',
-  4: 'Jueves',
-  5: 'Viernes',
-  6: 'Sábado',
-};
-
-/** Orden de despliegue lunes→domingo (no el orden numérico del campo `weekday`). */
-const WEEKDAY_DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
-
 const APPOINTMENT_STATUS_WORDS: Record<string, string> = {
   PENDIENTE: 'pendiente de confirmación',
   CONFIRMADA: 'confirmada',
@@ -220,74 +208,15 @@ export class ClinicFactsService {
 
   // ─────────────────────────── Horario ───────────────────────────
 
-  private formatMinutes(min: number): string {
-    const h = Math.floor(min / 60);
-    const m = min % 60;
-    return `${h}:${String(m).padStart(2, '0')}`;
-  }
-
   /**
-   * Agrupa días consecutivos (lunes→domingo) con el mismo rango horario:
-   * "Lunes a viernes 8:00 a 17:00. Sábado 9:00 a 13:00.". Días sin filas se
-   * omiten (cerrado), no se listan como "cerrado" explícitamente. Soporta
-   * turnos partidos (varias filas el mismo día → "9:00 a 13:00 y 15:00 a 18:00").
+   * Línea de horario para el bloque de hechos. El formateo vive en
+   * `common/business-hours.util.ts`, compartido con el mensaje de handoff del
+   * bot: dos redacciones distintas del mismo horario en la misma conversación
+   * serían peor que no darlo.
    */
   private buildScheduleLine(rows: BusinessHour[]): string {
-    if (rows.length === 0) return 'Horario: no informado';
-
-    const byWeekday = new Map<
-      number,
-      Array<{ startMinutes: number; endMinutes: number }>
-    >();
-    for (const row of rows) {
-      const list = byWeekday.get(row.weekday) ?? [];
-      list.push({ startMinutes: row.startMinutes, endMinutes: row.endMinutes });
-      byWeekday.set(row.weekday, list);
-    }
-
-    const rangeFor = (weekday: number): string | null => {
-      const list = byWeekday.get(weekday);
-      if (!list || list.length === 0) return null;
-      return [...list]
-        .sort((a, b) => a.startMinutes - b.startMinutes)
-        .map(
-          (r) =>
-            `${this.formatMinutes(r.startMinutes)} a ${this.formatMinutes(r.endMinutes)}`,
-        )
-        .join(' y ');
-    };
-
-    const groups: Array<{ days: number[]; range: string; lastIndex: number }> =
-      [];
-    WEEKDAY_DISPLAY_ORDER.forEach((weekday, index) => {
-      const range = rangeFor(weekday);
-      if (range === null) return; // día cerrado: NO extiende el grupo anterior
-      const last = groups[groups.length - 1];
-      // Sólo fusiona si el día es CONSECUTIVO al último del grupo (mismo
-      // rango Y sin un día cerrado en el medio) — evita que "lunes 9-13,
-      // martes cerrado, miércoles 9-13" salga como "lunes a miércoles".
-      if (last && last.range === range && last.lastIndex === index - 1) {
-        last.days.push(weekday);
-        last.lastIndex = index;
-      } else {
-        groups.push({ days: [weekday], range, lastIndex: index });
-      }
-    });
-
-    if (groups.length === 0) return 'Horario: no informado';
-
-    const parts = groups.map((g) => {
-      // Estilo español: sólo el primer día del tramo va con mayúscula
-      // ("Lunes a viernes"), el segundo va en minúscula salvo que sea el
-      // único día del grupo ("Sábado 9:00 a 13:00.").
-      const label =
-        g.days.length === 1
-          ? WEEKDAY_NAMES[g.days[0]]
-          : `${WEEKDAY_NAMES[g.days[0]]} a ${WEEKDAY_NAMES[g.days[g.days.length - 1]].toLowerCase()}`;
-      return `${label} ${g.range}.`;
-    });
-
-    return `Horario de atención: ${parts.join(' ')}`;
+    const schedule = formatSchedule(rows);
+    return schedule ? `Horario de atención: ${schedule}` : 'Horario: no informado';
   }
 
   // ─────────────────────────── Servicios ───────────────────────────

@@ -1,4 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
+import { HandoffQueueModule } from '../conversations/handoff.queue';
 import { FollowUpsModule } from '../follow-ups/follow-ups.module';
 import { KnowledgeModule } from '../knowledge/knowledge.module';
 import { PublicModule } from '../public/public.module';
@@ -24,6 +25,7 @@ import { IntentService } from './intent.service';
     SchedulingModule,
     KnowledgeModule,
     PublicModule,
+    HandoffQueueModule,
   ],
   providers: [BotService, IntentService],
   exports: [BotService, IntentService],

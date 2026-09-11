@@ -48,6 +48,7 @@ describe('BotService — FSM de agendamiento', () => {
    */
   let redisCounters: Map<string, number>;
   let redis: { incr: jest.Mock; expire: jest.Mock };
+  let handoffQueue: { add: jest.Mock };
   let bot: BotService;
 
   const zone = 'America/Caracas';
@@ -143,6 +144,9 @@ describe('BotService — FSM de agendamiento', () => {
         findMany: jest.fn().mockResolvedValue([professional1]),
         findFirst: jest.fn().mockResolvedValue(professional1),
       },
+      // M7: horario real de la clínica para el mensaje de handoff. Vacío por
+      // defecto → mensaje genérico.
+      businessHour: { findMany: jest.fn().mockResolvedValue([]) },
       patient: {
         findUnique: jest.fn().mockResolvedValue(null),
         // `linkConversationPatient` comprueba que el paciente sea de la clínica
@@ -211,6 +215,9 @@ describe('BotService — FSM de agendamiento', () => {
       answer: jest.fn().mockResolvedValue(null),
     };
 
+    // M7: cola del retorno automático tras un handoff.
+    handoffQueue = { add: jest.fn().mockResolvedValue({ id: 'job-1' }) };
+
     redisCounters = new Map();
     redis = {
       incr: jest.fn().mockImplementation(async (key: string) => {
@@ -232,6 +239,7 @@ describe('BotService — FSM de agendamiento', () => {
       schedulingSessions as unknown as SchedulingSessionService,
       knowledge as unknown as KnowledgeService,
       redis as any,
+      handoffQueue as any,
     );
   });
 
@@ -1109,6 +1117,25 @@ describe('BotService — FSM de agendamiento', () => {
     });
   });
 
+  // ── M7: handoff con expectativa real y retorno automático ──
+  describe('handoff (M7)', () => {
+    /** Lunes a viernes de 8:00 a 17:00. */
+    const lunesAViernes = [1, 2, 3, 4, 5].map((weekday) => ({
+      id: `bh-${weekday}`,
+      clinicId: 'clinic-A',
+      professionalId: null,
+      weekday,
+      startMinutes: 8 * 60,
+      endMinutes: 17 * 60,
+    }));
+
+    afterEach(() => {
+      // `DateTime.now` se mockea en varios de estos tests; sin restaurarlo se
+      // filtra a los que comparan ventanas de tiempo con `Date.now()` real.
+      jest.restoreAllMocks();
+    });
+
+    async function pedirHumano() {
   // ── B7: una clínica pt recibe el bot en portugués ──
   describe('copy por idioma de la clínica (B7)', () => {
     beforeEach(() => {
@@ -1122,11 +1149,79 @@ describe('BotService — FSM de agendamiento', () => {
         clinicId: 'clinic-A',
         chatId: convoState.chatId,
         phone: convoState.phone,
+        text: 'humano',
         text,
       });
       return waha.sendText.mock.calls.at(-1)![2] as string;
     }
 
+    it('fuera de horario dice cuándo responden, no "enseguida"', async () => {
+      // Domingo a las 22:00 en la TZ de la clínica.
+      prisma.businessHour.findMany.mockResolvedValue(lunesAViernes);
+      const domingoNoche = DateTime.fromObject(
+        { year: 2026, month: 9, day: 13, hour: 22 },
+        { zone: 'America/Caracas' },
+      );
+      jest.spyOn(DateTime, 'now').mockReturnValue(domingoNoche as any);
+
+      const msg = await pedirHumano();
+
+      expect(msg).toContain('horario de atención');
+      expect(msg).toContain('Lunes a viernes 8:00 a 17:00');
+      expect(msg).not.toMatch(/enseguida/i);
+    });
+
+    it('dentro de horario mantiene el "enseguida te atiende"', async () => {
+      prisma.businessHour.findMany.mockResolvedValue(lunesAViernes);
+      const martesManana = DateTime.fromObject(
+        { year: 2026, month: 9, day: 15, hour: 10 },
+        { zone: 'America/Caracas' },
+      );
+      jest.spyOn(DateTime, 'now').mockReturnValue(martesManana as any);
+
+      const msg = await pedirHumano();
+
+      expect(msg).toMatch(/persona del equipo/i);
+    });
+
+    it('sin BusinessHour cargado no promete un horario que nadie configuró', async () => {
+      prisma.businessHour.findMany.mockResolvedValue([]);
+
+      const msg = await pedirHumano();
+
+      expect(msg).toMatch(/persona del equipo/i);
+      expect(msg).not.toContain('horario de atención');
+    });
+
+    it('solo mira el horario de la CLÍNICA, no el de un profesional', async () => {
+      await pedirHumano();
+
+      expect(prisma.businessHour.findMany).toHaveBeenCalledWith({
+        where: { clinicId: 'clinic-A', professionalId: null },
+      });
+    });
+
+    it('programa el retorno automático al bot, idempotente por conversación', async () => {
+      await pedirHumano();
+
+      expect(handoffQueue.add).toHaveBeenCalledWith(
+        'handoff-timeout',
+        { conversationId: 'convo-1', clinicId: 'clinic-A' },
+        expect.objectContaining({
+          jobId: 'handoff:convo-1',
+          delay: 4 * 60 * 60 * 1000,
+        }),
+      );
+    });
+
+    it('si la cola falla, el handoff sigue siendo válido', async () => {
+      // Fail-open: lo que se pierde es el rescate, no la derivación.
+      handoffQueue.add.mockRejectedValue(new Error('redis down'));
+
+      const msg = await pedirHumano();
+
+      expect(convoState.state).toBe('NEEDS_HUMAN');
+      expect(msg).toBeTruthy();
     function conCitaProxima() {
       prisma.patient.findUnique.mockResolvedValue({
         id: 'pat-1',

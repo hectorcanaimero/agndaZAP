@@ -23,6 +23,15 @@ import {
   schedulingUrl,
   schedulingUrlWithToken,
 } from '../common/web-url.util';
+import {
+  formatSchedule,
+  isWithinBusinessHours,
+} from '../common/business-hours.util';
+import {
+  HANDOFF_TIMEOUT_HOURS,
+  HandoffQueue,
+  HANDOFF_QUEUE_TOKEN,
+} from '../conversations/handoff.queue';
 import { botCopy, BotCopy } from './bot.messages';
 import { Intent, IntentService } from './intent.service';
 import {
@@ -119,6 +128,7 @@ export class BotService {
     private readonly schedulingSessions: SchedulingSessionService,
     private readonly knowledge: KnowledgeService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    @Inject(HANDOFF_QUEUE_TOKEN) private readonly handoffQueue: HandoffQueue,
   ) {}
 
   /**
@@ -545,12 +555,12 @@ export class BotService {
     // `isHumanEscape`. `persona` a secas NO deriva (B3). Reseteamos FSM y
     // marcamos NEEDS_HUMAN para la bandeja.
     if (isHumanEscape(normalized)) {
-      await this.markNeedsHuman(convo.id);
+      await this.markNeedsHuman(convo.id, clinic.id);
       await this.reply(
         clinic.wahaSession,
         chatId,
         convo.id,
-        this.resolveBotMessage(clinic, 'handoff'),
+        await this.resolveHandoffMessage(clinic),
       );
       return;
     }
@@ -635,12 +645,12 @@ export class BotService {
     const intent = await this.intent.detect(effectiveText, clinic.locale);
     switch (intent) {
       case Intent.HABLAR_HUMANO:
-        await this.markNeedsHuman(convo.id);
+        await this.markNeedsHuman(convo.id, clinic.id);
         await this.reply(
           clinic.wahaSession,
           chatId,
           convo.id,
-          this.resolveBotMessage(clinic, 'handoff'),
+          await this.resolveHandoffMessage(clinic),
         );
         break;
 
@@ -701,12 +711,12 @@ export class BotService {
             await this.withClosingCta(clinic, convo, result.answer),
           );
         } else {
-          await this.markNeedsHuman(convo.id);
+          await this.markNeedsHuman(convo.id, clinic.id);
           await this.reply(
             clinic.wahaSession,
             chatId,
             convo.id,
-            this.resolveBotMessage(clinic, 'handoff'),
+            await this.resolveHandoffMessage(clinic),
           );
         }
         break;
@@ -1661,7 +1671,7 @@ export class BotService {
                 startAt: new Date(data.startAtISO!),
               })
             : null;
-          await this.markNeedsHuman(convo.id);
+          await this.markNeedsHuman(convo.id, clinic.id);
           await this.reply(
             clinic.wahaSession,
             convo.chatId,
@@ -1914,7 +1924,7 @@ export class BotService {
           convo.id,
           this.copy(clinic).cannotLinkChat,
         );
-        await this.markNeedsHuman(convo.id);
+        await this.markNeedsHuman(convo.id, clinic.id);
         return;
       }
       await this.reply(
@@ -1968,7 +1978,7 @@ export class BotService {
       // Cita sin servicio o profesional resolubles: no podemos listar horarios
       // comparables, así que el link (o recepción) es el único camino honesto.
       if (!link) {
-        await this.markNeedsHuman(convo.id);
+        await this.markNeedsHuman(convo.id, clinic.id);
         await this.reply(
           clinic.wahaSession,
           convo.chatId,
@@ -2003,7 +2013,10 @@ export class BotService {
     );
   }
 
-  private async markNeedsHuman(convoId: string): Promise<void> {
+  private async markNeedsHuman(
+    convoId: string,
+    clinicId?: string,
+  ): Promise<void> {
     await this.prisma.conversation.update({
       where: { id: convoId },
       data: {
@@ -2012,6 +2025,61 @@ export class BotService {
         flowData: Prisma.JsonNull,
       },
     });
+
+    // M7: si nadie la toma en unas horas, el bot recupera el control. Sin esto
+    // una conversación derivada un viernes a las 21:00 se queda muda hasta que
+    // alguien entre al panel el lunes.
+    //
+    // Fail-open: si la cola no responde, el handoff sigue siendo válido — lo
+    // que se pierde es el rescate, no la derivación.
+    if (!clinicId) return;
+    try {
+      await this.handoffQueue.add(
+        'handoff-timeout',
+        { conversationId: convoId, clinicId },
+        {
+          delay: HANDOFF_TIMEOUT_HOURS * 60 * 60 * 1000,
+          jobId: `handoff:${convoId}`,
+        },
+      );
+    } catch (e) {
+      this.logger.error(
+        `no se pudo programar el retorno del handoff convoId=${convoId}: ${(e as Error).message}`,
+      );
+    }
+  }
+
+  /**
+   * Mensaje de handoff con la expectativa REAL (M7).
+   *
+   * "Enseguida te atiende una persona" a las 22:00 de un sábado es mentira, y
+   * una mentira que el paciente descubre esperando. Si estamos fuera del
+   * horario de la clínica decimos cuándo responden, con el mismo texto que usa
+   * el bloque de hechos del RAG.
+   *
+   * Sin `BusinessHour` cargado caemos al mensaje genérico: no podemos prometer
+   * un horario que nadie configuró.
+   */
+  private async resolveHandoffMessage(clinic: Clinic): Promise<string> {
+    const base = this.resolveBotMessage(clinic, 'handoff');
+    try {
+      const rows = await this.prisma.businessHour.findMany({
+        where: { clinicId: clinic.id, professionalId: null },
+      });
+      if (rows.length === 0) return base;
+
+      const now = DateTime.now().setZone(clinic.timezone);
+      if (isWithinBusinessHours(rows, now)) return base;
+
+      const schedule = formatSchedule(rows);
+      if (!schedule) return base;
+      return `Le paso tu mensaje al equipo. Te responden en horario de atención: ${schedule}`;
+    } catch (e) {
+      this.logger.warn(
+        `handoff sin horario real clinicId=${clinic.id}: ${(e as Error).message}`,
+      );
+      return base;
+    }
   }
 
   /**
