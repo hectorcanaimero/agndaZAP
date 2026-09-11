@@ -19,12 +19,39 @@
  * `embedding IS NULL`. Correrlo dos veces seguidas → segunda vuelta es no-op.
  */
 import { PrismaClient } from '@prisma/client';
+import { ClinicFactsService } from '../src/knowledge/clinic-facts.service';
 import {
   KnowledgeService,
   KnowledgeUnavailableError,
 } from '../src/knowledge/knowledge.service';
+import { LlmRouterService } from '../src/common/llm/llm-router.service';
+import { PrismaService } from '../src/prisma/prisma.service';
 
 const prisma = new PrismaClient();
+
+
+/**
+ * `KnowledgeService` para uso de script: solo `ingest()` / `embedText()`.
+ *
+ * Esos dos métodos no tocan `llm` ni `clinicFacts` (verificado: solo los usa
+ * `answer()`, que es el RAG), así que el script no tiene con qué construirlos
+ * ni los necesita.
+ *
+ * Los casts van tipados y NO como `any` suelto: con `as any` en cada argumento
+ * un cambio en el tipo de una dependencia pasa inadvertido. La aridad sí la
+ * comprueba TypeScript en ambos casos — y de hecho fue lo que rompió el seed
+ * cuando el servicio ganó el tercer parámetro; lo que faltaba era que ALGUIEN
+ * typecheckease este archivo (ver `tsconfig.scripts.json`).
+ */
+function makeIngestOnlyKnowledgeService(
+  prisma: PrismaClient,
+): KnowledgeService {
+  return new KnowledgeService(
+    prisma as unknown as PrismaService,
+    undefined as unknown as LlmRouterService,
+    undefined as unknown as ClinicFactsService,
+  );
+}
 
 async function main() {
   // Guard suave para producción: es válido correr el reindex en prod (ese es
@@ -48,7 +75,7 @@ async function main() {
     process.exit(1);
   }
 
-  const knowledge = new KnowledgeService(prisma as unknown as any);
+  const knowledge = makeIngestOnlyKnowledgeService(prisma);
 
   // Sólo chunks sin embedding — evitamos re-embedear todo cada vez.
   // Nota: `embedding` es tipo `Unsupported(vector)` en el schema, así que

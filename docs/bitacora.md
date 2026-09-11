@@ -1,5 +1,11 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-11 — S10: los scripts de `prisma/` no los typecheckeaba nadie (rama `chore/typecheck-scripts-prisma`)
+- **Causa raíz del CI rojo de #42**: `apps/backend/tsconfig.json` tiene `include: ["src/**/*"]`, así que `prisma/seed.ts` y `prisma/reindex-faq.ts` quedaban fuera. `pnpm tsc --noEmit` pasaba en verde con el seed roto y el error solo aparecía cuando el job E2E ejecutaba `ts-node prisma/seed.ts` — tarde, en un job caro y sin señalar al PR culpable.
+- **Arreglo**: `tsconfig.scripts.json` aparte (con `noEmit`), script `typecheck:scripts` y paso propio en el job Backend de CI. **No** se amplía el `include` del tsconfig base: `tsconfig.build.json` lo extiende y con dos raíces TypeScript inferiría `rootDir: apps/backend`, la salida pasaría a `dist/src/main.js` y el `node dist/main.js` del Dockerfile dejaría de arrancar en prod.
+- **Segundo bug encontrado al activarlo**: `prisma/reindex-faq.ts:51` construía `KnowledgeService` con 1 argumento de 3. Estaba en main y no lo cubría el hotfix #53; `pnpm prisma:reindex-faq` habría explotado al ejecutarse.
+- Los `as any` sueltos de ambos scripts se sustituyen por una factory `makeIngestOnlyKnowledgeService` con casts tipados. Verificado que `ingest()` y `embedText()` no tocan `llm` ni `clinicFacts` (solo los usa `answer()`), así que las dependencias ausentes no se llaman nunca.
+
 ## 2026-09-11 — B9: el follow-up de satisfacción perdía el score (rama `fix/follow-up-upsert-conversation`)
 - **Bug** (ítem B9 de [[analisis/2026-09-11-chatbot-analisis-tecnico]], ya anotado como deuda el 2026-09-09: "follow-up sin Conversation"): `send-follow-up` mandaba el prompt "1-5" por WhatsApp pero solo marcaba `flowStep=AWAITING_NPS_SCORE` dentro de un `if (convo)`. Un paciente que agendó por la página pública y nunca escribió por WhatsApp no tiene `Conversation`, así que el prompt salía igual y su "5" entraba al bot sin `flowStep`: caía al clasificador LLM, el score se perdía y el paciente recibía un fallback sin sentido. Silencioso — no había error en logs.
 - **Fix**: la conversación se resuelve siempre. Primero `findFirst` por `(clinicId, phone)`; si no hay, `upsert` por la clave única `(clinicId, chatId)` con el id canónico `<digitos>@c.us`. Luego `flowStep` y `Message OUT` se escriben sin condicional.
