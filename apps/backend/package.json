@@ -11,7 +11,8 @@
     "prisma:reindex-faq": "ts-node prisma/reindex-faq.ts",
     "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
     "test": "jest",
-    "test:int": "jest --config jest.int.config.js"
+    "test:int": "jest --config jest.int.config.js",
+    "test:ci": "jest --json --outputFile=.jest-results.json && node scripts/assert-test-run.mjs .jest-results.json"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
