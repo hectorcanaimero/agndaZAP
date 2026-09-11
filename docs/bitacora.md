@@ -557,3 +557,9 @@
 - Pendientes anotados en la nota, no hechos aquí: escalar a `NEEDS_HUMAN` tras varios adjuntos
   (decisión de producto), hashear el `chatId` en las claves de Redis (junto con las de `bot:msg:`)
   y una columna `kind` en `Message` para no concatenar etiqueta y contenido.
+- **PR A3 (S2, decisión del owner)**: el segundo adjunto seguido sin texto en medio pasa la
+  conversación a `NEEDS_HUMAN`, limpia la FSM y responde "Te paso con una persona del equipo para
+  escucharte." Contador `bot:media-count:{clinicId}:{chatId}` con ventana de 24 h, que un mensaje de
+  texto borra. Antes, el hilo se quedaba en `BOT` y no entraba en el filtro de triaje del panel: un
+  paciente que solo mandaba notas de voz recibía un aviso cada 6 h y nadie lo atendía. La
+  transcripción de audio queda en backlog como M10.
