@@ -1263,7 +1263,7 @@ describe('BotService — FSM de agendamiento', () => {
 
       await say('bom dia, quero marcar uma consulta');
 
-      expect(intent.detect).toHaveBeenCalledWith('quero marcar uma consulta', 'pt');
+      expect(intent.detect).toHaveBeenCalledWith('quero marcar uma consulta', 'pt', expect.any(Array));
     });
 
     it('"sim" confirma igual que "sí"', async () => {
@@ -1313,6 +1313,128 @@ describe('BotService — FSM de agendamiento', () => {
       const msg = await say('oi');
 
       expect(msg).toContain('Saludo propio de la clínica');
+    });
+  });
+
+  // ── M3-b: intenciones nuevas y contexto al clasificador ──
+  describe('AGRADECER y CONSULTA_CITA (M3-b)', () => {
+    async function say(text: string) {
+      await bot.handleIncoming({
+        clinicId: 'clinic-A',
+        chatId: convoState.chatId,
+        phone: convoState.phone,
+        text,
+      });
+      return waha.sendText.mock.calls.at(-1)![2] as string;
+    }
+
+    it('AGRADECER cierra con cortesía, sin RAG ni handoff', async () => {
+      intent.detect.mockResolvedValue(Intent.AGRADECER);
+
+      const msg = await say('muchísimas gracias por la ayuda de verdad');
+
+      expect(msg).toMatch(/gusto|nada/i);
+      expect(knowledge.answer).not.toHaveBeenCalled();
+      expect(convoState.state).toBe('BOT');
+    });
+
+    it('CONSULTA_CITA responde desde la BD, no desde el RAG', async () => {
+      intent.detect.mockResolvedValue(Intent.CONSULTA_CITA);
+      prisma.patient.findUnique.mockResolvedValue({
+        id: 'pat-1',
+        clinicId: 'clinic-A',
+        phone: convoState.phone,
+        name: 'Ana',
+      });
+      prisma.appointment.findFirst.mockResolvedValue({
+        id: 'appt-7',
+        clinicId: 'clinic-A',
+        patientId: 'pat-1',
+        professionalId: 'prof-1',
+        status: 'PENDIENTE',
+        startAt: tomorrow10.toJSDate(),
+        service: { name: 'Limpieza dental' },
+        patient: { name: 'Ana' },
+      });
+
+      const msg = await say('¿cuándo es mi cita?');
+
+      expect(knowledge.answer).not.toHaveBeenCalled();
+      expect(msg).toContain('Limpieza dental');
+      expect(msg).toContain('Dra. Ríos');
+      // Con el link de gestión a mano, sin tener que volver a escribir.
+      expect(msg).toContain('/cita?t=');
+    });
+
+    it('el profesional se lee acotado al tenant', async () => {
+      intent.detect.mockResolvedValue(Intent.CONSULTA_CITA);
+      prisma.patient.findUnique.mockResolvedValue({
+        id: 'pat-1',
+        clinicId: 'clinic-A',
+        phone: convoState.phone,
+        name: 'Ana',
+      });
+      prisma.appointment.findFirst.mockResolvedValue({
+        id: 'appt-7',
+        clinicId: 'clinic-A',
+        patientId: 'pat-1',
+        professionalId: 'prof-1',
+        status: 'CONFIRMADA',
+        startAt: tomorrow10.toJSDate(),
+        service: { name: 'Limpieza dental' },
+        patient: { name: 'Ana' },
+      });
+
+      await say('¿cuándo tengo la consulta?');
+
+      expect(prisma.professional.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'prof-1', clinicId: 'clinic-A' },
+        }),
+      );
+    });
+
+    it('CONSULTA_CITA sin cita: ofrece agendar, no dice que no encontró nada y calla', async () => {
+      intent.detect.mockResolvedValue(Intent.CONSULTA_CITA);
+      prisma.patient.findUnique.mockResolvedValue(null);
+      prisma.appointment.findFirst.mockResolvedValue(null);
+
+      const msg = await say('¿cuándo es mi cita?');
+
+      expect(msg).toMatch(/\*agendar\*/);
+    });
+
+    it('el historial va al clasificador además de al RAG, y se lee una sola vez', async () => {
+      intent.detect.mockResolvedValue(Intent.PREGUNTA_FAQ);
+      knowledge.answer.mockResolvedValue({ answer: 'Sí.', sources: [] });
+      prisma.message.findMany.mockResolvedValue([
+        { direction: 'IN', body: '¿y los sábados?' },
+        { direction: 'OUT', body: 'Abrimos de lunes a viernes.' },
+        { direction: 'IN', body: '¿cuál es el horario?' },
+      ]);
+
+      await say('¿y los sábados?');
+
+      const [, , contexto] = intent.detect.mock.calls.at(-1)!;
+      expect(contexto).toEqual([
+        'Paciente: ¿cuál es el horario?',
+        'Asistente: Abrimos de lunes a viernes.',
+        'Paciente: ¿y los sábados?',
+      ]);
+      // El RAG recibe el mismo historial, no otra lectura.
+      expect(knowledge.answer.mock.calls.at(-1)![0].context).toBe(
+        (contexto as string[]).join('\n'),
+      );
+      expect(prisma.message.findMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('sin historial, el clasificador recibe una lista vacía', async () => {
+      intent.detect.mockResolvedValue(Intent.OTRO);
+      prisma.message.findMany.mockResolvedValue([]);
+
+      await say('ehh');
+
+      expect(intent.detect.mock.calls.at(-1)![2]).toEqual([]);
     });
   });
 
@@ -2125,10 +2247,7 @@ describe('BotService — FSM de agendamiento', () => {
 
       expect(reminders.confirmAppointment).not.toHaveBeenCalled();
       expect(prisma.reminder.findFirst).not.toHaveBeenCalled();
-      expect(intent.detect).toHaveBeenCalledWith(
-        'sí, quiero agendar una cita',
-        'es',
-      );
+      expect(intent.detect).toHaveBeenCalledWith('sí, quiero agendar una cita', 'es', expect.any(Array));
       // Con 1 servicio y 1 profesional en el mock, startFlow salta directo a
       // ASK_SLOT: lo que importa es que la FSM arrancó.
       expect(convoState.flowStep).toMatch(/^ASK_/);
@@ -2270,7 +2389,7 @@ describe('BotService — FSM de agendamiento', () => {
       await say('hola, quiero agendar una cita');
 
       // El saludo se recorta: al clasificador va solo el pedido real.
-      expect(intent.detect).toHaveBeenCalledWith('quiero agendar una cita', 'es');
+      expect(intent.detect).toHaveBeenCalledWith('quiero agendar una cita', 'es', expect.any(Array));
       // Con 1 servicio y 1 profesional en el mock, startFlow salta directo a
       // ASK_SLOT: lo que importa es que la FSM arrancó.
       expect(convoState.flowStep).toMatch(/^ASK_/);
@@ -2340,7 +2459,7 @@ describe('BotService — FSM de agendamiento', () => {
 
       await say('¿atienden los sábados?');
 
-      expect(intent.detect).toHaveBeenCalledWith('¿atienden los sábados?', 'es');
+      expect(intent.detect).toHaveBeenCalledWith('¿atienden los sábados?', 'es', expect.any(Array));
     });
   });
 
