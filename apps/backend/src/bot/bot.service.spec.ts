@@ -10,6 +10,10 @@ import { SchedulingService } from '../scheduling/scheduling.service';
 import { WahaService } from '../whatsapp/waha.service';
 import { BotService } from './bot.service';
 import { Intent, IntentService } from './intent.service';
+import {
+  RescheduleLimitExceededException,
+  SlotTakenException,
+} from '../scheduling/scheduling.errors';
 
 type Deep<T> = { [K in keyof T]?: any } & Record<string, any>;
 
@@ -1169,6 +1173,50 @@ describe('BotService — FSM de agendamiento', () => {
   // está en `webhook.controller.spec.ts` → "rate-limit antes de encolar".
   // Ver docs/adr/0021-cola-bot-inbound.md.
 
+  // ── S26: el contexto del flujo sobrevive a un re-listado de horarios ──
+  describe('carryFlowContext', () => {
+    it('conserva lo que describe QUÉ se agenda y descarta lo del paso actual', () => {
+      const data = {
+        serviceId: 'svc-1',
+        professionalId: 'prof-1',
+        patientName: 'Ana',
+        rescheduleOf: 'appt-7',
+        feedbackAppointmentId: 'appt-9',
+        // atado al paso: se va
+        startAtISO: '2030-01-01T10:00:00.000Z',
+        offeredSlots: ['a', 'b'],
+        offeredProfessionalIds: ['p1', 'p2'],
+        anyProfessional: true,
+        choices: [{ id: 'x', label: 'X' }],
+        invalidCount: 2,
+        slotWindowCount: 3,
+      };
+
+      const kept = (bot as any).carryFlowContext(data);
+
+      expect(kept).toEqual({
+        serviceId: 'svc-1',
+        professionalId: 'prof-1',
+        patientName: 'Ana',
+        rescheduleOf: 'appt-7',
+        feedbackAppointmentId: 'appt-9',
+      });
+    });
+
+    it('un campo nuevo de FlowData se conserva por defecto', () => {
+      // La polaridad es el punto del helper: al añadir `rescheduleOf` en B5, la
+      // versión que reconstruía campo a campo lo perdió en silencio y el
+      // paciente acababa con dos citas. Con la lista de descartes explícita,
+      // olvidarse de un campo nuevo ya no puede perderlo.
+      const kept = (bot as any).carryFlowContext({
+        serviceId: 'svc-1',
+        campoQueNadieHaInventadoTodavia: 'valor',
+      });
+
+      expect(kept.campoQueNadieHaInventadoTodavia).toBe('valor');
+    });
+  });
+
   it('resolveChoice ignora matches por nombre con menos de 3 chars', () => {
     // Accedemos al método privado a propósito: es determinista y no depende de
     // dependencias inyectadas.
@@ -1604,7 +1652,7 @@ describe('BotService — FSM de agendamiento', () => {
       // citas: la vieja sin mover y otra recién creada.
       scheduling.rescheduleAppointment = jest
         .fn()
-        .mockRejectedValueOnce(new ConflictException('slot ocupado'))
+        .mockRejectedValueOnce(new SlotTakenException())
         .mockResolvedValue({
           id: 'appt-7',
           status: 'PENDIENTE',
@@ -1631,9 +1679,11 @@ describe('BotService — FSM de agendamiento', () => {
     it('alcanzado el tope de movimientos, deriva a recepción en vez de volver a ofrecer', async () => {
       // El tope llega como ConflictException igual que el slot ocupado; si no
       // se distinguen, re-ofrecer horarios es un bucle infinito.
+      // Por TIPO, no por el texto: si mañana alguien reescribe el copy del
+      // error, este test tiene que seguir pasando (S25).
       scheduling.rescheduleAppointment = jest
         .fn()
-        .mockRejectedValue(new ConflictException('tope de reagendamientos alcanzado'));
+        .mockRejectedValue(new RescheduleLimitExceededException());
       prisma.patient.findUnique.mockResolvedValue({ ...patient, name: 'Ana' });
 
       await say('reagendar');

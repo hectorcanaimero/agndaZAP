@@ -46,11 +46,51 @@ export const EMBEDDING_DIMS = 1536;
  */
 export const DEFAULT_MAX_DISTANCE = 0.65;
 
+/**
+ * Umbral del fallback léxico (`word_similarity` de pg_trgm, rango 0-1).
+ *
+ * Medido contra las FAQ de la demo con las preguntas reales de
+ * [[notas/2026-09-10-rag-umbral-distancia]]:
+ *
+ * | pregunta | similitud | chunk |
+ * |---|---|---|
+ * | aceptan tarjeta | 0.650 | formas de pago ✓ |
+ * | cuanto dura la consulta | 0.548 | duración de la consulta ✓ |
+ * | que horario tienen | 0.368 | horarios ✓ (pero flojo) |
+ * | donde estan ubicados | 0.217 | horarios ✗ (chunk equivocado) |
+ * | el resto (incl. "quiero comprar un carro") | ≤ 0.17 | ruido |
+ *
+ * 0.5 deja pasar los aciertos inequívocos y corta bastante por encima del
+ * ruido. Deliberadamente conservador: la muestra es pequeña (4 chunks) y
+ * preferimos no responder a responder desde el chunk equivocado.
+ *
+ * `word_similarity` y no `similarity`: la segunda normaliza sobre las dos
+ * cadenas enteras, así que una pregunta de tres palabras contra un chunk de
+ * doscientos caracteres da siempre un número diminuto. `word_similarity` busca
+ * el mejor fragmento del chunk, que es justo la pregunta que queremos hacer.
+ */
+export const DEFAULT_MIN_LEXICAL_SIMILARITY = 0.5;
+
+/**
+ * El fallback léxico solo entra con preguntas cortas, que son las que el
+ * embedding falla (ver la nota): las de WhatsApp de 2-4 palabras. En una
+ * pregunta larga, que el vector no encuentre nada es información —significa que
+ * de verdad no hay nada— y buscar coincidencias de texto solo añade ruido.
+ */
+export const LEXICAL_FALLBACK_MAX_WORDS = 6;
+
 /** Formato de un match retornado por `retrieve()`. */
 export interface FaqMatch {
   id: string;
   content: string;
   distance: number;
+  /**
+   * Cómo se encontró. `lexical` significa que el vector no dio nada y entró el
+   * fallback de pg_trgm; su `distance` es `1 - word_similarity`, para que la
+   * escala siga siendo "menos es mejor" y el caller no tenga que saber de dónde
+   * vino cada match.
+   */
+  via?: 'vector' | 'lexical';
 }
 
 /**
@@ -309,13 +349,89 @@ export class KnowledgeService {
       distance:
         typeof r.distance === 'number' ? r.distance : Number(r.distance),
     }));
-    const matches = parsed.filter((m) => m.distance <= maxDistance);
+    const matches: FaqMatch[] = parsed
+      .filter((m) => m.distance <= maxDistance)
+      .map((m) => ({ ...m, via: 'vector' as const }));
 
     this.logger.log(
       `faq retrieve clinicId=${input.clinicId} qLen=${input.question.length} k=${k} candidates=${parsed.length} matches=${matches.length} minDist=${parsed[0]?.distance ?? 'n/a'}`,
     );
 
-    return matches;
+    if (matches.length > 0) return matches;
+
+    // Fallback léxico (M8). `text-embedding-3-small` falla justo con las
+    // preguntas cortas y coloquiales que llegan por WhatsApp: "donde estan
+    // ubicados" daba 0.619 contra el chunk correcto, por encima del umbral.
+    // Cuando el vector no encuentra nada, pg_trgm busca el fragmento del chunk
+    // que más se parece a la pregunta.
+    //
+    // Solo con preguntas cortas: en una larga, que el vector no encuentre nada
+    // es información —significa que de verdad no hay nada— y buscar
+    // coincidencias de texto solo añadiría ruido.
+    //
+    // El coste de un falso positivo está acotado: el chunk entra como fuente y
+    // el LLM de síntesis responde `NULL_ANSWER` si no sirve. O sea que se paga
+    // una llamada, no una respuesta inventada.
+    return this.retrieveLexical(input.clinicId, input.question, k);
+  }
+
+  /**
+   * Búsqueda por parecido de texto, como red cuando el vector no da nada.
+   *
+   * Fail-open y silencioso: si `pg_trgm` no estuviera instalado —una base
+   * antigua, un entorno a medio migrar— devuelve vacío y el flujo sigue como
+   * hasta ahora. Perder el fallback degrada la calidad de las respuestas; que
+   * explote la consulta rompería el bot entero.
+   */
+  private async retrieveLexical(
+    clinicId: string,
+    question: string,
+    k: number,
+  ): Promise<FaqMatch[]> {
+    const words = question.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0 || words.length > LEXICAL_FALLBACK_MAX_WORDS) {
+      return [];
+    }
+
+    try {
+      // Todo parametrizado, incluida la pregunta: va directa a `word_similarity`
+      // y viene de un mensaje de WhatsApp.
+      const rows = (await this.prisma.$queryRawUnsafe(
+        `SELECT id, content, word_similarity($2, content) AS sim
+           FROM "FaqChunk"
+          WHERE "clinicId" = $1
+            AND word_similarity($2, content) >= $3
+          ORDER BY sim DESC
+          LIMIT $4`,
+        clinicId,
+        question,
+        DEFAULT_MIN_LEXICAL_SIMILARITY,
+        k,
+      )) as Array<{ id: string; content: string; sim: number | string }>;
+
+      const matches: FaqMatch[] = rows.map((r) => {
+        const sim = typeof r.sim === 'number' ? r.sim : Number(r.sim);
+        return {
+          id: r.id,
+          content: r.content,
+          // Se expone como distancia para que la escala siga siendo
+          // "menos es mejor" y el caller no tenga que saber de dónde vino.
+          distance: 1 - sim,
+          via: 'lexical' as const,
+        };
+      });
+
+      this.logger.log(
+        `faq lexical clinicId=${clinicId} words=${words.length} matches=${matches.length} maxSim=${rows[0] ? Number(rows[0].sim).toFixed(3) : 'n/a'}`,
+      );
+
+      return matches;
+    } catch (e) {
+      this.logger.warn(
+        `faq lexical falló clinicId=${clinicId}: ${(e as Error).message}`,
+      );
+      return [];
+    }
   }
 
   // ─────────────────────────── Answer synthesis ───────────────────────────

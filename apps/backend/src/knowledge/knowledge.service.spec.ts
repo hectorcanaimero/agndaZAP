@@ -201,6 +201,98 @@ describe('KnowledgeService', () => {
       expect(matches[0].id).toBe('f-1');
     });
 
+    // ── M8: fallback léxico cuando el vector no encuentra nada ──
+    it('sin matches vectoriales y pregunta corta: cae al fallback léxico', async () => {
+      // `text-embedding-3-small` falla justo con las preguntas cortas de
+      // WhatsApp: "donde estan ubicados" daba 0.619 contra el chunk correcto.
+      mockOpenAIEmbeddingsOk();
+      prisma.$queryRawUnsafe
+        .mockResolvedValueOnce([{ id: 'f-1', content: 'lejos', distance: 0.9 }])
+        .mockResolvedValueOnce([
+          { id: 'f-2', content: 'Estamos en Puerto Ordaz', sim: 0.64 },
+        ]);
+
+      const matches = await svc.retrieve({
+        clinicId: 'clinic-A',
+        question: 'donde estan ubicados',
+      });
+
+      expect(prisma.$queryRawUnsafe).toHaveBeenCalledTimes(2);
+      const [sql, ...args] = prisma.$queryRawUnsafe.mock.calls[1];
+      expect(sql).toMatch(/word_similarity/);
+      expect(args[0]).toBe('clinic-A');
+      // La pregunta va PARAMETRIZADA: viene de un mensaje de WhatsApp.
+      expect(args[1]).toBe('donde estan ubicados');
+
+      expect(matches).toHaveLength(1);
+      expect(matches[0].via).toBe('lexical');
+      // Se expone como distancia para que la escala siga siendo "menos es
+      // mejor" y el caller no tenga que saber de dónde vino el match.
+      expect(matches[0].distance).toBeCloseTo(0.36, 5);
+    });
+
+    it('con matches vectoriales NO consulta el fallback', async () => {
+      mockOpenAIEmbeddingsOk();
+      prisma.$queryRawUnsafe.mockResolvedValueOnce([
+        { id: 'f-1', content: 'cerca', distance: 0.3 },
+      ]);
+
+      const matches = await svc.retrieve({
+        clinicId: 'clinic-A',
+        question: 'donde estan ubicados',
+      });
+
+      expect(prisma.$queryRawUnsafe).toHaveBeenCalledTimes(1);
+      expect(matches[0].via).toBe('vector');
+    });
+
+    it('pregunta larga sin matches: NO cae al fallback', async () => {
+      // En una pregunta larga, que el vector no encuentre nada es información
+      // —significa que de verdad no hay nada— y buscar coincidencias de texto
+      // solo añadiría ruido.
+      mockOpenAIEmbeddingsOk();
+      prisma.$queryRawUnsafe.mockResolvedValueOnce([]);
+
+      const matches = await svc.retrieve({
+        clinicId: 'clinic-A',
+        question:
+          'buenas tardes quisiera saber si ustedes atienden los sábados por la mañana',
+      });
+
+      expect(prisma.$queryRawUnsafe).toHaveBeenCalledTimes(1);
+      expect(matches).toHaveLength(0);
+    });
+
+    it('si pg_trgm no está instalado, degrada a vacío en vez de romper', async () => {
+      // Una base antigua o a medio migrar no puede tumbar el bot entero.
+      mockOpenAIEmbeddingsOk();
+      prisma.$queryRawUnsafe
+        .mockResolvedValueOnce([])
+        .mockRejectedValueOnce(
+          new Error('function word_similarity(text, text) does not exist'),
+        );
+
+      const matches = await svc.retrieve({
+        clinicId: 'clinic-A',
+        question: 'donde estan ubicados',
+      });
+
+      expect(matches).toEqual([]);
+    });
+
+    it('el fallback filtra por clinicId: cero fuga entre clínicas', async () => {
+      mockOpenAIEmbeddingsOk();
+      prisma.$queryRawUnsafe
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      await svc.retrieve({ clinicId: 'clinic-A', question: 'aceptan tarjeta' });
+
+      const [sql, clinicId] = prisma.$queryRawUnsafe.mock.calls[1];
+      expect(sql).toMatch(/WHERE "clinicId" = \$1/);
+      expect(clinicId).toBe('clinic-A');
+    });
+
     it('respeta el parámetro k pasándolo al LIMIT', async () => {
       mockOpenAIEmbeddingsOk();
       prisma.$queryRawUnsafe.mockResolvedValueOnce([]);
