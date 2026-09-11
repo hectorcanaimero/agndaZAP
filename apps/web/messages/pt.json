@@ -108,6 +108,64 @@
       "professional": "Profissional",
       "when": "Data e hora",
       "address": "Endereço"
+    },
+    "manageTitle": "Precisa mudar?",
+    "manageDescription": "Por este link você pode mudar o horário ou cancelar sua consulta quando quiser.",
+    "manageLink": "Ver ou mudar minha consulta"
+  },
+  "manage": {
+    "title": "Sua consulta",
+    "subtitle": "{name}, esta é a sua consulta em {clinic}.",
+    "statusLabel": "Situação",
+    "closed": "Esta consulta não pode mais ser alterada. Se precisar de outra, fale com a clínica pelo WhatsApp ou agende uma nova.",
+    "invalid": {
+      "title": "Este link não é mais válido",
+      "description": "Pode ter expirado ou a consulta não existe mais. Peça um novo à clínica pelo WhatsApp, ou agende por aqui.",
+      "cta": "Agendar uma consulta"
+    },
+    "summary": {
+      "service": "Serviço",
+      "professional": "Profissional",
+      "when": "Data e hora",
+      "address": "Endereço"
+    },
+    "status": {
+      "PENDIENTE": "Aguardando confirmação",
+      "CONFIRMADA": "Confirmada",
+      "EN_RIESGO": "Sem confirmação",
+      "ATENDIDA": "Atendida",
+      "CANCELADA": "Cancelada",
+      "NO_SHOW": "Você não compareceu"
+    },
+    "cancel": {
+      "button": "Cancelar consulta",
+      "confirmTitle": "Cancelar sua consulta?",
+      "confirmDescription": "Você vai cancelar a consulta de {when}. Se depois quiser outra, vai precisar agendar de novo.",
+      "confirmLabel": "Sim, cancelar",
+      "success": "Cancelamos sua consulta. Obrigado por avisar!"
+    },
+    "reschedule": {
+      "button": "Mudar horário",
+      "title": "Escolha um novo horário",
+      "back": "Voltar",
+      "loading": "Procurando horários…",
+      "noSlots": "Não há horários disponíveis nos próximos dias. Fale com a clínica pelo WhatsApp que a gente ajuda.",
+      "slotTaken": "Esse horário não está mais disponível. Escolha outro.",
+      "success": "Pronto! Mudamos a sua consulta.",
+      "linkLost": "Mudamos a sua consulta, mas este link parou de funcionar. Se precisar vê-la de novo, use o último que enviamos pelo WhatsApp.",
+      "confirmTitle": "Mudar sua consulta para este horário?",
+      "confirmDescription": "Sua consulta ficaria em {when}. O horário atual fica livre para outro paciente.",
+      "confirmLabel": "Sim, mudar"
+    },
+    "errors": {
+      "generic": "Não foi possível concluir a ação. Tente de novo daqui a pouco.",
+      "conflict": "A situação da sua consulta mudou. Atualizamos a página para você ver como está agora.",
+      "rateLimit": "Tentativas demais. Espere um minuto e tente de novo.",
+      "linkExpired": "Este link não vale mais. Peça um novo à clínica pelo WhatsApp."
+    },
+    "unavailable": {
+      "title": "Não foi possível carregar sua consulta",
+      "description": "Pode ser algo momentâneo. Tente de novo daqui a um minuto; se continuar, fale com a clínica pelo WhatsApp."
     }
   },
   "login": {

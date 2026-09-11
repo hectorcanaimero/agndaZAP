@@ -108,6 +108,64 @@
       "professional": "Profesional",
       "when": "Fecha y hora",
       "address": "Dirección"
+    },
+    "manageTitle": "¿Necesitas cambiarla?",
+    "manageDescription": "Desde este link puedes cambiar el horario o cancelar tu cita cuando quieras.",
+    "manageLink": "Ver o cambiar mi cita"
+  },
+  "manage": {
+    "title": "Tu cita",
+    "subtitle": "{name}, esta es tu cita en {clinic}.",
+    "statusLabel": "Estado",
+    "closed": "Esta cita ya no se puede cambiar. Si necesitas otra, escríbele a la clínica por WhatsApp o agenda una nueva.",
+    "invalid": {
+      "title": "Este link ya no es válido",
+      "description": "Puede que haya vencido o que la cita ya no exista. Pídele uno nuevo a la clínica por WhatsApp, o agenda desde aquí.",
+      "cta": "Agendar una cita"
+    },
+    "summary": {
+      "service": "Servicio",
+      "professional": "Profesional",
+      "when": "Fecha y hora",
+      "address": "Dirección"
+    },
+    "status": {
+      "PENDIENTE": "Pendiente de confirmar",
+      "CONFIRMADA": "Confirmada",
+      "EN_RIESGO": "Sin confirmar",
+      "ATENDIDA": "Atendida",
+      "CANCELADA": "Cancelada",
+      "NO_SHOW": "No asististe"
+    },
+    "cancel": {
+      "button": "Cancelar cita",
+      "confirmTitle": "¿Cancelar tu cita?",
+      "confirmDescription": "Vas a cancelar la cita del {when}. Si después quieres otra, tendrás que agendarla de nuevo.",
+      "confirmLabel": "Sí, cancelar",
+      "success": "Cancelamos tu cita. ¡Gracias por avisarnos!"
+    },
+    "reschedule": {
+      "button": "Cambiar horario",
+      "title": "Elige un horario nuevo",
+      "back": "Volver",
+      "loading": "Buscando horarios…",
+      "noSlots": "No hay horarios disponibles en los próximos días. Escríbele a la clínica por WhatsApp y te ayudan.",
+      "slotTaken": "Ese horario ya no está disponible. Elige otro.",
+      "success": "¡Listo! Cambiamos tu cita.",
+      "linkLost": "Cambiamos tu cita, pero este link dejó de servir. Si necesitas verla otra vez, usa el último que te mandamos por WhatsApp.",
+      "confirmTitle": "¿Cambiar tu cita a este horario?",
+      "confirmDescription": "Tu cita quedaría el {when}. El horario actual se libera para otro paciente.",
+      "confirmLabel": "Sí, cambiar"
+    },
+    "errors": {
+      "generic": "No pudimos completar la acción. Inténtalo de nuevo en un momento.",
+      "conflict": "El estado de tu cita cambió. Actualizamos la página para que veas cómo está ahora.",
+      "rateLimit": "Demasiados intentos. Espera un minuto y vuelve a probar.",
+      "linkExpired": "Este link ya no vale. Pídele uno nuevo a la clínica por WhatsApp."
+    },
+    "unavailable": {
+      "title": "No pudimos cargar tu cita",
+      "description": "Puede ser algo momentáneo. Vuelve a intentarlo en un minuto; si sigue igual, escríbele a la clínica por WhatsApp."
     }
   },
   "login": {
