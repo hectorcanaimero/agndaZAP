@@ -22,6 +22,10 @@ import {
 } from '../scheduling/scheduling.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { alertReception } from '../conversations/reception-alert';
+import {
+  RescheduleLimitExceededException,
+  SlotTakenException,
+} from '../scheduling/scheduling.errors';
 import { Public } from '../auth/decorators/public.decorator';
 import { CreatePublicAppointmentDto } from './dto/create-public-appointment.dto';
 import { RescheduleByTokenDto } from './dto/reschedule-by-token.dto';
@@ -331,49 +335,10 @@ export class PublicController {
       throw new BadRequestException('phone inválido');
     }
 
-    // El `conversationId` que se persiste en la cita es lo que después deja al
-    // chat gestionarla (`findUpcomingAppointment` la resuelve por ahí). Así que
-    // solo lo guardamos cuando ese chat tiene derecho a esa cita:
-    //
-    //  - la conversación tiene teléfono verificado por WAHA y coincide con el
-    //    del formulario, o
-    //  - la conversación no tiene teléfono (caso `@lid`) y ese número todavía
-    //    no es paciente de la clínica, así que la cita nace de este chat y el
-    //    nombre lo pone quien la crea.
-    //
-    // La segunda condición es imprescindible: sin ella, un chat `@lid` que
-    // escriba el teléfono de un paciente YA existente se quedaría con su cita.
-    //
-    // El caso que cierra: alguien con un token propio escribe en el formulario
-    // el teléfono de OTRA persona que ya es paciente. El campo llega readonly,
-    // pero eso es solo cliente. Sin este filtro la cita quedaría atada a su
-    // chat y el bot le saludaría con el nombre real de la víctima — el mismo
-    // oráculo de enumeración que este endpoint evita con `patientCreated`.
-    if (conversationId) {
-      const convo = await this.prisma.conversation.findFirst({
-        where: { id: conversationId, clinicId: clinic.id },
-        select: { phone: true },
-      });
-      const verifiedMatch = convo?.phone === normalizedPhone;
-      // Se consulta antes de crear porque `conversationId` viaja dentro de
-      // `createAppointment`. La carrera (que el paciente nazca justo entre
-      // esta lectura y la escritura) solo puede hacernos atar una cita a un
-      // chat que declaró ese mismo número: conservador de sobra.
-      const alreadyPatient =
-        convo?.phone === null
-          ? (await this.prisma.patient.findFirst({
-              where: { clinicId: clinic.id, phone: normalizedPhone },
-              select: { id: true },
-            })) !== null
-          : false;
-      const unclaimedLid = convo != null && convo.phone === null && !alreadyPatient;
-      if (!verifiedMatch && !unclaimedLid) {
-        this.logger.warn(
-          `conversationId no atado a la cita: el teléfono del formulario no corresponde a la conversación convoId=${conversationId} clinicId=${clinic.id}`,
-        );
-        conversationId = undefined;
-      }
-    }
+    // La guarda de PERSONA —si este chat tiene derecho a esta cita— vive en
+    // `SchedulingService.createAppointment`, junto a la de TENANT: ahí basta
+    // una lectura de `Conversation` para las dos, y `patientCreated` ya es un
+    // hecho, sin la ventana de carrera que tenía comprobarlo aquí (S23).
 
     // 5) Delegamos. SchedulingService tira ConflictException / NotFoundException
     // / BadRequestException con sus mensajes internos; el endpoint público
@@ -399,8 +364,10 @@ export class PublicController {
       }));
     } catch (e) {
       if (e instanceof ConflictException) {
-        // Mensaje orientado al usuario final del form público.
-        throw new ConflictException(
+        // Mensaje orientado al usuario final del form público. Se re-emite como
+        // `SlotTakenException` para que el cuerpo lleve el `code` y la web no
+        // dependa del texto.
+        throw new SlotTakenException(
           'El horario elegido ya no está disponible. Elige otro.',
         );
       }
@@ -750,16 +717,18 @@ export class PublicController {
         maxPatientReschedules: PublicController.MAX_PATIENT_RESCHEDULES,
       });
     } catch (e) {
-      if (e instanceof ConflictException) {
-        // El servicio usa 409 para dos cosas distintas y el paciente necesita
-        // mensajes distintos: el tope lo deriva a la clínica, el slot ocupado
-        // le pide otro horario.
-        if (e.message.includes('tope de reagendamientos')) {
-          throw new ConflictException(
-            'Ya cambiaste el horario de esta cita varias veces. Escríbele a la clínica y lo resolvemos contigo.',
-          );
-        }
-        throw new ConflictException(
+      // El servicio usa 409 para dos cosas distintas y el paciente necesita
+      // respuestas OPUESTAS: el tope lo deriva a la clínica, el slot ocupado le
+      // pide otro horario. Se distinguen por tipo y el `code` viaja al cliente,
+      // para que ni el backend ni la web tengan que mirar el texto del mensaje
+      // —que cambia con cada pasada de copy o de traducción.
+      if (e instanceof RescheduleLimitExceededException) {
+        throw new RescheduleLimitExceededException(
+          'Ya cambiaste el horario de esta cita varias veces. Escríbele a la clínica y lo resolvemos contigo.',
+        );
+      }
+      if (e instanceof SlotTakenException) {
+        throw new SlotTakenException(
           'Ese horario ya no está disponible. Elige otro.',
         );
       }

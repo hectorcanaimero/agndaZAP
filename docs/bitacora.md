@@ -8,6 +8,11 @@
 - Los de integración se llaman `*.int-spec.ts` **con guion**, para que el `testRegex` de los unitarios no los capture.
 - **Pendiente**: los tests de la cola `bot-inbound` en sí, cuando #65 esté en main. La semántica de la que depende ya queda cubierta.
 - **Tests**: 1163 unitarios + 21 de integración, verdes.
+## 2026-09-11 — S25: error tipado para el tope de reagendamientos (rama `fix/reschedule-limit-error-tipado`)
+- **Deuda propia**: al implementar el tope en S6 dejé que el controller distinguiera los dos 409 de `rescheduleAppointment` con `e.message.includes('tope de reagendamientos')`. Funcionaba y era frágil por definición — este repo reescribe copy a menudo, por tono o por traducción, y cualquiera de esas pasadas rompía la lógica sin fallar en compilación ni en los tests del emisor.
+- **Arreglo**: `SchedulingConflictException` con `code` en el cuerpo, y dos subclases — `RescheduleLimitExceededException` (`RESCHEDULE_LIMIT`) y `SlotTakenException` (`SLOT_TAKEN`). Siguen siendo `ConflictException`, así que el status y todo el manejo existente no cambian: quien no mire el `code` se comporta igual que antes.
+- **Por qué importa el caso**: los dos 409 piden respuestas **opuestas** — "el horario se ocupó" invita a elegir otro, "ya cambiaste demasiadas veces" invita a llamar a la clínica. Confundirlos manda al paciente al sitio equivocado.
+- **Tests**: 1168 verdes, incluido uno que reescribe el mensaje por completo y comprueba que la distinción sobrevive.
 
 ## 2026-09-11 — S13: los links de gestión mueren con la cita (rama `fix/invalidar-tokens-gestion`)
 - **El problema**: solo se podía quemar el token que el paciente acababa de usar. Se emiten varios por cita (respuesta del POST, recordatorios, mensajes del bot), así que los demás sobrevivían apuntando a una cita ya cancelada y seguían mostrando nombre, servicio, profesional y horario hasta agotar su TTL de 30 días. No permitían mutar nada, pero era PII expuesta sin motivo.
@@ -768,3 +773,15 @@
     distingue por el mensaje, que no es ideal: si el service expone un error tipado, cambiarlo.
 - El tope por chat es el mismo que en el borde público (3): el canal no debe cambiar cuántas veces
   puede moverla.
+
+## 2026-09-11 — S23: una lectura de `Conversation` para las dos guardas
+- La guarda de **persona** (¿este chat tiene derecho a esta cita?) se muda del
+  `public.controller.ts` a `SchedulingService.createAppointment`, junto a la de **tenant**
+  (¿la conversación es de esta clínica?). Una sola lectura sirve a las dos.
+- No es solo ahorrar una query: dentro del service `patientCreated` ya es un hecho, así que
+  desaparece la ventana de carrera que tenía comprobarlo antes de crear con un `findFirst` extra.
+- Las dos quedan comentadas como distintas y no intercambiables: una falla duro, la otra descarta
+  el enlace y sigue. El riesgo que motivó el ítem era que alguien viera dos lecturas iguales y
+  borrara "la repetida", quedándose sin uno de los dos controles.
+- Efecto lateral: la regla aplica ahora a **todos** los callers de `createAppointment`, no solo al
+  endpoint público.

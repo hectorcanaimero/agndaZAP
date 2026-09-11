@@ -62,15 +62,28 @@ cita (recordatorio-respuesta, follow-up, saludo con contexto) ya los cubre la v�
 mismo paciente, que es exactamente la parte que no se puede autorizar con un teléfono
 declarado.
 
-### Lo que sí se controla en el borde público
+### Lo que sí se controla al crear la cita
 
 Queda un filtro sobre qué citas se atan al chat (`conversationId`), que es lo que
-después habilita la vía 2. Solo se ata cuando:
+después habilita la vía 2. Vive en `SchedulingService.createAppointment` (S23), junto a
+la guarda de tenant y compartiendo con ella una sola lectura de `Conversation`.
+
+**Son dos guardas distintas y ninguna sustituye a la otra**: la de tenant comprueba que
+la conversación sea de la clínica y falla duro; la de persona comprueba que ese chat
+tenga derecho a esa cita y no falla, solo descarta el enlace. Quien vea una lectura y
+dos comprobaciones, que no borre "la repetida".
+
+Solo se ata cuando:
 
 - la conversación tiene teléfono verificado por WAHA y **coincide** con el del
   formulario, o
-- la conversación no tiene teléfono (`@lid`) y ese número **todavía no es paciente** de
-  la clínica, así que la cita nace de ese chat y el nombre lo pone quien la crea.
+- la conversación no tiene teléfono (`@lid`) y el `Patient` **nació en esa misma
+  llamada**, así que la cita es genuinamente de ese chat y el nombre lo puso quien la
+  creó.
+
+Lo segundo se comprueba con `patientCreated`, que dentro del service ya es un hecho. La
+primera versión vivía en el controller y tenía que anticiparlo con un `findFirst` extra,
+dejando una ventana de carrera entre la lectura y la escritura.
 
 Sin la segunda condición, un `@lid` que escribiera el teléfono de un paciente existente
 se quedaría con su cita por la vía 2 — el mismo secuestro por otra puerta, y además un
