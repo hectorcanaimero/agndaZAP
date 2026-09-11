@@ -38,6 +38,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[adr/0017-webhook-hmac-cookie-hardening|0017 — HMAC del webhook WAHA + hardening de cookies]]
 - [[adr/0018-scheduling-link-wa|0018 — Link de agendamiento por WhatsApp (bot → web con token efímero)]]
 - [[adr/0019-rag-hechos-de-bd|0019 — Hechos de BD como fuente del RAG (sin embeddings)]]
+- [[adr/0020-gestion-cita-por-link|0020 — Gestión de cita por link (cancelar y reagendar sin escribir)]]
 
 ## Specs de sprint (implementación)
 - [[specs/2026-08-18-observabilidad-pino-axiom-sentry|2026-08-18 — Spec Observabilidad (Pino + Axiom + Sentry) — Sprint 40 clínicas día 1-2]]
