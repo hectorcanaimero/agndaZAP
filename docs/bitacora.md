@@ -1,5 +1,11 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-11 — S22: validar el tenant del `conversationId` al crear cita (rama `fix/appointment-conversation-tenant`)
+- Salió del barrido de [[adr/0022-fk-compuestas-multi-tenant|S8]]: era el único de los diez pares `clinicId` + FK **sin ninguna validación**. `createAppointment` persistía `conversationId` con `source === 'BOT_WEB'` sin comprobar que la conversación fuera de la misma clínica.
+- **Por qué importa aunque hoy no sea alcanzable**: `findUpcomingAppointment` resuelve por `appointment.conversationId` (S5), así que una cita atada a la conversación de otra clínica dejaría que ese chat viera y gestionara la cita de un paciente ajeno. Hoy el id llega de un token que ya valida el slug — exactamente lo que se decía de `Feedback` antes de S4, hasta que alguien miró el `include`.
+- **Falla en vez de ignorar el id en silencio**: si se dispara hay datos inconsistentes, y una cita creada a medias —sin el enlace al chat del que depende todo el flujo BOT_WEB— es peor que un error visible.
+- Sin cambios para `PUBLIC`/`BOT`, que siguen descartando el id sin consultar nada.
+- **Tests**: 1083 verdes, con el caso cross-tenant y los de no-regresión de los otros `source`.
 ## 2026-09-11 — S8: FK compuesta en Feedback y barrido de tablas que copian `clinicId` (rama `fix/feedback-fk-compuesta`)
 - **El problema**: `Feedback` llevaba dos FKs sueltas (`clinicId` → Clinic y `appointmentId` → Appointment) y nada en la BD impedía que apuntaran a clínicas distintas. El `include` del panel trae nombre de paciente, profesional y servicio **de la cita**, así que una fila cruzada habría servido datos de otra clínica. El chequeo de S4 cierra el camino conocido; esto lo cierra para cualquier caller futuro.
 - **La decisión** (→ [[adr/0022-fk-compuestas-multi-tenant]]): FK compuesta `(clinicId, appointmentId)` → `Appointment(clinicId, id)`, con `@@unique([clinicId, id])` en Appointment. Un par cruzado deja de ser un bug que hay que recordar evitar y pasa a ser un INSERT que Postgres rechaza.
