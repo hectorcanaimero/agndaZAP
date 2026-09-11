@@ -1,6 +1,6 @@
 import type { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
-import { HealthController } from './health.controller';
+import { CHECK_TIMEOUT_MS, HealthController } from './health.controller';
 
 /**
  * Tests del HealthController. Estrategia: mocks manuales, sin `@nestjs/testing`.
@@ -162,26 +162,68 @@ describe('HealthController', () => {
       }
     });
 
-    it('los 3 checks corren en paralelo (no serial)', async () => {
-      // Simulamos que cada check tarda 50ms. Serial = 150ms, paralelo = ~50ms.
+    /**
+     * Antes esto se medía con el reloj: tres checks de 50 ms y `elapsed < 120`.
+     * En el VPS, con varias suites en paralelo, esos 50 ms se convertían en 380
+     * y el test fallaba sin que nada estuviera roto — un rojo que costaba
+     * tiempo a cada persona que se lo encontraba.
+     *
+     * La propiedad que importa no es cuánto tarda, sino que **los tres
+     * arranquen antes de que termine el primero**. Eso se comprueba sin reloj:
+     * se deja al primero colgado y se mira quién ha empezado. Si fueran
+     * seriales, sólo habría arrancado uno.
+     */
+    it('los 3 checks arrancan antes de que termine el primero', async () => {
+      const started: string[] = [];
+      let releaseDb!: () => void;
+
       prisma.$queryRawUnsafe.mockImplementationOnce(
-        () => new Promise((r) => setTimeout(() => r([{}]), 50)),
-      );
-      redis.ping.mockImplementationOnce(
-        () => new Promise((r) => setTimeout(() => r('PONG'), 50)),
-      );
-      global.fetch = jest.fn().mockImplementation(
         () =>
-          new Promise((r) =>
-            setTimeout(() => r({ ok: true, status: 200 } as Response), 50),
-          ),
+          new Promise((resolve) => {
+            started.push('db');
+            releaseDb = () => resolve([{}]);
+          }),
       );
-      const start = Date.now();
-      await controller.check();
-      const elapsed = Date.now() - start;
-      // Con paralelismo real deberíamos estar cerca de 50ms + overhead.
-      // Damos margen generoso: <120ms es señal clara de paralelismo.
-      expect(elapsed).toBeLessThan(120);
+      redis.ping.mockImplementationOnce(async () => {
+        started.push('redis');
+        return 'PONG';
+      });
+      global.fetch = jest.fn().mockImplementation(async () => {
+        started.push('waha');
+        return { ok: true, status: 200 } as Response;
+      });
+
+      const pending = controller.check();
+      // Un tick para que corran los cuerpos síncronos de los tres checks.
+      await Promise.resolve();
+
+      expect(started.sort()).toEqual(['db', 'redis', 'waha']);
+
+      releaseDb();
+      await expect(pending).resolves.toMatchObject({ ok: true });
+    });
+
+    /**
+     * La cabecera de este fichero prometía cubrir el timeout y no lo cubría.
+     * Aquí sí hacen falta fake timers: lo que se prueba es que pasado
+     * `CHECK_TIMEOUT_MS` el check se rinde en vez de colgar el response.
+     */
+    it('una dependencia que no responde nunca se corta por timeout', async () => {
+      jest.useFakeTimers();
+      try {
+        redis.ping.mockImplementationOnce(() => new Promise(() => {}));
+
+        const pending = controller.check();
+        await jest.advanceTimersByTimeAsync(CHECK_TIMEOUT_MS + 10);
+        const res = await pending;
+
+        expect(res.redis).toBe(false);
+        expect(res.ok).toBe(false);
+        // El resto sí responde: un check colgado no arrastra a los demás.
+        expect(res.db).toBe(true);
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 
