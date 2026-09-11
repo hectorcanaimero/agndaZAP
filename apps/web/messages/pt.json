@@ -156,7 +156,8 @@
       "confirmTitle": "Mudar sua consulta para este horário?",
       "confirmDescription": "Sua consulta ficaria em {when}. O horário atual fica livre para outro paciente.",
       "confirmLabel": "Sim, mudar",
-      "successLastOne": "Pronto! Mudamos a sua consulta. Era a última mudança que você podia fazer por aqui: se precisar de outra, fale com a clínica pelo WhatsApp."
+      "successLastOne": "Pronto! Mudamos a sua consulta. Era a última mudança que você podia fazer por aqui: se precisar de outra, fale com a clínica pelo WhatsApp.",
+      "limitReached": "Você já usou todas as mudanças de horário disponíveis para esta consulta. Se precisar de outra, fale com a clínica pelo WhatsApp que a gente ajuda."
     },
     "errors": {
       "generic": "Não foi possível concluir a ação. Tente de novo daqui a pouco.",

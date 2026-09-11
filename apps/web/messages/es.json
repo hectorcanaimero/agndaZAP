@@ -156,7 +156,8 @@
       "confirmTitle": "¿Cambiar tu cita a este horario?",
       "confirmDescription": "Tu cita quedaría el {when}. El horario actual se libera para otro paciente.",
       "confirmLabel": "Sí, cambiar",
-      "successLastOne": "¡Listo! Cambiamos tu cita. Era el último cambio que podías hacer por aquí: si necesitas otro, escríbele a la clínica por WhatsApp."
+      "successLastOne": "¡Listo! Cambiamos tu cita. Era el último cambio que podías hacer por aquí: si necesitas otro, escríbele a la clínica por WhatsApp.",
+      "limitReached": "Ya usaste todos los cambios de horario disponibles para esta cita. Si necesitas otro, escríbele a la clínica por WhatsApp y te ayudan."
     },
     "errors": {
       "generic": "No pudimos completar la acción. Inténtalo de nuevo en un momento.",
