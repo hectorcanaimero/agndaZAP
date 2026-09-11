@@ -102,8 +102,10 @@ describe('bot-rate-limit (ADR 0007)', () => {
 
     const line = logger.warn.mock.calls[0][0] as string;
     expect(line).not.toContain('5804141234567');
-    expect(line).toContain(hashChatId(chatId));
-    expect(hashChatId(chatId)).toHaveLength(12);
+    // El seudónimo lleva la clínica en el preimagen, así que hay que pasarla
+    // para reproducirlo (ver `hashChatId`).
+    expect(line).toContain(hashChatId(chatId, 'clinic-A'));
+    expect(hashChatId(chatId, 'clinic-A')).toHaveLength(12);
   });
 
   it('las claves son las del ADR 0007 y no cambiaron', () => {
@@ -111,6 +113,41 @@ describe('bot-rate-limit (ADR 0007)', () => {
     expect(botRateLimitKeys(clinicId, chatId, now)).toEqual({
       chatKey: `bot:msg:clinic-A:${chatId}:${Math.floor(now / 60000)}`,
       clinicKey: `bot:msg:clinic-A:hour:${Math.floor(now / 3600000)}`,
+    });
+  });
+
+  /**
+   * El seudónimo protege un teléfono, y el espacio de teléfonos es enumerable:
+   * un SHA-256 sin secreto se recorre entero en minutos, así que sería el
+   * teléfono escrito de otra forma.
+   */
+  describe('seudónimo del chatId', () => {
+    const CHAT = '584141234567@c.us';
+    const original = process.env.LOG_HASH_SECRET;
+    afterEach(() => {
+      process.env.LOG_HASH_SECRET = original;
+    });
+
+    it('depende del secreto: sin él no es reproducible por quien lo ignore', () => {
+      process.env.LOG_HASH_SECRET = 'secreto-a-de-al-menos-32-caracteres-xx';
+      const a = hashChatId(CHAT, 'clinic-A');
+      process.env.LOG_HASH_SECRET = 'secreto-b-de-al-menos-32-caracteres-xx';
+      expect(hashChatId(CHAT, 'clinic-A')).not.toBe(a);
+    });
+
+    it('el mismo paciente da seudónimos distintos en clínicas distintas', () => {
+      // Si no, un filtro por chatHash correlaciona a una persona entre tenants.
+      process.env.LOG_HASH_SECRET = 'secreto-de-al-menos-32-caracteres-xxxx';
+      expect(hashChatId(CHAT, 'clinic-A')).not.toBe(hashChatId(CHAT, 'clinic-B'));
+    });
+
+    it('es estable para el mismo par (chat, clínica)', () => {
+      process.env.LOG_HASH_SECRET = 'secreto-de-al-menos-32-caracteres-xxxx';
+      expect(hashChatId(CHAT, 'clinic-A')).toBe(hashChatId(CHAT, 'clinic-A'));
+    });
+
+    it('nunca contiene el teléfono', () => {
+      expect(hashChatId(CHAT, 'clinic-A')).not.toContain('584141234567');
     });
   });
 });

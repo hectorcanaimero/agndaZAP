@@ -29,6 +29,8 @@ import {
 } from './bot/bot-inbound.processor';
 import { BOT_INBOUND_QUEUE_TOKEN } from './bot/bot-inbound.queue';
 import { BotService } from './bot/bot.service';
+import type Redis from 'ioredis';
+import { REDIS_CLIENT } from './public/rate-limit.guard';
 
 async function bootstrap(): Promise<void> {
   // Sentry ANTES que cualquier NestFactory / Module init. Sin esto, si un
@@ -176,6 +178,7 @@ async function bootstrap(): Promise<void> {
     parseRedis(),
     app.get(BotService),
     prisma,
+    app.get<Redis>(REDIS_CLIENT),
   );
   botInboundWorker.on('ready', () => logger.log('BotInboundWorker listo'));
   botInboundWorker.on('failed', (job, err) => {

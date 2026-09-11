@@ -10,6 +10,7 @@ const base = {
   SENTRY_DSN: 'https://sentry',
   WEB_BASE_URL: 'https://showly.us',
   WEBHOOK_TOKEN: 't'.repeat(32),
+  LOG_HASH_SECRET: 'h'.repeat(40),
 };
 
 describe('validateProdEnv', () => {
@@ -85,5 +86,23 @@ describe('validateProdEnv', () => {
       expect.stringContaining('WEBHOOK_HMAC_SECRET o WEBHOOK_TOKEN'),
       expect.stringContaining('ALLOW_WEBHOOK_WITHOUT_TOKEN'),
     ]);
+  });
+
+  /**
+   * Sin esta clave el seudónimo con el que el chatId del paciente sale en los
+   * logs del bot usa HMAC con clave vacía: vuelve a ser reversible por fuerza
+   * bruta, y esos logs salen del servidor.
+   */
+  it('falta LOG_HASH_SECRET → error explícito', () => {
+    const { LOG_HASH_SECRET: _omitida, ...sinClave } = base;
+    expect(validateProdEnv(sinClave)).toEqual(
+      expect.arrayContaining([expect.stringContaining('LOG_HASH_SECRET')]),
+    );
+  });
+
+  it('LOG_HASH_SECRET corto → error de fortaleza', () => {
+    expect(validateProdEnv({ ...base, LOG_HASH_SECRET: 'corto' })).toEqual(
+      expect.arrayContaining([expect.stringContaining('LOG_HASH_SECRET')]),
+    );
   });
 });

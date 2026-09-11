@@ -751,3 +751,19 @@
     distingue por el mensaje, que no es ideal: si el service expone un error tipado, cambiarlo.
 - El tope por chat es el mismo que en el borde público (3): el canal no debe cambiar cuántas veces
   puede moverla.
+
+## 2026-09-11 — P1 · M9-a: evento `bot.turn` y contadores del bot
+- Una línea estructurada por turno, emitida por quien lo envuelve (processor de `bot-inbound`, o el
+  webhook para adjuntos y descartes), más contadores por clínica y día en Redis que alimentarán el
+  dashboard (M9-b). `BotService` anota intención/origen/RAG en un `AsyncLocalStorage`.
+- **`LOG_HASH_SECRET` es nueva y obligatoria en producción**: hay que crearla en Coolify antes de
+  desplegar o el backend no arranca.
+- Blockers de la auditoría, corregidos: el seudónimo del `chatId` era un SHA-256 sin secreto sobre
+  un teléfono (reversible en segundos; ahora HMAC con `clinicId` en el preimagen, para que además no
+  correlacione al mismo paciente entre clínicas), y el campo `reason` salía como `[REDACTED]` en
+  producción porque coincide con un path del redactor — renombrarlo sin más habría convertido el bug
+  en una fuga, porque su valor era el mensaje de la excepción. Ahora es un conjunto cerrado.
+- Los contadores sólo cuentan el primer intento (BullMQ reintenta 3 veces y el panel habría mentido
+  sobre el volumen), el día va en la zona de la clínica y no en UTC, y se miran los errores de
+  `pipeline.exec()`, que no rechaza por comandos sueltos. Detalle en
+  [[notas/2026-09-11-evento-bot-turn]].
