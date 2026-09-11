@@ -36,6 +36,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[adr/0016-admin-audit-impersonation-trail|0016 — Trail estructurado de mutations bajo impersonation]]
 - [[adr/0017-webhook-hmac-cookie-hardening|0017 — HMAC del webhook WAHA + hardening de cookies]]
 - [[adr/0018-scheduling-link-wa|0018 — Link de agendamiento por WhatsApp (bot → web con token efímero)]]
+- [[adr/0019-rag-hechos-de-bd|0019 — Hechos de BD como fuente del RAG (sin embeddings)]]
 
 ## Specs de sprint (implementación)
 - [[specs/2026-08-18-observabilidad-pino-axiom-sentry|2026-08-18 — Spec Observabilidad (Pino + Axiom + Sentry) — Sprint 40 clínicas día 1-2]]
@@ -71,6 +72,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[notas/2026-09-10-tono-espanol-neutro|2026-09-10 — Tono de voz: español latinoamericano neutro (tuteo, sin voseo)]]
 - [[notas/2026-09-10-rag-umbral-distancia|2026-09-10 — RAG: umbral de distancia 0.5 → 0.65, calibrado con preguntas reales]]
 - [[notas/2026-09-11-conversation-chatid-canonico|2026-09-11 — `Conversation.chatId`: formato canónico y por qué no se puede hacer upsert a ciegas]]
+- [[notas/2026-09-11-waha-mensajes-sin-texto|2026-09-11 — WAHA: mensajes sin texto (audio, imagen, sticker) y cómo detectarlos]]
 
 ## Flujo de trabajo
 - [[skills-y-flujo|Skills, agentes y flujo de trabajo]]
