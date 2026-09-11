@@ -61,9 +61,14 @@ jobs:
         working-directory: apps/backend
         run: pnpm typecheck:scripts
 
+      # `pnpm test:ci` y no `pnpm test`: el código de salida de Jest cubre un
+      # suite que no arranca o un fichero sin tests, pero NO cubre los tests
+      # que existen y no se ejecutaron. Un `it.only` olvidado deja el resto del
+      # fichero sin correr y Jest sale 0 diciendo "1 passed" — incluidos los
+      # tests que habrían fallado. Verificado contra esta versión de Jest.
       - name: Unit tests
         working-directory: apps/backend
-        run: pnpm test
+        run: pnpm test:ci
 
   # ──────────────────── BACKEND (integración) ────────────────────
   # Los unitarios usan mocks de Redis, y los mocks se desvían de Redis: un mock

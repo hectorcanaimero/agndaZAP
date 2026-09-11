@@ -1,5 +1,13 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-11 — S17: CI falla si la corrida de tests fue verde pero incompleta (rama `ci/fallar-si-un-suite-no-arranca`)
+- **Lo que ya estaba cubierto** (verificado con sondas, no asumido): un suite que no arranca sale con exit 1, y un fichero de test sin tests también. CI ya los cazaba.
+- **El hueco real**: los tests que EXISTEN y no se ejecutan. Un `it.only` olvidado deja el resto del fichero sin correr y Jest sale **0** diciendo "1 passed" — incluidos los tests que habrían fallado. Un suite entero con `it.skip` sale 0 también. Es el caso peligroso porque es el que ocurre sin querer: alguien depura en local y commitea el `.only`.
+- **Arreglo**: `pnpm test:ci` corre Jest con `--json` y `scripts/assert-test-run.mjs` falla si hay suites que no arrancaron, ficheros sin tests, o tests en estado `pending`/`todo`. El mensaje nombra cada test que no corrió.
+- **Auditoría M4/M6 en `bot.service.spec.ts`: no hay duplicados.** Ningún nombre repetido (96 tests), y los dos únicos pares que se solapaban en tema —los de `answer=null` y los de chat `@lid`— afirman cosas distintas y son complementarios: uno comprueba el cambio a `NEEDS_HUMAN` y el otro que NO se anexa el link; uno que el `phone` llega null al RAG y el otro que la invitación sale igual. No se borra nada.
+- **Nota de método**: mi primer intento de auditar fue un parser de texto sobre el spec, y volvió a atribuir tests al `describe` equivocado —el mismo error que ya cometí con el `});` perdido—. La herramienta correcta es `jest --verbose`, que imprime el árbol real.
+- **Tests**: 1307 verdes.
+
 ## 2026-09-11 — M3-a: clasificador de intención v2 (rama `feat/intent-clasificador-v2`)
 - **Prompt con definición y 2 ejemplos por intención**, en es/pt según el locale de la clínica. Es lo que de verdad mueve la precisión con un modelo barato: sin definiciones, el modelo inventa su propio criterio para las clases ambiguas. Los ejemplos son frases reales de WhatsApp, no prosa de manual.
 - **Salida JSON `{ intent, confidence }`** con parseo de igualdad EXACTA contra el enum. El parser viejo usaba `includes`, así que una respuesta como "no es agendar" clasificaba como AGENDAR — y había un test que lo daba por bueno. Confianza < 0.6 → `OTRO`: preferimos "no te entendí" a ejecutar la acción equivocada, porque un CANCELAR mal clasificado le cancela la cita a alguien que solo preguntaba.
