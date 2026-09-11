@@ -552,5 +552,6 @@
 - Gotcha de tests encontrado de paso: mockear `Math.random` hacía que jest reportara
   `RangeError: Maximum call stack size exceeded` en vez del fallo real. Ver
   [[notas/2026-09-11-source-map-stack-overflow]].
-- Detalle: [[notas/2026-09-11-bot-matching-saludo-si-persona]]. Fuente: §4 del análisis técnico
-  del chatbot del 2026-09-11 (pendiente de commit por la sesión de planeamiento).
+- Detalle: [[notas/2026-09-11-bot-matching-saludo-si-persona]]. Fuente: §4 de
+  [[analisis/2026-09-11-chatbot-analisis-tecnico]]; reparto en [[plans/2026-09-11-p0-bot-reparto]]
+  (ambos llegan por el PR #45).

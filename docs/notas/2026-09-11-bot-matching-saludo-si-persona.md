@@ -6,7 +6,7 @@ tags: [bot, matching, nlu, p0]
 
 # Matching del bot: B1 + B2 + B3
 
-Tres bugs del análisis técnico del chatbot del 2026-09-11 (§4) que compartían
+Tres bugs de [[analisis/2026-09-11-chatbot-analisis-tecnico]] (§4) que compartían
 raíz: la escalera de `handleIncoming` tomaba decisiones mirando solo el **principio**
 del mensaje y consumiéndolo entero.
 
