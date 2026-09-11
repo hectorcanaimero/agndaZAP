@@ -636,11 +636,7 @@ export class BotService {
         break;
 
       case Intent.CANCELAR: {
-        // Nota para el rebase: cuando entre S5, `findUpcomingAppointment`
-        // recibe `convo` en vez de `phone` y este guard sobra.
-        const appt = phone
-          ? await this.findUpcomingAppointment(clinicId, phone)
-          : null;
+        const appt = await this.findUpcomingAppointment(clinicId, convo);
         const link = appt ? await this.manageLink(clinic, appt) : null;
         await this.reply(
           clinic.wahaSession,
