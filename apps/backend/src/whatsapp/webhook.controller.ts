@@ -22,6 +22,13 @@ import { RequestContextService } from '../common/logger/request-context';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizeE164 } from '../common/phone.util';
 import { hashChatId, withinBotRateLimit } from '../bot/bot-rate-limit';
+import { recordBotStats } from '../bot/bot-stats';
+import {
+  buildBotTurn,
+  emitBotTurn,
+  type BotTurnOutcome,
+  type BotTurnReason,
+} from '../bot/bot-turn-event';
 import { REDIS_CLIENT } from '../public/rate-limit.guard';
 import { WahaService } from './waha.service';
 import { verifyWebhookAuthFromEnv } from './webhook-auth.util';
@@ -296,6 +303,47 @@ export class WebhookController {
    *
    * Comparte claves y presupuesto con el bot — ver `bot/bot-rate-limit.ts`.
    */
+  /**
+   * Registra un turno de los caminos que NO pasan por el worker: adjuntos y
+   * mensajes descartados. Sin esto, la métrica contaría sólo lo que llega al
+   * bot y la tasa de descarte sería invisible justo cuando más importa (un
+   * flood, o una clínica que sólo recibe audios).
+   *
+   * Argumentos con nombre a propósito: `clinicId` y `chatId` son dos strings
+   * seguidos, y confundirlos atribuiría las métricas de un paciente a la
+   * clínica equivocada sin que nada se queje.
+   *
+   * `log: false` cuenta pero no emite la línea. Es para el camino de la cota:
+   * el sentido del rate-limit es dejar de hacer trabajo durante un flood, y
+   * una línea por mensaje descartado convierte el flood en coste de ingesta.
+   * El contador agregado ya da la señal que interesa (la tasa de descarte).
+   */
+  private recordTurn(input: {
+    clinicId: string;
+    chatId: string;
+    timezone?: string;
+    outcome: BotTurnOutcome;
+    latencyMs?: number;
+    reasonCode?: BotTurnReason;
+    log?: boolean;
+  }): void {
+    const event = buildBotTurn({
+      clinicId: input.clinicId,
+      chatHash: hashChatId(input.chatId, input.clinicId),
+      outcome: input.outcome,
+      latencyMs: input.latencyMs,
+      requestId: this.ctx.get('requestId'),
+      reasonCode: input.reasonCode,
+    });
+    if (input.log !== false) emitBotTurn(this.logger, event);
+    void recordBotStats(
+      this.redis,
+      this.logger,
+      event,
+      input.timezone,
+    ).catch(() => undefined);
+  }
+
   private withinRateLimit(
     clinicId: string,
     chatId: string,
@@ -472,6 +520,12 @@ export class WebhookController {
       // Clínica SUSPENDED/ARCHIVED: el bot no responde (misma regla que los
       // endpoints públicos). `session.status` se sigue procesando arriba para
       // no perder el estado de la sesión WAHA. Log sin PII: sólo clinicId.
+      // No registra `bot.turn`, al revés que el mismo caso en el worker, y es
+      // deliberado: aquí todavía no se ha parseado el `payload`, así que no hay
+      // `chatId` con el que construir el seudónimo. Tampoco se pierde gran
+      // cosa: una clínica suspendida no tiene a nadie mirando su panel. En el
+      // worker sí importa, porque allí significa que se suspendió DESPUÉS de
+      // encolar, y eso explica mensajes que el paciente mandó y nadie contestó.
       if (clinic.status !== 'ACTIVE') {
         this.logger.debug(
           `webhook message ignorado: clínica no activa clinicId=${clinic.id} status=${clinic.status}`,
@@ -559,8 +613,17 @@ export class WebhookController {
         // ADR 0007 antes de escribir nada: este camino no pasa por
         // `BotService.handleIncoming`, que es donde viven las dos capas.
         if (!(await this.withinRateLimit(clinic.id, from, 'media'))) {
+          this.recordTurn({
+            clinicId: clinic.id,
+            chatId: from,
+            timezone: clinic.timezone,
+            outcome: 'skipped',
+            reasonCode: 'rate-limit',
+            log: false,
+          });
           return { ok: true };
         }
+        const mediaStartedAt = Date.now();
         try {
           await this.handleUnsupportedMessage({
             clinic,
@@ -578,6 +641,16 @@ export class WebhookController {
           if (dedupKey) await this.releaseMessage(dedupKey);
           throw e;
         }
+        // Un adjunto es un turno igual: el paciente escribió y le
+        // respondimos. Sin esto, las notas de voz serían un agujero en las
+        // métricas justo donde más falta hace saber cuántas llegan.
+        this.recordTurn({
+          clinicId: clinic.id,
+          chatId: from,
+          timezone: clinic.timezone,
+          outcome: 'unsupported',
+          latencyMs: Date.now() - mediaStartedAt,
+        });
         return { ok: true };
       }
 
@@ -594,6 +667,14 @@ export class WebhookController {
       // límites efectivos son la mitad: ~7/min por chat y 250/h por clínica.
       // Es el lado seguro del error, pero hay que cerrarlo.
       if (!(await this.withinRateLimit(clinic.id, from, 'bot'))) {
+        this.recordTurn({
+          clinicId: clinic.id,
+          chatId: from,
+          timezone: clinic.timezone,
+          outcome: 'skipped',
+          reasonCode: 'rate-limit',
+          log: false,
+        });
         return { ok: true };
       }
 

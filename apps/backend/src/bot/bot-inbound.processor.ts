@@ -5,7 +5,17 @@ import { Worker, Job } from 'bullmq';
 import { requestContext } from '../common/logger/request-context';
 import { PrismaService } from '../prisma/prisma.service';
 import { isSentryEnabled } from '../common/sentry/sentry.config';
+import type Redis from 'ioredis';
+import { hashChatId } from './bot-rate-limit';
+import { recordBotStats } from './bot-stats';
 import { BotService } from './bot.service';
+import { runBotTurn } from './bot-turn-context';
+import {
+  buildBotTurn,
+  emitBotTurn,
+  type BotTurnOutcome,
+  type BotTurnReason,
+} from './bot-turn-event';
 import {
   BOT_INBOUND_JOB,
   BOT_INBOUND_QUEUE,
@@ -50,6 +60,7 @@ export function createBotInboundWorker(
   connection: { host: string; port: number },
   bot: BotService,
   prisma: PrismaService,
+  redis: Redis,
 ): Worker {
   const logger = new Logger('BotInboundWorker');
 
@@ -144,6 +155,7 @@ export function createBotInboundWorker(
       // Hoy no es alcanzable, pero si alguien renombra la constante los
       // mensajes desaparecerían marcados como completados y sin una línea.
       logger.warn(`job con nombre inesperado, descartado: ${job.name}`);
+      emit({ job, outcome: 'skipped', reasonCode: 'job-desconocido' });
       return;
     }
     const { clinicId, chatId, phone, lid, contactName, text } = job.data;
@@ -151,26 +163,100 @@ export function createBotInboundWorker(
     // El webhook comprobó que la clínica estaba ACTIVE al encolar, pero entre
     // eso y ahora pudo suspenderse (o la cola venir atrasada). Sin revalidar,
     // el bot respondería en nombre de una clínica dada de baja.
-    const clinic = await prisma.clinic.findUnique({
-      where: { id: clinicId },
-      select: { status: true },
-    });
+    // El `try` no sobra: si Postgres se cae, `handle` reventaba aquí y NO se
+    // emitía ningún evento. La clínica vería cero turnos y cero errores, que es
+    // indistinguible de "no escribió nadie" — justo durante una caída.
+    let clinic: { status: string; timezone: string } | null;
+    try {
+      clinic = await prisma.clinic.findUnique({
+        where: { id: clinicId },
+        select: { status: true, timezone: true },
+      });
+    } catch (err) {
+      emit({ job, outcome: 'error', reasonCode: 'bot-error' });
+      throw err;
+    }
     if (clinic?.status !== 'ACTIVE') {
       logger.log(
         `mensaje descartado: clínica no activa clinic=${clinicId} status=${
           clinic?.status ?? 'inexistente'
         }`,
       );
+      emit({
+        job,
+        outcome: 'skipped',
+        reasonCode: 'clinica-no-activa',
+      });
       return;
     }
 
-    await bot.handleIncoming({
-      clinicId,
-      chatId,
-      phone,
-      lid,
-      contactName,
-      text,
+    // El turno se envuelve para poder medir su latencia REAL y para que
+    // `BotService` pueda anotar intención, origen y RAG desde dentro sin
+    // pasar un parámetro por toda la cadena. Se emite pase lo que pase: un
+    // turno que falla es el que más interesa observar.
+    const startedAt = Date.now();
+    const turn = await runBotTurn(() =>
+      bot.handleIncoming({ clinicId, chatId, phone, lid, contactName, text }),
+    );
+    const latencyMs = Date.now() - startedAt;
+
+    emit({
+      job,
+      outcome: turn.ok ? 'ok' : 'error',
+      latencyMs,
+      turn: turn.data,
+      timezone: clinic.timezone,
+      ...(turn.ok ? {} : { reasonCode: 'bot-error' as const }),
     });
+    if (!turn.ok) throw turn.error;
+  }
+
+  /**
+   * Una línea por turno (ver `bot-turn-event.ts`) más los contadores que lee
+   * el dashboard (`bot-stats.ts`).
+   *
+   * Los contadores van sin `await`: son una métrica, y no pueden retrasar ni
+   * hacer fallar la respuesta a un paciente. `recordBotStats` ya es fail-open
+   * por dentro, así que el `catch` aquí es sólo por si la promesa se rechaza
+   * de una forma que no previó.
+   */
+  function emit(input: {
+    job: Job<BotInboundJobData>;
+    outcome: BotTurnOutcome;
+    latencyMs?: number;
+    turn?: Parameters<typeof buildBotTurn>[0]['turn'];
+    reasonCode?: BotTurnReason;
+    /** TZ de la clínica, para que el contador caiga en el día correcto. */
+    timezone?: string;
+  }): void {
+    const { job, outcome, latencyMs, turn, reasonCode, timezone } = input;
+    const jobData = job.data;
+    // 1-based, y sólo se emite si hubo reintento: un `attempt: 1` en cada
+    // línea es ruido.
+    const attempt = job.attemptsMade + 1;
+
+    const event = buildBotTurn({
+      clinicId: jobData.clinicId,
+      chatHash: hashChatId(jobData.chatId, jobData.clinicId),
+      outcome,
+      latencyMs,
+      requestId: jobData.requestId,
+      reasonCode,
+      ...(attempt > 1 ? { attempt } : {}),
+      turn,
+    });
+    emitBotTurn(logger, event);
+
+    // **Los contadores sólo cuentan el primer intento.** El evento se emite en
+    // todos (es lo que hace falta para depurar), pero BullMQ reintenta hasta
+    // tres veces: un mensaje que falla dos veces y acierta a la tercera sumaría
+    // 3 turnos y 2 errores para UN mensaje del paciente, y el panel de la
+    // clínica estaría mintiendo sobre su propio volumen.
+    if (attempt === 1) {
+      void recordBotStats(redis, logger, event, timezone).catch(
+        () => undefined,
+      );
+    }
+
   }
 }

@@ -25,7 +25,7 @@ describe('WebhookController', () => {
     message: { create: jest.Mock };
   };
   let inbound: { add: jest.Mock };
-  let redis: jest.Mocked<Pick<Redis, 'set' | 'del' | 'incr' | 'expire'>>;
+  let redis: jest.Mocked<Pick<Redis, 'set' | 'del' | 'incr' | 'expire' | 'pipeline'>>;
   let waha: { sendText: jest.Mock };
   let controller: WebhookController;
 
@@ -98,6 +98,7 @@ describe('WebhookController', () => {
           id: 'clinic-A',
           status: 'ACTIVE',
           wahaSession: 'clinic-a',
+          timezone: 'America/Caracas',
         }),
         update: jest.fn(),
       },
@@ -113,8 +114,16 @@ describe('WebhookController', () => {
       // Rate-limit del ADR 0007: por defecto siempre dentro de la cota.
       incr: jest.fn().mockResolvedValue(1),
       expire: jest.fn().mockResolvedValue(1),
+      // Contadores de M9: pipeline encadenable.
+      pipeline: jest.fn(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const chain: any = { exec: jest.fn().mockResolvedValue([]) };
+        chain.hincrby = jest.fn(() => chain);
+        chain.expire = jest.fn(() => chain);
+        return chain;
+      }),
     } as unknown as jest.Mocked<
-      Pick<Redis, 'set' | 'del' | 'incr' | 'expire'>
+      Pick<Redis, 'set' | 'del' | 'incr' | 'expire' | 'pipeline'>
     >;
     waha = { sendText: jest.fn().mockResolvedValue(undefined) };
     controller = new WebhookController(
@@ -232,6 +241,96 @@ describe('WebhookController', () => {
     prisma.clinic.findUnique.mockResolvedValueOnce(null);
     await post(messageEvent('msg-5'));
     expect(inbound.add).not.toHaveBeenCalled();
+  });
+
+  /**
+   * M9: los caminos que NO pasan por el worker también emiten `bot.turn`. Sin
+   * esto, las notas de voz y los mensajes descartados por la cota serían un
+   * agujero en las métricas justo donde más falta hace verlos.
+   */
+  describe('evento bot.turn desde el webhook (M9)', () => {
+    function turnEvents() {
+      return logSpy.mock.calls
+        .map((c) => c[0])
+        .filter((a) => typeof a === 'object' && a?.event === 'bot.turn');
+    }
+
+    let logSpy: jest.SpyInstance;
+    beforeEach(() => {
+      logSpy = jest
+        .spyOn(Logger.prototype, 'log')
+        .mockImplementation(() => undefined);
+      // `mockClear` no sobra: el afterEach global no restaura mocks, así que
+      // `spyOn` devuelve el MISMO spy entre tests y `mock.calls` se acumula.
+      logSpy.mockClear();
+    });
+
+    afterEach(() => logSpy.mockRestore());
+
+    it('un adjunto emite un turno con outcome unsupported', async () => {
+      await post(mediaEvent({ type: 'ptt', hasMedia: true }));
+      expect(turnEvents()).toEqual([
+        expect.objectContaining({
+          clinicId: 'clinic-A',
+          outcome: 'unsupported',
+        }),
+      ]);
+    });
+
+    /**
+     * El descarte por cota CUENTA pero no emite línea: el sentido del
+     * rate-limit es dejar de hacer trabajo durante un flood, y una línea por
+     * mensaje descartado lo convierte en coste de ingesta de logs. El contador
+     * agregado ya da la señal que interesa.
+     */
+    it('un mensaje descartado por la cota cuenta pero no emite línea', async () => {
+      redis.incr.mockResolvedValueOnce(16);
+      await post(messageEvent(MSG_ID));
+
+      expect(turnEvents()).toEqual([]);
+      expect(redis.pipeline).toHaveBeenCalled();
+    });
+
+    it('un mensaje de texto normal NO emite aquí: lo hace el worker', async () => {
+      // Si emitiéramos en los dos sitios, cada turno se contaría dos veces.
+      await post(messageEvent(MSG_ID));
+      expect(turnEvents()).toEqual([]);
+    });
+
+    it('el chatId va hasheado y no se filtra el teléfono', async () => {
+      await post(mediaEvent({ type: 'ptt', hasMedia: true }));
+      const [e] = turnEvents();
+      expect(e.chatHash).toMatch(/^[0-9a-f]{12}$/);
+      expect(JSON.stringify(e)).not.toContain(PHONE);
+    });
+
+    it('suma los contadores en la clave del día de la clínica', async () => {
+      await post(mediaEvent({ type: 'ptt', hasMedia: true }));
+
+      const chain = redis.pipeline.mock.results[0].value;
+      const keys = chain.hincrby.mock.calls.map((c: unknown[]) => c[0]);
+      const fields = chain.hincrby.mock.calls.map((c: unknown[]) => c[1]);
+      expect(keys[0]).toMatch(/^bot:stats:clinic-A:\d{4}-\d{2}-\d{2}$/);
+      expect(fields).toEqual(
+        expect.arrayContaining(['turns', 'outcome:unsupported']),
+      );
+    });
+
+    it('el seudónimo del chat cambia entre clínicas: no correlaciona pacientes', async () => {
+      await post(mediaEvent({ type: 'ptt', hasMedia: true }));
+      const first = turnEvents()[0].chatHash;
+
+      prisma.clinic.findUnique.mockResolvedValueOnce({
+        id: 'clinic-B',
+        status: 'ACTIVE',
+        wahaSession: 'clinic-b',
+        timezone: 'America/Caracas',
+      });
+      logSpy.mockClear();
+      await post(mediaEvent({ type: 'ptt', hasMedia: true }, 'otro-id'));
+
+      expect(turnEvents()[0].chatHash).not.toBe(first);
+    });
   });
 
   /**

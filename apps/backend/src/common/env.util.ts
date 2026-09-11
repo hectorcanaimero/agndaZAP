@@ -73,6 +73,17 @@ export function validateProdEnv(env: EnvLike): string[] {
       'WEBHOOK_HMAC_SECRET o WEBHOOK_TOKEN son obligatorios en producción',
     );
   }
+  // Clave del seudónimo con el que el `chatId` del paciente sale en los logs
+  // (`hashChatId`). Sin ella el HMAC usa clave vacía y el seudónimo se vuelve
+  // reversible por fuerza bruta: el espacio de teléfonos se recorre entero en
+  // minutos. En dev da igual; en producción esos logs van a un tercero.
+  if (!env.LOG_HASH_SECRET) {
+    errors.push(
+      'LOG_HASH_SECRET es obligatorio en producción (seudónimo de los logs del bot)',
+    );
+  }
+  errors.push(...checkSecretStrength('LOG_HASH_SECRET', env.LOG_HASH_SECRET));
+
   errors.push(...checkSecretStrength('WEBHOOK_TOKEN', env.WEBHOOK_TOKEN));
   errors.push(
     ...checkSecretStrength('WEBHOOK_HMAC_SECRET', env.WEBHOOK_HMAC_SECRET),

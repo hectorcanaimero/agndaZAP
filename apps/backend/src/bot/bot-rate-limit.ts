@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { createHash } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import Redis from 'ioredis';
 
 /**
@@ -38,12 +38,27 @@ const CHAT_WINDOW_TTL_S = 90;
 const CLINIC_WINDOW_TTL_S = 3900;
 
 /**
- * Hash corto del `chatId` para poder loguear sin filtrar PII: el `chatId`
- * incluye el número E.164 del paciente. 12 hex ≈ 48 bits, suficiente para
- * correlacionar eventos de la misma conversación sin exponer el identificador.
+ * Seudónimo del `chatId` para poder loguear sin filtrar el teléfono.
+ *
+ * **HMAC, no hash a secas, y con la clínica en el preimagen.** Un SHA-256 sin
+ * secreto sobre un E.164 no protege nada: el espacio de teléfonos es
+ * enumerable y se recorre entero en minutos, así que el "hash" es el teléfono
+ * escrito de otra forma. El número de bits nunca fue el punto — el secreto sí.
+ *
+ * El `clinicId` va dentro del preimagen para que el mismo paciente produzca
+ * seudónimos distintos en clínicas distintas. Sin eso, un filtro por
+ * `chatHash` en el destino de logs correlaciona a una persona entre tenants,
+ * que es justo el enlace que el aislamiento multi-tenant existe para impedir.
+ *
+ * Sin `LOG_HASH_SECRET` el HMAC usa clave vacía: el seudónimo deja de ser
+ * seguro pero sigue siendo estable, así que dev y tests funcionan igual.
+ * `validateProdEnv` la exige en producción.
  */
-export function hashChatId(chatId: string): string {
-  return createHash('sha256').update(chatId).digest('hex').slice(0, 12);
+export function hashChatId(chatId: string, clinicId = ''): string {
+  return createHmac('sha256', process.env.LOG_HASH_SECRET ?? '')
+    .update(`${clinicId}:${chatId}`)
+    .digest('hex')
+    .slice(0, 12);
 }
 
 /** Claves de las dos ventanas. Exportadas para poder asertarlas en tests. */
@@ -77,7 +92,7 @@ export async function withinBotRateLimit(
     if (count === 1) await redis.expire(chatKey, CHAT_WINDOW_TTL_S);
     if (count > BOT_PER_CHAT_LIMIT) {
       logger.warn(
-        `${scope} rate-limit clinic=${clinicId} chat=${hashChatId(chatId)} count=${count}`,
+        `${scope} rate-limit clinic=${clinicId} chat=${hashChatId(chatId, clinicId)} count=${count}`,
       );
       return false;
     }

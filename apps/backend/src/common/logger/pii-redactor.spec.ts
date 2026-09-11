@@ -192,4 +192,39 @@ describe('PII redactor', () => {
     expect(entry.msg).toBe('this is the message');
     expect(entry.level).toBe(30); // pino level info = 30
   });
+
+  /**
+   * M9. `nestjs-pino` vuelca el objeto del log en la RAÍZ del entry, así que
+   * cualquier campo del evento `bot.turn` que coincida con un path de
+   * redacción sale como `[REDACTED]` en producción — verde en los tests, que
+   * espían el logger de Nest antes de que pino redacte, y ciego en el destino
+   * real. Ya pasó una vez: el motivo se llamaba `reason`, que está en la lista
+   * por el motivo de consulta del paciente.
+   *
+   * Este test recorre el evento completo para que el próximo campo que alguien
+   * añada lo cace aquí y no en producción.
+   */
+  it('el evento bot.turn sobrevive entero al redactor', () => {
+    const { log, readLast } = createTestLogger();
+    const event = {
+      event: 'bot.turn',
+      clinicId: 'clinic-A',
+      chatHash: 'ab12cd34ef56',
+      outcome: 'error',
+      latencyMs: 1234,
+      requestId: 'req-1',
+      reasonCode: 'bot-error',
+      attempt: 2,
+      intent: 'agendar',
+      source: 'llm',
+      handoff: false,
+      rag: { candidates: 5, matches: 2, minDist: 0.31, nullAnswer: false },
+    };
+    log.info(event, 'bot turn');
+    const entry = readLast();
+
+    for (const [key, value] of Object.entries(event)) {
+      expect([key, entry[key]]).toEqual([key, value]);
+    }
+  });
 });

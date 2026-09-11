@@ -7,6 +7,8 @@ import {
   createBotInboundWorker,
   safeErrorLabel,
 } from './bot-inbound.processor';
+import { recordBotTurn } from './bot-turn-context';
+import { Intent } from './intent.service';
 import { BOT_INBOUND_JOB, type BotInboundJobData } from './bot-inbound.queue';
 
 /**
@@ -59,11 +61,20 @@ describe('createBotInboundWorker', () => {
   let bot: { handleIncoming: jest.Mock };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let prisma: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let redis: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let redisCalls: any[][];
+  let logSpy: jest.SpyInstance;
   let processor: (job: any) => Promise<unknown>;
   let errorSpy: jest.SpyInstance;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    redisCalls = [];
+    logSpy = jest
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation(() => undefined);
     errorSpy = jest
       .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => undefined);
@@ -72,10 +83,29 @@ describe('createBotInboundWorker', () => {
       clinic: { findUnique: jest.fn().mockResolvedValue({ status: 'ACTIVE' }) },
       conversation: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     };
+    redis = {
+      pipeline: jest.fn(() => {
+        const calls: any[] = [];
+        const chain: any = {
+          hincrby: jest.fn((...a: any[]) => {
+            calls.push(['hincrby', ...a]);
+            return chain;
+          }),
+          expire: jest.fn((...a: any[]) => {
+            calls.push(['expire', ...a]);
+            return chain;
+          }),
+          exec: jest.fn(async () => calls),
+        };
+        redisCalls.push(calls);
+        return chain;
+      }),
+    };
     const worker = createBotInboundWorker(
       { host: 'localhost', port: 6379 },
       bot as unknown as BotService,
       prisma as unknown as PrismaService,
+      redis as unknown as never,
     ) as unknown as { processor: (job: any) => Promise<unknown> };
     processor = worker.processor;
   });
@@ -275,5 +305,165 @@ describe('createBotInboundWorker', () => {
     for (const call of errorSpy.mock.calls) {
       expect(String(call[0])).not.toContain('me duele la muela');
     }
+  });
+
+  /** M9: una línea estructurada por turno, sin PII. */
+  describe('evento bot.turn', () => {
+    function lastEvent() {
+      const calls = logSpy.mock.calls.filter(
+        (c) => typeof c[0] === 'object' && c[0]?.event === 'bot.turn',
+      );
+      return calls.at(-1)?.[0];
+    }
+
+    it('emite un bot.turn por turno con outcome ok y latencia', async () => {
+      await processor(makeJob());
+      const e = lastEvent();
+
+      expect(e).toMatchObject({
+        event: 'bot.turn',
+        clinicId: 'clinic-A',
+        outcome: 'ok',
+        requestId: 'req-1',
+      });
+      expect(typeof e.latencyMs).toBe('number');
+    });
+
+    it('el chatId va hasheado, nunca en claro', async () => {
+      await processor(makeJob());
+      const e = lastEvent();
+
+      expect(e.chatHash).toMatch(/^[0-9a-f]{12}$/);
+      expect(JSON.stringify(e)).not.toContain('584141234567');
+    });
+
+    it('no filtra el texto del paciente', async () => {
+      await processor(makeJob());
+      expect(JSON.stringify(lastEvent())).not.toContain('quiero agendar');
+    });
+
+    it('un turno que falla también emite, con outcome error', async () => {
+      // Es justo el turno que más interesa observar.
+      bot.handleIncoming.mockRejectedValue(new Error('deepseek down'));
+      await expect(processor(makeJob())).rejects.toThrow();
+
+      // `reasonCode`, no el mensaje del error: éste puede arrastrar el texto
+      // del paciente (los errores de JSON.parse incluyen parte de la entrada).
+      expect(lastEvent()).toMatchObject({
+        outcome: 'error',
+        reasonCode: 'bot-error',
+      });
+    });
+
+    it('una clínica suspendida emite skipped y no llega al bot', async () => {
+      prisma.clinic.findUnique.mockResolvedValue({ status: 'SUSPENDED' });
+      await processor(makeJob());
+
+      expect(lastEvent()).toMatchObject({
+        outcome: 'skipped',
+        reasonCode: 'clinica-no-activa',
+      });
+      expect(bot.handleIncoming).not.toHaveBeenCalled();
+    });
+
+    it('incluye lo que BotService anotó en el contexto del turno', async () => {
+      bot.handleIncoming.mockImplementation(async () => {
+        recordBotTurn({ intent: Intent.AGENDAR, source: 'rule', handoff: false });
+      });
+      await processor(makeJob());
+
+      expect(lastEvent()).toMatchObject({
+        intent: Intent.AGENDAR,
+        source: 'rule',
+        handoff: false,
+      });
+    });
+
+    it('omite los campos que el turno no llegó a rellenar', async () => {
+      // Un `intent: undefined` en Axiom parece un dato ausente cuando en
+      // realidad el camino ni pasó por el clasificador.
+      await processor(makeJob());
+      expect(lastEvent()).not.toHaveProperty('intent');
+      expect(lastEvent()).not.toHaveProperty('rag');
+    });
+
+    it('suma los contadores del día que lee el dashboard', async () => {
+      bot.handleIncoming.mockImplementation(async () => {
+        recordBotTurn({ intent: Intent.AGENDAR, source: 'llm' });
+      });
+      await processor(makeJob());
+
+      const ops = redisCalls.at(-1) ?? [];
+      const fields = ops
+        .filter((o) => o[0] === 'hincrby')
+        .map((o) => o[2]);
+      expect(fields).toEqual(
+        expect.arrayContaining(['turns', 'outcome:ok', 'intent:agendar', 'source:llm']),
+      );
+      expect(ops.some((o) => o[0] === 'expire')).toBe(true);
+    });
+
+    it('si los contadores fallan, el turno sigue adelante', async () => {
+      redis.pipeline = jest.fn(() => {
+        throw new Error('redis down');
+      });
+      await expect(processor(makeJob())).resolves.toBeUndefined();
+      expect(bot.handleIncoming).toHaveBeenCalled();
+    });
+  });
+
+  describe('reintentos y contadores', () => {
+    it('los contadores sólo cuentan el primer intento', async () => {
+      // BullMQ reintenta 3 veces: sin esto, un mensaje que falla dos veces y
+      // acierta a la tercera sumaría 3 turnos y 2 errores para UN mensaje, y
+      // el panel de la clínica mentiría sobre su propio volumen.
+      redisCalls = [];
+      bot.handleIncoming.mockRejectedValueOnce(new Error('timeout'));
+      await expect(processor(makeJob({ attemptsMade: 1 }))).rejects.toThrow();
+      expect(redisCalls).toHaveLength(0);
+    });
+
+    it('pero el evento sí se emite en cada intento, con el número', async () => {
+      bot.handleIncoming.mockRejectedValueOnce(new Error('timeout'));
+      await expect(processor(makeJob({ attemptsMade: 1 }))).rejects.toThrow();
+      const e = logSpy.mock.calls
+        .map((c) => c[0])
+        .filter((a) => a?.event === 'bot.turn')
+        .at(-1);
+      expect(e).toMatchObject({ outcome: 'error', attempt: 2 });
+    });
+
+    it('el primer intento no lleva `attempt`: sería ruido en cada línea', async () => {
+      await processor(makeJob());
+      const e = logSpy.mock.calls
+        .map((c) => c[0])
+        .filter((a) => a?.event === 'bot.turn')
+        .at(-1);
+      expect(e).not.toHaveProperty('attempt');
+    });
+
+    it('si la base falla antes del bot, igual se emite un evento', async () => {
+      // Si no, durante una caída de Postgres el panel muestra cero turnos y
+      // cero errores: indistinguible de "no escribió nadie".
+      prisma.clinic.findUnique.mockRejectedValue(new Error('db down'));
+      await expect(processor(makeJob())).rejects.toThrow('db down');
+      const e = logSpy.mock.calls
+        .map((c) => c[0])
+        .filter((a) => a?.event === 'bot.turn')
+        .at(-1);
+      expect(e).toMatchObject({ outcome: 'error', reasonCode: 'bot-error' });
+    });
+
+    it('un turno que lanza un valor falsy no se lee como exitoso', async () => {
+      // `throw null` con `if (error)` habría emitido ok y marcado el job como
+      // completado, dejando al paciente sin respuesta y sin rastro.
+      bot.handleIncoming.mockImplementation(() => Promise.reject(null));
+      await expect(processor(makeJob())).rejects.toBeNull();
+      const e = logSpy.mock.calls
+        .map((c) => c[0])
+        .filter((a) => a?.event === 'bot.turn')
+        .at(-1);
+      expect(e.outcome).toBe('error');
+    });
   });
 });
