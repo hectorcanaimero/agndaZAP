@@ -1,5 +1,19 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-11 — M10: exploración de STT para notas de voz (sin código)
+- Nota en [[notas/2026-09-11-exploracion-stt-notas-de-voz]] con comparativa, precios verificados en septiembre de 2026 y plan de 3 PRs.
+- **Recomendación: OpenAI `gpt-4o-mini-transcribe`.** No por precio —a este volumen las tres opciones cuestan céntimos— sino porque es el único proveedor **ya dentro del consent del ADR 0004**, que nombra explícitamente a OpenAI, DeepSeek y Google. Sumar Deepgram obligaría a reescribir el texto legal, versionarlo y volver a pedirlo.
+- **Deepgram es la mejor tecnología de las tres y aun así la peor opción aquí**: su ventaja es la latencia de streaming, y una nota de voz llega entera. Pagaríamos un coste legal real por una ventaja que este caso de uso no usa.
+- **Regla propuesta: transcribir y NO guardar el audio.** Una nota de voz es mucho más sensible que el texto equivalente —lleva la voz, el ruido de fondo, quién más está en la habitación— y el ADR 0004 §1 ni siquiera cifra las `notes` at-rest.
+- **Tres premisas del encargo que no se sostenían**, verificadas: (a) Gemini NO está usable en el router —llama a `gemini-2.0-flash`, retirado en junio de 2026, y `GEMINI_API_KEY` no está en Coolify, así que la cadena real es `deepseek → opencode`—; (b) WAHA no descarga media (faltan las envs `WAHA_MEDIA_*`), así que hoy llega `hasMedia: true` con `media: null`; (c) el handoff tras dos adjuntos no está en producción porque #46 quedó huérfano.
+## 2026-09-11 — S17: CI falla si la corrida de tests fue verde pero incompleta (rama `ci/fallar-si-un-suite-no-arranca`)
+- **Lo que ya estaba cubierto** (verificado con sondas, no asumido): un suite que no arranca sale con exit 1, y un fichero de test sin tests también. CI ya los cazaba.
+- **El hueco real**: los tests que EXISTEN y no se ejecutan. Un `it.only` olvidado deja el resto del fichero sin correr y Jest sale **0** diciendo "1 passed" — incluidos los tests que habrían fallado. Un suite entero con `it.skip` sale 0 también. Es el caso peligroso porque es el que ocurre sin querer: alguien depura en local y commitea el `.only`.
+- **Arreglo**: `pnpm test:ci` corre Jest con `--json` y `scripts/assert-test-run.mjs` falla si hay suites que no arrancaron, ficheros sin tests, o tests en estado `pending`/`todo`. El mensaje nombra cada test que no corrió.
+- **Auditoría M4/M6 en `bot.service.spec.ts`: no hay duplicados.** Ningún nombre repetido (96 tests), y los dos únicos pares que se solapaban en tema —los de `answer=null` y los de chat `@lid`— afirman cosas distintas y son complementarios: uno comprueba el cambio a `NEEDS_HUMAN` y el otro que NO se anexa el link; uno que el `phone` llega null al RAG y el otro que la invitación sale igual. No se borra nada.
+- **Nota de método**: mi primer intento de auditar fue un parser de texto sobre el spec, y volvió a atribuir tests al `describe` equivocado —el mismo error que ya cometí con el `});` perdido—. La herramienta correcta es `jest --verbose`, que imprime el árbol real.
+- **Tests**: 1307 verdes.
+
 ## 2026-09-11 — M3-a: clasificador de intención v2 (rama `feat/intent-clasificador-v2`)
 - **Prompt con definición y 2 ejemplos por intención**, en es/pt según el locale de la clínica. Es lo que de verdad mueve la precisión con un modelo barato: sin definiciones, el modelo inventa su propio criterio para las clases ambiguas. Los ejemplos son frases reales de WhatsApp, no prosa de manual.
 - **Salida JSON `{ intent, confidence }`** con parseo de igualdad EXACTA contra el enum. El parser viejo usaba `includes`, así que una respuesta como "no es agendar" clasificaba como AGENDAR — y había un test que lo daba por bueno. Confianza < 0.6 → `OTRO`: preferimos "no te entendí" a ejecutar la acción equivocada, porque un CANCELAR mal clasificado le cancela la cita a alguien que solo preguntaba.
@@ -934,3 +948,50 @@
   salía en `null` porque nadie escribía ese contador.
 - Es la tercera vez en el día que `main` queda en un estado que no compila o al que le falta código
   mergeado. Propuesta sobre la mesa: que CI compile el *merge result* y exigir la rama al día.
+## 2026-09-11 — P1 · S4: `Feedback` admitía filas cruzadas entre clínicas
+- `FollowUpsService.recordFeedback` escribía `clinicId` y `appointmentId` sin comprobar que fueran
+  juntos. `Feedback` tiene FKs separadas a `Clinic` y `Appointment`, así que la base lo permite, y el
+  `appointmentId` viene de `Conversation.flowData` (JSON durable), no de la request. Doble daño: el
+  panel de una clínica leería el comentario en texto libre de un paciente de otra
+  (`@@index([clinicId, respondedAt])`), y como `appointmentId` es `@unique`, la clínica legítima ya
+  no podría registrar nunca el feedback real de esa cita.
+- Ahora valida con `appointment.findFirst({ id, clinicId })` antes de escribir, y ante un cruce
+  devuelve `created: false` con log de `error` en vez de lanzar (el caller es el webhook: un 500 ahí
+  es un bucle de reintentos de WAHA sobre un `flowData` que no se arregla solo).
+- **Segundo agujero, sin cerrar todavía**: `bot.service.ts` (`handleAwaitingNpsComment`) hace
+  `feedback.update({ where: { appointmentId } })` sin `clinicId`, y ese sí *sobrescribe* texto de un
+  paciente de otra clínica. No se puede arreglar en el sitio porque `update` exige un `where` único.
+  Queda `FollowUpsService.recordComment` (con `updateMany`, que sí acepta `where` compuesto) listo
+  para que la sesión dueña de `bot.service.ts` lo cablee en una línea. Detalle en
+  [[notas/2026-09-11-feedback-cross-tenant]].
+- El `security-auditor` no encontró blockers, pero sí que la justificación de `updateMany` que
+  escribí era **falsa**: con `extendedWhereUnique` (GA desde Prisma 5.0) `update` sí admite el
+  filtro por `clinicId`. El motivo real es que `update` lanza P2025 sin match y eso es un 500 en el
+  webhook. Corregido en el comentario, en el nombre del test y en la nota.
+- También salió del audit: el guard de idempotencia de `scheduleForAppointment` leía sin `clinicId`
+  (una fila envenenada dejaba a la clínica legítima sin prompt), y el catch de `recordFeedback` ahora
+  cubre P2003/P2025 además de P2002. Pendientes anotados: FK compuesta
+  `Feedback → Appointment(clinicId, id)` con migración y ADR propio, y el `include` de
+  `feedback.controller.ts`, que sigue el `appointmentId` hasta `patient.name` sin revalidar tenant.
+
+## 2026-09-11 — El comentario del feedback también se escribe con `clinicId`
+- `handleAwaitingNpsComment` hacía `prisma.feedback.update({ where: { appointmentId } })` sin
+  `clinicId`: si `flowData.feedbackAppointmentId` quedaba con una cita de otra clínica, el bot
+  pisaba el comentario de esa fila. Ahora usa `FollowUpsService.recordComment(clinicId, …)`, que
+  filtra por las dos columnas (lo dejó listo S4, PR #50).
+- Alcance real: `flowData` lo escribe el processor de follow-ups para esa conversación, no el
+  paciente, así que no era explotable desde WhatsApp. Es defensa en profundidad, misma clase que
+  S4 — pero el `update` por id suelto es exactamente el patrón que la convención del repo prohíbe.
+- Con 0 filas afectadas el bot cierra igual y agradece: el paciente no debe enterarse de un
+  problema de datos nuestro. Queda el `logger.warn` de `recordComment` para verlo en observabilidad.
+
+## 2026-09-11 — M3-b: intenciones nuevas y contexto al clasificador
+- `AGRADECER` cierra con cortesía (mismo pool que el cierre determinista), sin RAG ni handoff.
+- `CONSULTA_CITA` ("¿cuándo es mi cita?") responde **desde la BD**, no desde el RAG: la respuesta
+  está en `Appointment`, y mandarla al RAG era pedirle al LLM que adivinara un dato que tenemos.
+  Incluye el link de gestión, para que no tenga que volver a escribir.
+- El historial de la conversación va ahora **al clasificador además de al RAG**, con una sola
+  lectura de `Message` para los dos. `IntentService` ya lo trata como texto no confiable (M3-a),
+  igual que `knowledge.service.ts`.
+- `buildConversationContext` pasa a devolver `string[]`: es lo que espera el clasificador, y el
+  RAG lo une. Antes devolvía el string ya unido y habría hecho falta partirlo.

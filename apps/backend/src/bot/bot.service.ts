@@ -314,14 +314,14 @@ export class BotService {
    */
   private async buildConversationContext(
     conversationId: string,
-  ): Promise<string | null> {
+  ): Promise<string[]> {
     const rows = await this.prisma.message.findMany({
       where: { conversationId },
       orderBy: { createdAt: 'desc' },
       take: BotService.CONTEXT_PAIRS * 2,
       select: { direction: true, body: true },
     });
-    if (rows.length === 0) return null;
+    if (rows.length === 0) return [];
 
     const lines = rows
       .reverse()
@@ -330,7 +330,7 @@ export class BotService {
           `${m.direction === 'IN' ? 'Paciente' : 'Asistente'}: ${m.body.replace(/\s+/g, ' ').trim()}`,
       )
       .filter((l) => l.length > 10);
-    if (lines.length === 0) return null;
+    if (lines.length === 0) return [];
 
     // Recorte por el principio, quedándonos con lo más reciente.
     const kept: string[] = [];
@@ -340,7 +340,7 @@ export class BotService {
       kept.unshift(line);
       total += line.length + 1;
     }
-    return kept.length > 0 ? kept.join('\n') : null;
+    return kept;
   }
 
   /**
@@ -642,7 +642,19 @@ export class BotService {
     }
 
     // 3) Detección de intención con LLM.
-    const intent = await this.intent.detect(effectiveText, clinic.locale);
+    //
+    // El historial va también al clasificador (M3-b/M5): "el martes" es
+    // AGENDAR o REPROGRAMAR según lo que se venía hablando, y un "sí" detrás
+    // de "¿te la cambio?" no es lo mismo que un "sí" suelto.
+    //
+    // `IntentService` lo trata como texto no confiable —lo sanea y le dice al
+    // modelo que ignore órdenes que vengan dentro—, igual que el RAG.
+    const contextLines = await this.buildConversationContext(convo.id);
+    const intent = await this.intent.detect(
+      effectiveText,
+      clinic.locale,
+      contextLines,
+    );
     switch (intent) {
       case Intent.HABLAR_HUMANO:
         await this.markNeedsHuman(convo.id, clinic.id);
@@ -683,17 +695,65 @@ export class BotService {
         );
         break;
 
+      // "gracias", "perfecto": cierra la conversación, no pide nada. Mismo
+      // cierre que el determinista, sin gastar otra llamada.
+      case Intent.AGRADECER:
+        await this.reply(
+          clinic.wahaSession,
+          chatId,
+          convo.id,
+          this.pickVariant(this.copy(clinic).pools.closing),
+        );
+        break;
+
+      // "¿cuándo es mi cita?" — pregunta por SU cita, no por la clínica, así
+      // que no tiene sentido mandarla al RAG: la respuesta está en la BD.
+      case Intent.CONSULTA_CITA: {
+        const appt = await this.findUpcomingAppointment(clinicId, convo);
+        if (!appt) {
+          await this.reply(
+            clinic.wahaSession,
+            chatId,
+            convo.id,
+            this.copy(clinic).noAppointmentToTell,
+          );
+          break;
+        }
+        const copy = this.copy(clinic);
+        const when = this.formatWhen(appt.startAt.toISOString(), clinic);
+        const service = appt.service?.name ?? 'consulta';
+        // `findUpcomingAppointment` no incluye el profesional (no hace falta en
+        // los otros caminos). Lo leemos acotado al tenant.
+        const professional =
+          (
+            await this.prisma.professional.findFirst({
+              where: { id: appt.professionalId, clinicId: clinic.id },
+              select: { name: true },
+            })
+          )?.name ?? '';
+        const statusLine =
+          appt.status === 'CONFIRMADA'
+            ? copy.apptConfirmedLine(service, when)
+            : copy.apptPendingLine(service, when);
+        const link = await this.manageLink(clinic, appt);
+        await this.reply(
+          clinic.wahaSession,
+          chatId,
+          convo.id,
+          copy.appointmentInfo(service, professional, when, statusLine, link),
+        );
+        break;
+      }
+
       case Intent.PREGUNTA_FAQ: {
         // RAG sobre FaqChunk: si hay match confiable → respondemos con el
         // texto sintetizado por el LLM desde las fuentes. Si no → handoff a
         // humano (política "prefiero handoff que alucinar").
-        // El historial reciente resuelve referencias ("¿y los sábados?"). El
-        // mensaje actual ya se acaba de persistir, así que queda incluido.
-        const context = await this.buildConversationContext(convo.id);
         const result = await this.knowledge.answer({
           clinicId,
           question: effectiveText,
-          context,
+          // Mismo historial que fue al clasificador: una sola lectura.
+          context: contextLines.join('\n') || null,
           locale: clinic.locale,
           tone: clinic.botTone, // custom per-tenant desde /panel/ajustes
           // Teléfono de la conversación (el que WAHA reporta, no uno
@@ -2216,12 +2276,12 @@ export class BotService {
     );
 
     if (apptId && !skip) {
-      // Actualizamos el comment del feedback existente (la row se creó en el
-      // paso previo). NO usamos followUps.recordFeedback porque ya existe.
-      await this.prisma.feedback.update({
-        where: { appointmentId: apptId },
-        data: { comment: originalText.trim().slice(0, 1000) },
-      });
+      // La fila de Feedback ya existe (la creó el paso del score), así que
+      // solo actualizamos el comentario. Vía `FollowUpsService.recordComment`,
+      // que filtra por `clinicId` además de por `appointmentId`: un
+      // `feedback.update` por `appointmentId` suelto escribiría sobre la fila
+      // de otra clínica si `flowData` quedara con un id ajeno. Ver S4.
+      await this.followUps.recordComment(clinic.id, apptId, originalText);
     }
 
     await this.resetFlow(convo.id);
