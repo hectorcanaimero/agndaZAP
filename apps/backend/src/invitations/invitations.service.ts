@@ -91,7 +91,7 @@ export class InvitationsService {
           select: {
             email: true,
             name: true,
-            clinic: { select: { name: true } },
+            clinic: { select: { name: true, status: true } },
           },
         },
       },
@@ -110,6 +110,11 @@ export class InvitationsService {
       // Defensivo: user sin clínica no debería estar en el flow de invitación
       // (solo CLINIC_ADMIN se invita — SUPERADMIN se crea por seed/CLI).
       throw new ConflictException('invitación en estado inválido');
+    }
+    // Clínica suspendida o archivada: nadie nuevo entra. Mismo 404 que una
+    // invitación inexistente — no confirmamos que la clínica existe.
+    if (inv.user.clinic.status !== 'ACTIVE') {
+      throw new NotFoundException('invitación no encontrada');
     }
 
     return {
@@ -131,12 +136,22 @@ export class InvitationsService {
   async accept(token: string, plainPassword: string): Promise<void> {
     const inv = await this.prisma.invitation.findUnique({
       where: { token },
+      include: { user: { select: { clinic: { select: { status: true } } } } },
     });
 
     if (!inv) throw new NotFoundException('invitación no encontrada');
     if (inv.acceptedAt) throw new GoneException('invitación ya utilizada');
     if (inv.expiresAt.getTime() <= Date.now()) {
       throw new GoneException('invitación expirada');
+    }
+    // Se re-comprueba acá y no solo en `getByToken`: entre ver la pantalla y
+    // pulsar "aceptar" la clínica puede haber sido suspendida, y este es el
+    // paso que de verdad da acceso (escribe la contraseña del usuario).
+    //
+    // Sin clínica no se bloquea: `accept` nunca la ha exigido y no es esta
+    // tarea la que debe cambiar ese comportamiento.
+    if (inv.user.clinic && inv.user.clinic.status !== 'ACTIVE') {
+      throw new NotFoundException('invitación no encontrada');
     }
 
     // Hash FUERA de la transacción (bcrypt es CPU-heavy — no queremos tener

@@ -1,5 +1,14 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-11 — S12: auditoría de `Clinic.status` en la superficie sin auth (rama `fix/clinic-status-endpoints-publicos`)
+- **Disparador**: al construir los endpoints de gestión de cita por link se me olvidó el filtro `status = ACTIVE` que los otros endpoints públicos sí tenían. Lo cazó el `security-auditor` y la pregunta obvia fue dónde más faltaba. Faltaba en tres sitios.
+- **El feed iCal era el peor**: servía nombre y teléfono del paciente en cada evento sin mirar el estado de la clínica, y la URL vive indefinidamente en la app de calendario del profesional — habría seguido sincronizando PII de salud meses después de cerrar la cuenta, sin que nadie visite nada. Ahora devuelve feed vacío.
+- **Invitaciones**: se podía entrar a una clínica suspendida. Comprobado en `getByToken` y otra vez en `accept`, porque entre ver la pantalla y pulsar el botón la clínica puede suspenderse y `accept` es el paso que da acceso de verdad.
+- **Token de agendamiento**: hidrataba el form con nombre y teléfono del paciente. Alcance menor (TTL 30 min) pero es PII igual.
+- **Ya estaban bien** y se verificaron: los tres endpoints de `/public/clinics`, el webhook WAHA (para `message`; `session.status` se procesa igual a propósito) y el login. `POST /public/leads` no es de clínica y los health checks no leen datos.
+- Regla que queda escrita en [[notas/2026-09-11-offboarding-clinic-status]]: un token emitido cuando la clínica estaba activa **no es un permiso permanente**; el estado se comprueba al usarlo.
+- **Tests**: 947 verdes, con caso `SUSPENDED`/`ARCHIVED` por endpoint.
+
 ## 2026-09-11 — B9: el follow-up de satisfacción perdía el score (rama `fix/follow-up-upsert-conversation`)
 - **Bug** (ítem B9 de [[analisis/2026-09-11-chatbot-analisis-tecnico]], ya anotado como deuda el 2026-09-09: "follow-up sin Conversation"): `send-follow-up` mandaba el prompt "1-5" por WhatsApp pero solo marcaba `flowStep=AWAITING_NPS_SCORE` dentro de un `if (convo)`. Un paciente que agendó por la página pública y nunca escribió por WhatsApp no tiene `Conversation`, así que el prompt salía igual y su "5" entraba al bot sin `flowStep`: caía al clasificador LLM, el score se perdía y el paciente recibía un fallback sin sentido. Silencioso — no había error en logs.
 - **Fix**: la conversación se resuelve siempre. Primero `findFirst` por `(clinicId, phone)`; si no hay, `upsert` por la clave única `(clinicId, chatId)` con el id canónico `<digitos>@c.us`. Luego `flowStep` y `Message OUT` se escriben sin condicional.
