@@ -10,6 +10,7 @@ import { alertReception as sendReceptionAlert } from '../conversations/reception
 import { PrismaService } from '../prisma/prisma.service';
 import { WahaService } from '../whatsapp/waha.service';
 import { REMINDERS_QUEUE } from './reminders.service';
+import { SchedulingSessionService } from '../scheduling/scheduling-session.service';
 
 /**
  * Procesa los jobs de la cola de recordatorios.
@@ -36,6 +37,12 @@ export function createRemindersWorker(
   connection: { host: string; port: number },
   prisma: PrismaService,
   waha: WahaService,
+  /**
+   * Emisor del link de gestión (ADR 0020). Opcional a propósito: si no se pasa,
+   * el recordatorio sale con las palabras de siempre. Así el worker sigue
+   * arrancando en entornos donde Redis de sesiones no esté disponible.
+   */
+  sessions?: SchedulingSessionService,
 ): Worker<RemindersJobData> {
   const logger = new Logger('RemindersWorker');
 
@@ -111,11 +118,32 @@ export function createRemindersWorker(
         .setLocale(appt.clinic.locale)
         .toFormat("cccc d 'de' LLLL, HH:mm");
 
+      // Link de gestión: cambiar u horario o cancelar sin tener que escribir.
+      // Best-effort — si no se puede emitir, el recordatorio sale igual con las
+      // palabras de siempre. Perder el link no puede costar el recordatorio.
+      let manageUrl: string | null = null;
+      if (sessions) {
+        try {
+          manageUrl = await sessions.issueManageUrl(
+            appt,
+            appt.clinic.slug,
+            appt.clinic.locale,
+          );
+        } catch (e) {
+          logger.warn(
+            `recordatorio sin link de gestión (cita ${appt.id}): ${(e as Error).message}`,
+          );
+        }
+      }
+
       const text =
         `Hola${appt.patient.name ? ' ' + appt.patient.name : ''}, reservaste una cita ` +
         `de ${appt.service.name} en ${appt.clinic.name} para el ${when}. ¿Confirmas que vas?\n\n` +
         `Responde *SÍ* para confirmar, *REAGENDAR* para cambiarla o *CANCELAR* si no puedes ir, ` +
-        `así liberamos el turno para otro paciente.`;
+        `así liberamos el turno para otro paciente.` +
+        (manageUrl
+          ? `\n\nTambién puedes cambiarla o cancelarla aquí:\n${manageUrl}`
+          : '');
 
       await waha.sendText(appt.clinic.wahaSession, appt.patient.phone, text);
 

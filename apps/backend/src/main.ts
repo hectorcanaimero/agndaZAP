@@ -22,6 +22,7 @@ import {
 import { createRemindersWorker } from './reminders/reminders.processor';
 import { parseRedis } from './reminders/reminders.module';
 import { createFollowUpsWorker } from './follow-ups/follow-ups.processor';
+import { SchedulingSessionService } from './scheduling/scheduling-session.service';
 import {
   createBotInboundWorker,
   safeErrorLabel,
@@ -144,7 +145,12 @@ async function bootstrap(): Promise<void> {
 
   // Bootstrap del worker BullMQ. Comparte Redis con la Queue vía parseRedis().
   const waha = app.get(WahaService);
-  const worker = createRemindersWorker(parseRedis(), prisma, waha);
+  const worker = createRemindersWorker(
+    parseRedis(),
+    prisma,
+    waha,
+    app.get(SchedulingSessionService),
+  );
   worker.on('ready', () => logger.log('RemindersWorker listo'));
   worker.on('failed', (job, err) => {
     // BullMQ puede entregar `err` undefined en edges raros; blindamos el log.

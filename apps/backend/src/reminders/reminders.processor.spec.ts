@@ -5,6 +5,7 @@ import { requestContext } from '../common/logger/request-context';
 import { PrismaService } from '../prisma/prisma.service';
 import { WahaService } from '../whatsapp/waha.service';
 import { createRemindersWorker } from './reminders.processor';
+import { SchedulingSessionService } from '../scheduling/scheduling-session.service';
 
 /**
  * Tests del worker de recordatorios (consumer BullMQ).
@@ -89,6 +90,7 @@ function makeJob(name: string, data: Record<string, unknown>, id = `${name}-job`
 describe('RemindersProcessor (createRemindersWorker)', () => {
   let prisma: Deep<PrismaService>;
   let waha: Deep<WahaService>;
+  let sessions: any;
   let process: (job: any) => Promise<unknown>;
   let logSpy: jest.SpyInstance;
   let warnSpy: jest.SpyInstance;
@@ -117,10 +119,19 @@ describe('RemindersProcessor (createRemindersWorker)', () => {
     };
     waha = { sendText: jest.fn().mockResolvedValue(undefined) };
 
+    sessions = {
+      issueManageUrl: jest
+        .fn()
+        .mockResolvedValue(
+          'https://showly.us/es/agendar/clinica-a/cita?t=mtok-abc',
+        ),
+    };
+
     const worker = createRemindersWorker(
       { host: 'localhost', port: 6379 },
       prisma as unknown as PrismaService,
       waha as unknown as WahaService,
+      sessions as unknown as SchedulingSessionService,
     ) as any;
     process = worker.processor;
   });
@@ -158,6 +169,24 @@ describe('RemindersProcessor (createRemindersWorker)', () => {
       expect(text).toContain('sábado 12 de septiembre, 10:00');
       expect(text).toMatch(/\*SÍ\*/);
       expect(text).toMatch(/\*REAGENDAR\*/);
+      // M2-c: el link de gestión evita que tenga que escribir para cambiarla.
+      expect(text).toContain('/cita?t=mtok-abc');
+    });
+
+    it('si no se puede emitir el link, el recordatorio sale igual', async () => {
+      // Perder el link no puede costar el recordatorio, que es lo que de
+      // verdad baja el no-show.
+      sessions.issueManageUrl.mockRejectedValue(new Error('redis down'));
+
+      await process(makeJob('send-reminder', { reminderId: 'rem-1' }));
+
+      expect(waha.sendText).toHaveBeenCalledTimes(1);
+      const text = waha.sendText.mock.calls[0][2];
+      expect(text).toMatch(/\*SÍ\*/);
+      expect(text).not.toContain('/cita?t=');
+      expect(prisma.reminder.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'SENT' }) }),
+      );
       expect(text).toMatch(/\*CANCELAR\*/);
 
       expect(prisma.reminder.update).toHaveBeenCalledWith({
