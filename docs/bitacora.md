@@ -564,12 +564,12 @@
   [[analisis/2026-09-11-chatbot-analisis-tecnico]]; reparto en [[plans/2026-09-11-p0-bot-reparto]]
   (ambos llegan por el PR #45).
 
-## 2026-09-11 — El RAG del bot recibe el teléfono de la conversación
-- `bot.service.ts` pasa `phone: convo.phone` a `knowledge.answer` (paso 4 de M1, que la sesión B
-  dejó como parámetro opcional). Con eso el bloque de hechos de BD incluye "tu próxima cita" y el
-  bot puede responder "¿cuándo es mi cita?" sin inventar.
-- Va `convo.phone` y no el `phone` del mensaje: el upsert de la conversación conserva el número ya
-  conocido, así que un mensaje que llegue por `@lid` no borra el contexto. Sin teléfono el bloque
-  sale igual, sin la parte de la cita.
-- Es el teléfono que reporta WAHA, no uno declarado en un formulario. La distinción importa: ver
-  la decisión de S5 sobre no rellenar `Conversation.phone` con el número del form público.
+## 2026-09-11 — S1: el rate-limit del bot, en un solo sitio
+- El bloque del ADR 0007 estaba duplicado palabra por palabra en `bot.service.ts` y en
+  `webhook.controller.ts` (el camino de los adjuntos, que no pasa por el bot). Extraído a
+  `apps/backend/src/bot/bot-rate-limit.ts` con spec propio; los dos callers lo consumen.
+- Claves de Redis, límites y TTLs **sin cambios**: el presupuesto sigue compartido y cada mensaje
+  se cuenta una sola vez. `scope` (`bot` | `media`) solo etiqueta el log.
+- El hash del `chatId` en logs queda unificado en 12 hex: el bot usaba 8 y el webhook 12, así que
+  las dos mitades de una misma conversación no se correlacionaban con un grep.
+- ADR 0007 actualizado con la sección de implementación.
