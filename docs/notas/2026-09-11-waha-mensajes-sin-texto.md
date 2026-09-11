@@ -59,7 +59,8 @@ atiende la bandeja necesita ver que entró un audio, o el hilo queda con un
 hueco inexplicable. Lo que `HUMAN` corta es el aviso automático. Mismo orden
 que en `BotService.handleIncoming` (upsert primero, corte por `HUMAN` después).
 
-> **Regla común con B9** (PR #44, follow-ups), por si alguien compara los dos y
+> **Regla común con B9** ([[notas/2026-09-11-conversation-chatid-canonico]]),
+> por si alguien compara los dos y
 > le parece que se contradicen: con `HUMAN` **no sale nada automático hacia el
 > paciente, y en la bandeja se registra exactamente lo que ocurrió de verdad**.
 > Aquí el paciente sí mandó algo, así que el `Message IN` va: hay un evento real
