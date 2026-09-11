@@ -51,6 +51,14 @@ import { normalizeE164 } from '../common/phone.util';
 export class PublicController {
   private readonly logger = new Logger('PublicController');
 
+  /**
+   * Cuántas veces puede el paciente mover la MISMA cita desde el link antes de
+   * que lo derivemos a la clínica. Tres es suficiente para un cambio de planes
+   * legítimo; a partir de ahí suele ser señal de que hace falta hablar, y de
+   * hecho a partir de dos reagendamientos el panel ya avisa a recepción.
+   */
+  private static readonly MAX_PATIENT_RESCHEDULES = 3;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly availability: AvailabilityService,
@@ -478,6 +486,9 @@ export class PublicController {
   ) {
     const { appointment } = await this.resolveManageOr404(slug, token);
     const mutable = SchedulingService.isPatientMutable(appointment);
+    const underRescheduleCap =
+      appointment.patientRescheduleCount <
+      PublicController.MAX_PATIENT_RESCHEDULES;
 
     return {
       appointment: {
@@ -489,6 +500,12 @@ export class PublicController {
         startAtISO: appointment.startAt.toISOString(),
         durationMin: appointment.service.durationMin,
         status: appointment.status,
+        /**
+         * Cuántas veces movió la cita EL PACIENTE desde el link. Es el que
+         * cuenta para su tope; los movimientos del staff no se lo gastan.
+         * La web puede avisar antes de que gaste el último.
+         */
+        rescheduleCount: appointment.patientRescheduleCount,
       },
       clinic: {
         name: appointment.clinic.name,
@@ -498,7 +515,10 @@ export class PublicController {
       },
       patient: { name: appointment.patient.name },
       canCancel: mutable,
-      canReschedule: mutable,
+      // Cancelar siempre se puede; mover tiene tope. Que el paciente pueda
+      // cancelar aunque no pueda mover es deliberado: cancelar es justo lo que
+      // queremos que sea más fácil que no aparecer.
+      canReschedule: mutable && underRescheduleCap,
     };
   }
 
@@ -570,9 +590,22 @@ export class PublicController {
         clinicId: session.clinicId,
         appointmentId: appointment.id,
         startAtISO: dto.startAtISO,
+        // El tope se comprueba dentro del update condicional del servicio: con
+        // el check acá afuera, una ráfaga con el mismo token pasaría varias
+        // veces entre la lectura y la escritura.
+        byPatient: true,
+        maxPatientReschedules: PublicController.MAX_PATIENT_RESCHEDULES,
       });
     } catch (e) {
       if (e instanceof ConflictException) {
+        // El servicio usa 409 para dos cosas distintas y el paciente necesita
+        // mensajes distintos: el tope lo deriva a la clínica, el slot ocupado
+        // le pide otro horario.
+        if (e.message.includes('tope de reagendamientos')) {
+          throw new ConflictException(
+            'Ya cambiaste el horario de esta cita varias veces. Escríbele a la clínica y lo resolvemos contigo.',
+          );
+        }
         throw new ConflictException(
           'Ese horario ya no está disponible. Elige otro.',
         );
@@ -611,7 +644,13 @@ export class PublicController {
         startAtISO: updated.startAt.toISOString(),
         durationMin: appointment.service.durationMin,
         status: updated.status,
+        // Para que la web sepa si acabó de gastar el último movimiento sin
+        // tener que re-pedir el GET con el token nuevo.
+        rescheduleCount: updated.patientRescheduleCount,
       },
+      canReschedule:
+        updated.patientRescheduleCount <
+        PublicController.MAX_PATIENT_RESCHEDULES,
       ...(manageUrl ? { manageUrl } : {}),
     };
   }

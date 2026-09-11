@@ -263,6 +263,16 @@ model Appointment {
   conversationId String?
   conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
 
+  // Cuántas veces se movió esta cita, venga del panel o del link de gestión
+  // (ADR 0020). Es la señal de riesgo del "reagendador reincidente": no va por
+  // estado, porque reagendar devuelve la cita a PENDIENTE y perdería la traza.
+  // A partir de 2 el panel avisa a recepción.
+  rescheduleCount   Int       @default(0)
+  // Solo los que inició el paciente desde el link. El tope es suyo: los
+  // movimientos que hace recepción desde el panel no deben gastarle el cupo.
+  patientRescheduleCount Int  @default(0)
+  lastRescheduledAt DateTime?
+
   reminders      Reminder[]
   feedback       Feedback?
   createdAt      DateTime @default(now())
