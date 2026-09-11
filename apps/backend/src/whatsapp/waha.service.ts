@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { phoneToChatId } from '../common/phone.util';
 
 /**
  * Cliente de WAHA (WhatsApp HTTP API, no oficial).
@@ -32,10 +33,13 @@ export class WahaService {
     };
   }
 
-  /** Normaliza un teléfono E.164 a chatId de WhatsApp (ej. 584141234567@c.us). */
+  /**
+   * Normaliza un teléfono E.164 a chatId de WhatsApp (ej. 584141234567@c.us).
+   * Delega en el helper compartido: el formato tiene que ser idéntico al que
+   * usan los callers que escriben `Conversation.chatId` (UNIQUE por clínica).
+   */
   private toChatId(phone: string): string {
-    const digits = phone.replace(/\D/g, '');
-    return `${digits}@c.us`;
+    return phoneToChatId(phone);
   }
 
   async sendText(session: string, phoneOrChatId: string, text: string): Promise<void> {

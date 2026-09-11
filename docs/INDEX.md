@@ -71,6 +71,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[notas/2026-09-10-waha-healthcheck-wget|2026-09-10 — Healthcheck de WAHA: la imagen no trae `wget`, usar `curl`]]
 - [[notas/2026-09-10-tono-espanol-neutro|2026-09-10 — Tono de voz: español latinoamericano neutro (tuteo, sin voseo)]]
 - [[notas/2026-09-10-rag-umbral-distancia|2026-09-10 — RAG: umbral de distancia 0.5 → 0.65, calibrado con preguntas reales]]
+- [[notas/2026-09-11-conversation-chatid-canonico|2026-09-11 — `Conversation.chatId`: formato canónico y por qué no se puede hacer upsert a ciegas]]
 - [[notas/2026-09-11-waha-mensajes-sin-texto|2026-09-11 — WAHA: mensajes sin texto (audio, imagen, sticker) y cómo detectarlos]]
 
 ## Flujo de trabajo
