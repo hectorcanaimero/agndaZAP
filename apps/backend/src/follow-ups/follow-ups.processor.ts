@@ -8,6 +8,7 @@ import { isSentryEnabled } from '../common/sentry/sentry.config';
 import { PrismaService } from '../prisma/prisma.service';
 import { WahaService } from '../whatsapp/waha.service';
 import { FOLLOW_UPS_QUEUE } from './follow-ups.service';
+import { botCopy } from '../bot/bot.messages';
 
 // Processor de follow-ups post-atención.
 // send-follow-up: manda el prompt "¿Cómo fue tu experiencia?" (1-5) al paciente
@@ -113,11 +114,12 @@ export function createFollowUpsWorker(
         return;
       }
 
-      const nombre = appt.patient.name ? ` ${appt.patient.name}` : '';
-      const text =
-        `Hola${nombre}, gracias por tu visita a ${appt.clinic.name}.\n\n` +
-        `¿Cómo fue tu experiencia con ${appt.professional.name}? ` +
-        `Responde con un número del *1* (muy mala) al *5* (excelente).`;
+      // Copy en el idioma de la clínica (B7).
+      const text = botCopy(appt.clinic.locale).followUpPrompt(
+        appt.patient.name ?? '',
+        appt.clinic.name,
+        appt.professional.name,
+      );
 
       await waha.sendText(appt.clinic.wahaSession, appt.patient.phone, text);
 

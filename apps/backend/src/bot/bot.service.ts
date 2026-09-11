@@ -23,6 +23,7 @@ import {
   schedulingUrl,
   schedulingUrlWithToken,
 } from '../common/web-url.util';
+import { botCopy, BotCopy } from './bot.messages';
 import { Intent, IntentService } from './intent.service';
 import {
   asksForSomethingElse,
@@ -193,58 +194,6 @@ export class BotService {
    * (página pública de agendamiento, sin token). Para `confirmAppointment`
    * además: `{status}`, `{when}`, `{address}`, `{service}`, `{professional}`.
    */
-  private static readonly DEFAULT_BOT_MESSAGES = {
-    greeting: [
-      '¡Hola! Soy el asistente de {clinicName}. ¿Quieres agendar una cita? Escríbeme *agendar* y lo hacemos aquí mismo, o reserva en línea: {link}\n\nSi tienes otra duda, cuéntame.',
-      'Hola 👋 Soy el asistente de {clinicName}. Escríbeme *agendar* para reservar tu cita por aquí, o hazlo en línea: {link}\n\nTambién puedo responder tus dudas.',
-      '¡Hola! Gracias por escribir a {clinicName}. Para reservar una cita escríbeme *agendar*, o usa nuestra página: {link}\n\n¿En qué te ayudo?',
-    ],
-    /**
-     * Saludo cuando el número ya tiene una cita próxima. Arquitectura de
-     * elección con contexto: en vez de ofrecer "agendar", ofrecemos las
-     * acciones que tienen sentido sobre ESA cita. Placeholders extra:
-     * `{service}`, `{when}`, `{statusLine}`.
-     */
-    greetingWithAppointment: [
-      'Hola{patientName}. {statusLine}\n\nResponde *SÍ* para confirmarla, *REAGENDAR* para moverla o *CANCELAR* si no puedes ir.\n\nSi necesitas otra cosa, cuéntame.',
-    ],
-    fallback: [
-      'Puedo ayudarte a *agendar*, *reagendar* o *cancelar* una cita, o responder dudas. ¿Qué necesitas?',
-      'Cuéntame qué necesitas: puedo *agendar*, *reagendar* o *cancelar* una cita, o responder dudas.',
-      'Estoy para ayudarte con tu cita. Puedes escribir *agendar*, *reagendar*, *cancelar*, o preguntarme algo.',
-    ],
-    handoff: [
-      'Enseguida te atiende una persona del equipo. 🙏',
-      'Te derivo con alguien del equipo, enseguida te responden. 🙏',
-    ],
-    /**
-     * Cierre de cortesía ("ok, gracias"). Sin LLM y sin volver a ofrecer el
-     * menú: el paciente está cerrando la conversación, no pidiendo algo.
-     * Antes esto caía en el parser de recordatorios y respondía
-     * "No encontré una cita próxima…" (ver B2 del análisis del bot).
-     */
-    closing: [
-      '¡Con gusto! Si necesitas algo más, escríbeme. 🙌',
-      'De nada. Aquí estoy si necesitas algo más. 🙌',
-      '¡Un gusto ayudarte! Cualquier cosa, escríbeme. 🙌',
-    ],
-    /**
-     * Cierre con acción tras responder una duda (M6). Solo se anexa cuando el
-     * paciente NO tiene cita próxima: si ya tiene una, invitarlo a agendar es
-     * ruido. `{link}` es la página pública SIN token — responder una pregunta
-     * no debe escribir una `SchedulingSession` en DB.
-     */
-    ctaAfterAnswer: [
-      '¿Quieres agendar? Escríbeme *agendar* y lo hacemos aquí, o reserva en línea: {link}',
-      'Si quieres una cita, escríbeme *agendar* o resérvala aquí: {link}',
-      'Cuando quieras agendar, escríbeme *agendar* o usa nuestra página: {link}',
-    ],
-    confirmAppointment: [
-      '✅ Listo. Tu cita de {service} con {professional} quedó {status} para el {when} en {clinicName}.{address}\n\nTe recordaré antes de la cita.{manageLine}',
-      '¡Perfecto! Reservé tu cita de {service} con {professional} para el {when} en {clinicName}.{address}\n\nTe avisaré antes para recordártela.{manageLine}',
-    ],
-  } as const;
-
   /**
    * Aviso de asistente automático (ADR 0004 §7). Se agrega SIEMPRE al final
    * del greeting — también cuando la clínica personaliza `botGreeting` —
@@ -253,8 +202,7 @@ export class BotService {
    * consentimiento del form público y en la política de privacidad, no en el
    * saludo. Incluye el escape a humano para que el paciente sepa salir del bot.
    */
-  static readonly AI_DISCLOSURE =
-    'Soy un asistente automático. Si prefieres hablar con una persona, escribe *humano*.';
+  static readonly AI_DISCLOSURE = botCopy('es').aiDisclosure;
 
   /** Ventana en la que un "sí" suelto se lee como respuesta a un recordatorio. */
   private static readonly REMINDER_REPLY_WINDOW_H = 48;
@@ -294,6 +242,11 @@ export class BotService {
     return variants[Math.floor(Math.random() * variants.length)]!;
   }
 
+  /** Copy del bot en el idioma de la clínica (B7). */
+  private copy(clinic: Pick<Clinic, 'locale'>): BotCopy {
+    return botCopy(clinic.locale);
+  }
+
   /**
    * Resuelve el mensaje del bot para una clínica, aplicando el custom si
    * existe o eligiendo una variante random del pool default. Reemplaza
@@ -313,19 +266,21 @@ export class BotService {
     key: 'greeting' | 'fallback' | 'handoff',
     ctx?: { patientName?: string | null },
   ): string {
+    const copy = botCopy(clinic.locale);
     const customMap = {
       greeting: clinic.botGreeting,
       fallback: clinic.botFallback,
       handoff: clinic.botHandoffMsg,
     } as const;
-    const template =
-      customMap[key] || this.pickVariant(BotService.DEFAULT_BOT_MESSAGES[key]);
+    // El override del tenant gana sobre el idioma: si la clínica escribió su
+    // propio saludo, ese es el que quiere, en el idioma que lo haya escrito.
+    const template = customMap[key] || this.pickVariant(copy.pools[key]);
     const rendered = template
       .replace(/\{clinicName\}/g, clinic.name)
       .replace(/\{patientName\}/g, ctx?.patientName ?? '')
       .replace(/\{link\}/g, this.publicSchedulingUrl(clinic));
     return key === 'greeting'
-      ? `${rendered}\n\n${BotService.AI_DISCLOSURE}`
+      ? `${rendered}\n\n${copy.aiDisclosure}`
       : rendered;
   }
 
@@ -409,9 +364,10 @@ export class BotService {
     });
     if (lastOut?.body.includes(link)) return answer;
 
-    const cta = this.pickVariant(
-      BotService.DEFAULT_BOT_MESSAGES.ctaAfterAnswer,
-    ).replace(/\{link\}/g, link);
+    const cta = this.pickVariant(this.copy(clinic).pools.ctaAfterAnswer).replace(
+      /\{link\}/g,
+      link,
+    );
     return `${answer}\n\n${cta}`;
   }
 
@@ -461,20 +417,18 @@ export class BotService {
   ): Promise<string | null> {
     const appt = await this.findUpcomingAppointment(clinic.id, convo);
     if (!appt) return null;
+    const copy = this.copy(clinic);
     const when = this.formatWhen(appt.startAt.toISOString(), clinic);
     const service = appt.service?.name ?? 'consulta';
     const statusLine =
       appt.status === 'CONFIRMADA'
-        ? `Tu cita de ${service} del ${when} ya está confirmada.`
-        : `Veo que tienes una cita de ${service} el ${when}.`;
+        ? copy.apptConfirmedLine(service, when)
+        : copy.apptPendingLine(service, when);
     const patientName = appt.patient?.name ? ` ${appt.patient.name}` : '';
-    const template = this.pickVariant(
-      BotService.DEFAULT_BOT_MESSAGES.greetingWithAppointment,
-    );
-    const rendered = template
+    const rendered = this.pickVariant(copy.pools.greetingWithAppointment)
       .replace(/\{patientName\}/g, patientName)
       .replace(/\{statusLine\}/g, statusLine);
-    return `${rendered}\n\n${BotService.AI_DISCLOSURE}`;
+    return `${rendered}\n\n${copy.aiDisclosure}`;
   }
 
   /**
@@ -489,6 +443,7 @@ export class BotService {
    * campo `Clinic.botConfirm` en una migración aparte. Ver deuda técnica.
    */
   private resolveConfirmMessage(input: {
+    copy: BotCopy;
     status: string;
     when: string;
     clinicName: string;
@@ -498,12 +453,10 @@ export class BotService {
     /** Link de gestión (ADR 0020). Sin él caemos al "escríbeme *reagendar*". */
     manageUrl?: string | null;
   }): string {
-    const template = this.pickVariant(
-      BotService.DEFAULT_BOT_MESSAGES.confirmAppointment,
-    );
+    const template = this.pickVariant(input.copy.pools.confirmAppointment);
     const manageLine = input.manageUrl
-      ? `\n\nSi necesitas cambiarla o cancelarla, entra aquí:\n${input.manageUrl}`
-      : '\n\nSi necesitas cambiarla, escríbeme *reagendar*.';
+      ? input.copy.manageLine(input.manageUrl)
+      : input.copy.manageLineFallback;
     return template
       .replace(/\{status\}/g, input.status)
       .replace(/\{when\}/g, input.when)
@@ -626,7 +579,7 @@ export class BotService {
         clinic.wahaSession,
         chatId,
         convo.id,
-        this.pickVariant(BotService.DEFAULT_BOT_MESSAGES.closing),
+        this.pickVariant(this.copy(clinic).pools.closing),
       );
       return;
     }
@@ -706,9 +659,7 @@ export class BotService {
           clinic.wahaSession,
           chatId,
           convo.id,
-          link
-            ? `Puedes cambiarla o cancelarla aquí:\n\n${link}\n\nSi prefieres, responde *CANCELAR* aquí mismo. No voy a cancelarla sin esa confirmación explícita.`
-            : 'Para cancelar tu próxima cita, responde *CANCELAR*. No voy a cancelarla sin esa confirmación explícita.',
+          this.copy(clinic).cancelNeedsWord(link),
         );
         break;
       }
@@ -718,7 +669,7 @@ export class BotService {
           clinic.wahaSession,
           chatId,
           convo.id,
-          'Para confirmar tu próxima cita, responde *SÍ*.',
+          this.copy(clinic).confirmNeedsWord,
         );
         break;
 
@@ -785,7 +736,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        'Por ahora no tenemos servicios cargados. Escríbeme más tarde o escribe *humano* para hablar con una persona.',
+        this.copy(clinic).noServices,
       );
       return;
     }
@@ -812,7 +763,7 @@ export class BotService {
       clinic.wahaSession,
       convo.chatId,
       convo.id,
-      `¡Con gusto te agendo! Primero, ¿qué servicio necesitas?\n\n${list}\n\nResponde con el número o el nombre.`,
+      this.copy(clinic).askService(list),
     );
   }
 
@@ -841,7 +792,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        'Listo, dejé el agendamiento en pausa. Cuando quieras, escríbeme *agendar* para retomar.',
+        this.copy(clinic).flowAborted,
       );
       return;
     }
@@ -889,7 +840,7 @@ export class BotService {
         clinic,
         convo,
         data,
-        `Creo que no te entendí. Elige un servicio de la lista:\n\n${this.choiceList(data)}\n\nResponde con el número o el nombre.`,
+        this.copy(clinic).notUnderstoodService(this.choiceList(data)),
       );
       return;
     }
@@ -902,7 +853,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        'Ese servicio ya no está disponible. Escríbeme *agendar* para empezar de nuevo.',
+        this.copy(clinic).serviceGone,
       );
       return;
     }
@@ -941,7 +892,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        'Por ahora no tengo profesionales disponibles para ese servicio. Escríbeme más tarde.',
+        this.copy(clinic).noProfessionals,
       );
       return;
     }
@@ -960,7 +911,10 @@ export class BotService {
     // obligarlos a elegir agrega un paso que no aporta. Ver M4.
     const choices = [
       ...professionals.map((p) => ({ id: p.id, label: p.name })),
-      { id: BotService.ANY_PROFESSIONAL, label: 'Cualquier profesional' },
+      {
+        id: BotService.ANY_PROFESSIONAL,
+        label: this.copy(clinic).anyProfessionalLabel,
+      },
     ];
     const nextData: FlowData = { ...data, choices, invalidCount: 0 };
     await this.prisma.conversation.update({
@@ -972,7 +926,7 @@ export class BotService {
       clinic.wahaSession,
       convo.chatId,
       convo.id,
-      `Perfecto. ¿Con qué profesional prefieres?\n\n${list}\n\nResponde con el número o el nombre.`,
+      this.copy(clinic).askProfessional(list),
     );
   }
 
@@ -995,14 +949,17 @@ export class BotService {
     // palabras que usa la gente.
     const choice =
       hasAnyOption && isNoPreferenceChoice(normalized)
-        ? { id: BotService.ANY_PROFESSIONAL, label: 'Cualquier profesional' }
+        ? {
+            id: BotService.ANY_PROFESSIONAL,
+            label: this.copy(clinic).anyProfessionalLabel,
+          }
         : this.resolveChoice(data.choices ?? [], normalized);
     if (!choice) {
       await this.replyNotUnderstood(
         clinic,
         convo,
         data,
-        `Creo que no te entendí. Elige un profesional de la lista:\n\n${this.choiceList(data)}\n\nResponde con el número o el nombre.`,
+        this.copy(clinic).notUnderstoodProfessional(this.choiceList(data)),
       );
       return;
     }
@@ -1025,7 +982,7 @@ export class BotService {
           clinic.wahaSession,
           convo.chatId,
           convo.id,
-          'Ese servicio se quedó sin profesionales disponibles. Escríbeme *agendar* para retomar.',
+          this.copy(clinic).serviceLostProfessionals,
         );
         return;
       }
@@ -1054,7 +1011,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        'Ese profesional ya no está disponible. Escríbeme *agendar* para retomar.',
+        this.copy(clinic).professionalGone,
       );
       return;
     }
@@ -1200,20 +1157,19 @@ export class BotService {
     const labels = shown.map(
       (e, i) => `${i + 1}. ${this.slotLabel(e.slot, clinic)}`,
     );
+    const copy = this.copy(clinic);
     const intro = preferenceMissed
-      ? 'No me quedan horarios con esa preferencia, pero sí estos:'
+      ? copy.slotsIntroPreferenceMissed
       : windowCount > 0
-        ? 'Estos son los horarios de la semana siguiente:'
-        : (opts.intro ?? 'Vamos bien. Estos son los próximos horarios disponibles:');
+        ? copy.slotsIntroNextWeek
+        : (opts.intro ?? copy.slotsIntro);
     const more =
-      windowCount + 1 < BotService.MAX_SLOT_WINDOWS
-        ? '\n0. Ver más horarios'
-        : '';
+      windowCount + 1 < BotService.MAX_SLOT_WINDOWS ? copy.slotsMoreOption : '';
     await this.reply(
       clinic.wahaSession,
       convo.chatId,
       convo.id,
-      `${intro}\n\n${labels.join('\n')}${more}\n\nResponde con el número del horario que prefieras.${opts.footer ?? ''}`,
+      copy.slotsPrompt(labels.join('\n'), more, opts.footer ?? '', intro),
     );
   }
 
@@ -1234,7 +1190,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        'No encontré horarios libres en los próximos días. Escríbeme más tarde y volvemos a intentar.',
+        this.copy(clinic).noSlots,
       );
       return;
     }
@@ -1243,7 +1199,7 @@ export class BotService {
       clinic.wahaSession,
       convo.chatId,
       convo.id,
-      `Hasta ahí llega mi agenda por aquí. Puedes ver el calendario completo y elegir con calma en este enlace, que vence en 30 minutos:\n\n${link}`,
+      this.copy(clinic).agendaExhausted(link),
     );
   }
 
@@ -1293,7 +1249,7 @@ export class BotService {
           clinic.wahaSession,
           convo.chatId,
           convo.id,
-          `Por aquí ya te mostré las próximas semanas. Para ver el calendario completo y elegir con calma, entra en este enlace, que vence en 30 minutos:\n\n${link}\n\nO responde con el número de alguno de los horarios que te pasé.`,
+          this.copy(clinic).agendaExhaustedWindows(link),
         );
         return;
       }
@@ -1336,7 +1292,7 @@ export class BotService {
         clinic,
         convo,
         data,
-        `Creo que no te entendí. Elige un horario respondiendo con su número:\n\n${this.offeredSlotList(offered, clinic)}`,
+        this.copy(clinic).notUnderstoodSlot(this.offeredSlotList(offered, clinic)),
       );
       return;
     }
@@ -1346,7 +1302,7 @@ export class BotService {
         clinic,
         convo,
         data,
-        `Ese número no está en la lista. Elige uno entre 1 y ${offered.length}:\n\n${this.offeredSlotList(offered, clinic)}`,
+        this.copy(clinic).slotNotInList(offered.length, this.offeredSlotList(offered, clinic)),
       );
       return;
     }
@@ -1361,7 +1317,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        'Algo cambió en la agenda. Escríbeme *agendar* para volver a intentar.',
+        this.copy(clinic).agendaChanged,
       );
       return;
     }
@@ -1381,7 +1337,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        'Algo cambió en la agenda. Escríbeme *agendar* para volver a intentar.',
+        this.copy(clinic).agendaChanged,
       );
       return;
     }
@@ -1416,7 +1372,12 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        `Último paso. ¿Confirmo tu cita, ${existingPatient.name}, de ${service.name} con ${professional.name} el ${when}? Responde *SÍ* para confirmar o *no* para cancelar.`,
+        this.copy(clinic).confirmPrompt(
+        existingPatient.name,
+        service.name,
+        professional.name,
+        when,
+      ),
       );
       return;
     }
@@ -1430,7 +1391,7 @@ export class BotService {
       clinic.wahaSession,
       convo.chatId,
       convo.id,
-      'Ya casi terminamos. ¿A nombre de quién agendo la cita?',
+      this.copy(clinic).askName,
     );
   }
 
@@ -1462,7 +1423,7 @@ export class BotService {
       clinic.wahaSession,
       convo.chatId,
       convo.id,
-      `${message}\n\nSi te resulta más cómodo, también puedes elegir todo desde aquí (el enlace vence en 30 minutos):\n\n${link}`,
+      this.copy(clinic).webFallback(message, link),
     );
   }
 
@@ -1480,7 +1441,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        'Creo que no te entendí. ¿A nombre de quién agendo la cita?',
+        this.copy(clinic).askNameAgain,
       );
       return;
     }
@@ -1490,7 +1451,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        'Perdí el hilo del agendamiento. Escríbeme *agendar* y empezamos de nuevo.',
+        this.copy(clinic).flowLost,
       );
       return;
     }
@@ -1510,7 +1471,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        'Algo cambió en la agenda. Escríbeme *agendar* para volver a intentar.',
+        this.copy(clinic).agendaChanged,
       );
       return;
     }
@@ -1525,7 +1486,12 @@ export class BotService {
       clinic.wahaSession,
       convo.chatId,
       convo.id,
-      `Último paso. ¿Confirmo tu cita, ${cleaned}, de ${service.name} con ${professional.name} el ${when}? Responde *SÍ* para confirmar o *no* para cancelar.`,
+      this.copy(clinic).confirmPrompt(
+        cleaned,
+        service.name,
+        professional.name,
+        when,
+      ),
     );
   }
 
@@ -1543,7 +1509,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        'Solo necesito un *SÍ* para confirmar o un *no* para cancelar el agendamiento.',
+        this.copy(clinic).confirmOnlyYesOrNo,
       );
       return;
     }
@@ -1563,7 +1529,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        'Listo, no agendé nada. Cuando quieras retomar, escríbeme *agendar*.',
+        this.copy(clinic).nothingScheduled,
       );
       return;
     }
@@ -1574,7 +1540,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        'Perdí el hilo del agendamiento. Escríbeme *agendar* y empezamos de nuevo.',
+        this.copy(clinic).flowLost,
       );
       return;
     }
@@ -1592,7 +1558,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        `Para terminar de agendar necesito tu número de teléfono. Completa tu cita aquí, el enlace vence en 30 minutos:\n\n${link}`,
+        this.copy(clinic).needPhone(link),
       );
       return;
     }
@@ -1652,11 +1618,12 @@ export class BotService {
 
       const when = this.formatWhen(data.startAtISO, clinic);
       const address = clinic.address ? `\nDirección: ${clinic.address}` : '';
+      const copy = this.copy(clinic);
       const status = data.rescheduleOf
-        ? 'movida'
+        ? copy.status.moved
         : appt.status === 'CONFIRMADA'
-          ? 'confirmada'
-          : 'agendada';
+          ? copy.status.confirmed
+          : copy.status.scheduled;
       // Link de gestión en el cierre: el paciente lo tiene a mano desde el
       // primer momento, sin tener que volver a escribir (M2-c).
       const manageUrl = await this.manageLink(clinic, appt);
@@ -1665,6 +1632,7 @@ export class BotService {
         convo.chatId,
         convo.id,
         this.resolveConfirmMessage({
+          copy,
           status,
           when,
           clinicName: clinic.name,
@@ -1698,9 +1666,7 @@ export class BotService {
             clinic.wahaSession,
             convo.chatId,
             convo.id,
-            `Ya moviste esta cita varias veces, así que prefiero que lo veas con una persona del equipo para no liarlo más. Te derivo con recepción.${
-              link ? `\n\nMientras tanto, aquí tienes el detalle de tu cita:\n${link}` : ''
-            }`,
+            this.copy(clinic).rescheduleLimit(link),
           );
           return;
         }
@@ -1728,7 +1694,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        'Se me complicó registrar la cita. Vuelve a intentar en un momento o escribe *humano* para hablar con una persona.',
+        this.copy(clinic).createFailed,
       );
     }
   }
@@ -1751,7 +1717,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        'Perdí el hilo del agendamiento. Escríbeme *agendar* y empezamos de nuevo.',
+        this.copy(clinic).flowLost,
       );
       return;
     }
@@ -1773,7 +1739,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        'Por ahora no quedan horarios en los próximos 7 días para este servicio y profesional. Escríbeme *agendar* más tarde y probamos de nuevo.',
+        this.copy(clinic).noSlotsLeftForPair,
       );
       return;
     }
@@ -1794,7 +1760,7 @@ export class BotService {
       clinic.wahaSession,
       convo.chatId,
       convo.id,
-      `¡Ay! Ese horario acaba de ocuparse. Te muestro los que quedan libres:\n\n${labels.join('\n')}\n\nElige uno respondiendo con el número.`,
+      this.copy(clinic).slotTaken(labels.join('\n')),
     );
   }
 
@@ -1815,7 +1781,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        'Perdí el hilo del agendamiento. Escríbeme *agendar* y empezamos de nuevo.',
+        this.copy(clinic).flowLost,
       );
       return;
     }
@@ -1837,7 +1803,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        'Por ahora no quedan horarios en los próximos 7 días para este servicio y profesional. Escríbeme *agendar* más tarde y probamos de nuevo.',
+        this.copy(clinic).noSlotsLeftForPair,
       );
       return;
     }
@@ -1858,7 +1824,7 @@ export class BotService {
       clinic.wahaSession,
       convo.chatId,
       convo.id,
-      `Ese horario ya pasó. Te muestro los que quedan libres:\n\n${labels.join('\n')}\n\nElige uno respondiendo con el número.`,
+      this.copy(clinic).slotExpired(labels.join('\n')),
     );
   }
 
@@ -1946,7 +1912,7 @@ export class BotService {
           clinic.wahaSession,
           convo.chatId,
           convo.id,
-          'No pude asociar este chat a una cita. Te derivo con recepción para ayudarte.',
+          this.copy(clinic).cannotLinkChat,
         );
         await this.markNeedsHuman(convo.id);
         return;
@@ -1955,7 +1921,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        'No encontré una cita próxima asociada a este número. Si necesitas ayuda, escribe *humano* para hablar con una persona.',
+        this.copy(clinic).noUpcomingAppointment,
       );
       return;
     }
@@ -1966,7 +1932,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        '¡Listo! Tu cita quedó confirmada. Te esperamos.',
+        this.copy(clinic).appointmentConfirmed,
       );
       return;
     }
@@ -1981,7 +1947,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        'Tu cita fue cancelada. Cuando quieras, escríbeme para reagendar.',
+        this.copy(clinic).appointmentCanceled,
       );
       return;
     }
@@ -1995,7 +1961,7 @@ export class BotService {
     // no-show tiene (M2-c).
     const link = await this.manageLink(clinic, appt);
     const footer = link
-      ? `\n\nO elígelo con calma aquí: ${link}`
+      ? this.copy(clinic).rescheduleFooter(link)
       : '';
 
     if (!appt.serviceId || !appt.professionalId) {
@@ -2007,7 +1973,7 @@ export class BotService {
           clinic.wahaSession,
           convo.chatId,
           convo.id,
-          'Te derivo con recepción para reagendar esa cita. No voy a moverla hasta que confirmes el nuevo horario.',
+          this.copy(clinic).cannotLinkChat,
         );
         return;
       }
@@ -2015,7 +1981,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        `Puedes elegir el horario nuevo aquí:\n\n${link}\n\nTu cita actual sigue en pie hasta que la cambies.`,
+        this.copy(clinic).rescheduleSlots(link),
       );
       return;
     }
@@ -2031,8 +1997,7 @@ export class BotService {
       appt.serviceId,
       [appt.professionalId],
       {
-        intro:
-          'Te muestro los horarios libres para mover tu cita. La actual sigue en pie hasta que elijas:',
+        intro: this.copy(clinic).slotsIntroReschedule,
         footer,
       },
     );
@@ -2127,7 +2092,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        'Creo que no te entendí. Respóndeme con un número del *1* al *5*.',
+        this.copy(clinic).npsInvalid,
       );
       return;
     }
@@ -2145,7 +2110,7 @@ export class BotService {
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        '¡Gracias por tu respuesta!',
+        this.copy(clinic).npsThanks,
       );
       return;
     }
@@ -2164,8 +2129,7 @@ export class BotService {
       clinic.wahaSession,
       convo.chatId,
       convo.id,
-      '¡Gracias! Si quieres contarnos algo más, escríbelo ahora ' +
-        '(o responde *no* para finalizar).',
+      this.copy(clinic).npsAskComment,
     );
   }
 
@@ -2197,7 +2161,7 @@ export class BotService {
       clinic.wahaSession,
       convo.chatId,
       convo.id,
-      '¡Muchas gracias por tu tiempo! Que tengas un buen día.',
+      this.copy(clinic).npsDone,
     );
   }
 
