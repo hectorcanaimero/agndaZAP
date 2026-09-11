@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 
 export interface LlmCompletionOptions {
   system: string;
@@ -17,14 +17,30 @@ const DEFAULT_TIMEOUT_MS = 3000;
 const DEFAULT_MAX_TOKENS = 200;
 
 /**
+ * Modelo de Gemini. Configurable por env **a propósito**: el router estuvo
+ * apuntando a `gemini-2.0-flash` mucho después de que Google lo retirara, y
+ * nadie se enteró porque el provider fallaba en silencio al final de la cadena.
+ * Con esto, cambiar de modelo cuando el actual se retire es una variable de
+ * entorno y no un deploy.
+ *
+ * `gemini-2.5-flash` es el que Google documenta como su mejor relación
+ * precio/rendimiento para tareas de baja latencia y alto volumen, que es
+ * exactamente el papel que juega acá.
+ */
+const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+
+/**
  * Router unificado para chat completions. Recorre providers en orden y hace
- * fallback en cadena. Un provider sin API key se saltea silenciosamente
- * (permite deploys parciales sin romper el flujo).
+ * fallback en cadena. Un provider sin API key se saltea (permite deploys
+ * parciales sin romper el flujo), pero **se avisa al arrancar**: el silencio
+ * hizo que durante semanas la cadena real fuera `deepseek → opencode` sin que
+ * nadie lo supiera, porque `GEMINI_API_KEY` nunca se configuró en producción.
  *
  * Providers:
  *  - `deepseek` — DeepSeek Chat (OpenAI-compat, endpoint fijo).
  *  - `opencode` — Gateway OpenAI-compat vía `OPENCODE_BASE_URL`/`OPENCODE_PLAN`.
- *  - `gemini`   — Google `gemini-2.0-flash` (shape distinto).
+ *  - `gemini`   — Google Gemini Flash (shape distinto). Modelo configurable
+ *    por `GEMINI_MODEL`; default `gemini-2.5-flash`.
  *
  * Orden configurable por `LLM_PROVIDER_ORDER` (csv). Default:
  * `deepseek,opencode,gemini`.
@@ -33,8 +49,57 @@ const DEFAULT_MAX_TOKENS = 200;
  * directamente (dimensión y modelo distintos, no aplica el patrón de fallback).
  */
 @Injectable()
-export class LlmRouterService {
+export class LlmRouterService implements OnModuleInit {
   private readonly logger = new Logger(LlmRouterService.name);
+
+  /**
+   * Avisa al arrancar de los providers que se van a saltar por falta de
+   * configuración.
+   *
+   * Sin esto, un provider mal configurado es indistinguible de uno que
+   * funciona: la cadena degrada en silencio y solo se nota cuando fallan
+   * todos y el bot empieza a responder "no te entendí".
+   */
+  onModuleInit(): void {
+    const order = this.resolveOrder();
+    const faltantes = order
+      .map((p) => ({ provider: p, falta: this.missingConfig(p) }))
+      .filter((x) => x.falta.length > 0);
+
+    const disponibles = order.length - faltantes.length;
+
+    if (faltantes.length > 0) {
+      const detalle = faltantes
+        .map((f) => `${f.provider} (falta ${f.falta.join(', ')})`)
+        .join('; ');
+      this.logger.warn(
+        `LLM: ${faltantes.length} de ${order.length} providers se van a saltar — ${detalle}`,
+      );
+    }
+
+    if (disponibles === 0) {
+      // Sin ningún provider el bot no clasifica intenciones ni responde FAQ:
+      // degrada a fallback genérico en cada mensaje. Es un error de
+      // configuración, no una degradación aceptable.
+      this.logger.error(
+        'LLM: NINGÚN provider configurado — el bot no podrá clasificar ni responder consultas',
+      );
+    } else {
+      this.logger.log(
+        `LLM: ${disponibles} provider(s) disponibles, orden ${order.join(' → ')}`,
+      );
+    }
+  }
+
+  /** Qué env vars le faltan a un provider para poder usarse. */
+  private missingConfig(provider: ProviderName): string[] {
+    const requeridas: Record<ProviderName, string[]> = {
+      deepseek: ['DEEPSEEK_API_KEY'],
+      opencode: ['OPENCODE_API_KEY', 'OPENCODE_BASE_URL', 'OPENCODE_PLAN'],
+      gemini: ['GEMINI_API_KEY'],
+    };
+    return requeridas[provider].filter((env) => !process.env[env]);
+  }
 
   async complete(opts: LlmCompletionOptions): Promise<string> {
     const order = this.resolveOrder();
@@ -161,7 +226,9 @@ export class LlmRouterService {
     );
     try {
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${
+          process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL
+        }:generateContent?key=${key}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
