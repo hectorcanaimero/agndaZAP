@@ -681,6 +681,18 @@
 - Tras dos respuestas seguidas sin entender, ofrece el form web sin resetear la FSM.
 - Detalle y gotchas en [[notas/2026-09-11-fsm-navegacion-horarios]].
 
+## 2026-09-11 — S5: ligar `Conversation.patientId`
+- `findUpcomingAppointment` resuelve por `patientId` → `conversationId` → `phone` de la
+  conversación, y liga de paso cuando encuentra al paciente por el teléfono de WAHA.
+- **Desde el borde público NO se liga.** La primera versión ligaba si el `Patient` nacía en esa
+  misma petición; el `security-auditor` mostró que eso prueba que nadie había reclamado el
+  teléfono, no que quien rellena el form sea su dueño: un chat `@lid` podía pre-reclamar el número
+  de otra persona y quedarse con todas sus citas futuras. Lo que sí se controla ahí es qué citas
+  quedan atadas al chat (`conversationId`).
+- Nunca se escribe `Conversation.phone` con el número del formulario.
+- Efecto colateral necesario: `handleReminderReply` ya no exige teléfono antes de buscar, que era
+  lo que impedía confirmar desde un `@lid` ligado — el caso que S5 venía a arreglar.
+- Detalle y razonamiento en [[notas/2026-09-11-conversation-patient-link]].
 ## 2026-09-11 — P1 · B10: cola `bot-inbound` entre el webhook y el bot
 - El webhook encola y responde 200 al instante; un worker BullMQ llama a `handleIncoming`. Antes
   esperaba al bot (LLM incluido) y WAHA reintentaba por timeout, procesando el mismo mensaje dos

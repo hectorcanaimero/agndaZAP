@@ -332,13 +332,8 @@ export class BotService {
   ): Promise<string> {
     // Mismo helper que usa el resto del bot para resolver la cita del
     // paciente, así que hereda el orden de resolución sin duplicarlo.
-    if (convo.phone) {
-      const upcoming = await this.findUpcomingAppointment(
-        clinic.id,
-        convo.phone,
-      );
-      if (upcoming) return answer;
-    }
+    const upcoming = await this.findUpcomingAppointment(clinic.id, convo);
+    if (upcoming) return answer;
 
     const link = this.publicSchedulingUrl(clinic);
     const lastOut = await this.prisma.message.findFirst({
@@ -373,10 +368,9 @@ export class BotService {
    */
   private async greetingWithAppointment(
     clinic: Clinic,
-    phone: string | null,
+    convo: Conversation,
   ): Promise<string | null> {
-    if (!phone) return null;
-    const appt = await this.findUpcomingAppointment(clinic.id, phone);
+    const appt = await this.findUpcomingAppointment(clinic.id, convo);
     if (!appt) return null;
     const when = this.formatWhen(appt.startAt.toISOString(), clinic);
     const service = appt.service?.name ?? 'consulta';
@@ -543,7 +537,7 @@ export class BotService {
     }
 
     if (greeted && isBareGreeting(effectiveNormalized)) {
-      const contextual = await this.greetingWithAppointment(clinic, phone);
+      const contextual = await this.greetingWithAppointment(clinic, convo);
       await this.reply(
         clinic.wahaSession,
         chatId,
@@ -564,7 +558,7 @@ export class BotService {
       const ambiguous =
         reminderAction === 'YES' && isAmbiguousYes(effectiveNormalized);
 
-      if (!ambiguous || !phone) {
+      if (!ambiguous) {
         await this.handleReminderReply(clinic, convo, reminderAction, phone);
         return;
       }
@@ -573,7 +567,7 @@ export class BotService {
       // arranca con "sí". Si el mensaje nombra otra cosa (agendar, precio,
       // cancelar…), va al clasificador aunque haya un recordatorio esperando.
       if (!asksForSomethingElse(effectiveNormalized)) {
-        if (await this.hasConfirmationContext(clinic.id, convo.id, phone)) {
+        if (await this.hasConfirmationContext(clinic.id, convo)) {
           await this.handleReminderReply(clinic, convo, reminderAction, phone);
           return;
         }
@@ -1467,6 +1461,14 @@ export class BotService {
         source: 'BOT',
       });
 
+      // S5: la cita nació de este chat y el teléfono es el de WAHA, así que
+      // la conversación queda ligada al paciente. A partir de acá el
+      // recordatorio-respuesta y el follow-up la encuentran aunque el chat
+      // pase a `@lid` y perdamos el teléfono.
+      if (appt.patientId) {
+        await this.linkConversationPatient(convo.id, clinic.id, appt.patientId);
+      }
+
       await this.resetFlow(convo.id);
 
       // Nombres para el cierre (Peak-End: el paciente recuerda el último
@@ -1681,42 +1683,40 @@ export class BotService {
    *     saludo con cita próxima (`greetingWithAppointment`) y la rama
    *     `Intent.CONFIRMAR`, que piden "responde *SÍ*" SIN crear ningún
    *     `Reminder`. Sin esto el bot castigaba la respuesta que él mismo pidió.
-   *  2. Hay un `Reminder` con `status = SENT` en las últimas 48 h para una cita
-   *     próxima de este teléfono en ESTA clínica — el caso del recordatorio
-   *     anti no-show, que puede llegar días después del último mensaje.
+   *  2. Hay un `Reminder` con `status = SENT` en las últimas 48 h para la cita
+   *     próxima de esta conversación — el recordatorio anti no-show, que puede
+   *     llegar días después del último mensaje.
    *
-   * `Reminder` no tiene tenant propio: el filtro multi-tenant va sobre la cita
-   * (`appointment.clinicId`) y sobre el paciente (`patient.clinicId`).
+   * La cita sale de `findUpcomingAppointment`, así que hereda el orden
+   * `patientId → conversationId → phone` de S5 y funciona también en un chat
+   * `@lid` sin teléfono. El `Reminder` se busca por `appointmentId`, que ya
+   * viene acotado al tenant.
    */
   private async hasConfirmationContext(
     clinicId: string,
-    conversationId: string,
-    phone: string,
+    convo: Pick<Conversation, 'id' | 'phone' | 'patientId'>,
   ): Promise<boolean> {
     const lastOut = await this.prisma.message.findFirst({
-      where: { conversationId, direction: 'OUT' },
+      where: { conversationId: convo.id, direction: 'OUT' },
       orderBy: { createdAt: 'desc' },
       select: { body: true },
     });
     if (lastOut && /\*s[ií]\*/i.test(lastOut.body)) return true;
 
+    const appt = await this.findUpcomingAppointment(clinicId, convo);
+    if (!appt) return false;
+
     // `minus({ hours })` sobre instantes: el resultado no depende de la zona,
     // así que acá no hace falta la TZ de la clínica (a diferencia de todo lo
     // que se le muestra al paciente, que sí va en su zona).
-    const now = DateTime.now();
     const reminder = await this.prisma.reminder.findFirst({
       where: {
+        appointmentId: appt.id,
         status: 'SENT',
         sentAt: {
-          gte: now
+          gte: DateTime.now()
             .minus({ hours: BotService.REMINDER_REPLY_WINDOW_H })
             .toJSDate(),
-        },
-        appointment: {
-          clinicId,
-          status: { in: [...BotService.upcomingAppointmentStatuses] },
-          startAt: { gte: now.toJSDate() },
-          patient: { clinicId, phone },
         },
       },
       select: { id: true },
@@ -1735,19 +1735,22 @@ export class BotService {
     action: ReminderReplyAction,
     phone: string | null,
   ): Promise<void> {
-    if (!phone) {
-      await this.reply(
-        clinic.wahaSession,
-        convo.chatId,
-        convo.id,
-        'No pude asociar este chat a una cita. Te derivo con recepción para ayudarte.',
-      );
-      await this.markNeedsHuman(convo.id);
-      return;
-    }
-
-    const appt = await this.findUpcomingAppointment(clinic.id, phone);
+    // S5: resolvemos ANTES de mirar el teléfono. Una conversación ligada por
+    // `patientId`, o con una cita nacida de este mismo chat, se gestiona sin
+    // teléfono — que es justo el caso `@lid` que motivó el ítem.
+    const appt = await this.findUpcomingAppointment(clinic.id, convo);
     if (!appt) {
+      if (!phone) {
+        // Sin cita y sin teléfono no hay nada a lo que agarrarse.
+        await this.reply(
+          clinic.wahaSession,
+          convo.chatId,
+          convo.id,
+          'No pude asociar este chat a una cita. Te derivo con recepción para ayudarte.',
+        );
+        await this.markNeedsHuman(convo.id);
+        return;
+      }
       await this.reply(
         clinic.wahaSession,
         convo.chatId,
@@ -1980,21 +1983,119 @@ export class BotService {
     });
   }
 
-  private async findUpcomingAppointment(clinicId: string, phone: string) {
-    const patient = await this.prisma.patient.findUnique({
-      where: { clinicId_phone: { clinicId, phone } },
-    });
-    if (!patient) return null;
-    return this.prisma.appointment.findFirst({
-      where: {
-        clinicId,
-        patientId: patient.id,
-        status: { in: [...BotService.upcomingAppointmentStatuses] },
-        startAt: { gte: DateTime.now().toJSDate() },
-      },
+  /**
+   * Próxima cita abierta que le corresponde a ESTA conversación (S5).
+   *
+   * Tres vías, en orden, quedándose con la primera que devuelva algo:
+   *
+   *  1. `convo.patientId` si ya está ligado — lo más preciso, y lo único que
+   *     funciona en un chat `@lid` sin teléfono.
+   *  2. `appointment.conversationId = convo.id` — la cita nació de este chat
+   *     (link tokenizado). Deja que un `@lid` gestione **sus propias** citas
+   *     sin heredar el historial de un teléfono que no verificamos.
+   *  3. El `phone` de la conversación — el que reporta WAHA, no uno declarado
+   *     en un formulario. Si por esa vía aparece un `Patient` y la
+   *     conversación no tenía `patientId`, lo ligamos de paso: a partir de ahí
+   *     entra por la vía 1.
+   *
+   * Nunca se liga a partir de un teléfono declarado: ver
+   * `docs/notas/2026-09-11-conversation-patient-link.md`.
+   */
+  private async findUpcomingAppointment(
+    clinicId: string,
+    convo: Pick<Conversation, 'id' | 'phone' | 'patientId'>,
+  ) {
+    const openAndFuture = {
+      clinicId,
+      status: { in: [...BotService.upcomingAppointmentStatuses] },
+      startAt: { gte: DateTime.now().toJSDate() },
+    };
+    const pick = {
       orderBy: { startAt: 'asc' },
       include: { service: true, patient: true },
+    } as const;
+
+    if (convo.patientId) {
+      const byPatient = await this.prisma.appointment.findFirst({
+        where: {
+          ...openAndFuture,
+          patientId: convo.patientId,
+          // Si la conversación tiene teléfono verificado por WAHA, el paciente
+          // ligado tiene que ser el de ese número. Un enlace viejo que ya no
+          // corresponde no puede ganarle al teléfono verificado: caeríamos en
+          // la vía (c), que además lo corrige.
+          ...(convo.phone ? { patient: { phone: convo.phone } } : {}),
+        },
+        ...pick,
+      });
+      if (byPatient) return byPatient;
+    }
+
+    const byConversation = await this.prisma.appointment.findFirst({
+      where: { ...openAndFuture, conversationId: convo.id },
+      ...pick,
     });
+    if (byConversation) return byConversation;
+
+    if (!convo.phone) return null;
+    const patient = await this.prisma.patient.findUnique({
+      where: { clinicId_phone: { clinicId, phone: convo.phone } },
+    });
+    if (!patient) return null;
+
+    // Oportunista: el teléfono es el verificado por WAHA, así que ligar es
+    // seguro y evita repetir esta búsqueda en cada mensaje. También corrige un
+    // enlace anterior que apunte a otro paciente — el número verificado manda.
+    if (convo.patientId !== patient.id) {
+      await this.linkConversationPatient(convo.id, clinicId, patient.id);
+    }
+
+    return this.prisma.appointment.findFirst({
+      where: { ...openAndFuture, patientId: patient.id },
+      ...pick,
+    });
+  }
+
+  /**
+   * Liga `Conversation.patientId`. `updateMany` con `clinicId` en el `where`:
+   * un `update` por `id` suelto escribiría sin comprobar el tenant, que es el
+   * patrón que la convención del repo prohíbe.
+   *
+   * Nunca toca `phone`: el único teléfono en el que confiamos es el que
+   * reporta WAHA.
+   */
+  private async linkConversationPatient(
+    conversationId: string,
+    clinicId: string,
+    patientId: string,
+  ): Promise<void> {
+    // El `updateMany` acota la CONVERSACIÓN al tenant, pero el `patientId` lo
+    // pone el caller. La FK no comprueba clínica, así que una fila
+    // `Conversation(clínica A) → Patient(clínica B)` quedaría persistida y el
+    // panel, que resuelve por `patientId`, sí cruzaría. Hoy los tres callers
+    // pasan un paciente ya acotado; esto es defensa en profundidad.
+    const patient = await this.prisma.patient.findFirst({
+      where: { id: patientId, clinicId },
+      select: { id: true },
+    });
+    if (!patient) {
+      this.logger.error(
+        `link conversation/patient rechazado: el paciente no es de esta clínica convoId=${conversationId} clinicId=${clinicId}`,
+      );
+      return;
+    }
+
+    const { count } = await this.prisma.conversation.updateMany({
+      where: { id: conversationId, clinicId },
+      data: { patientId },
+    });
+    if (count > 0) {
+      // Traza sin PII: en un incidente, saber qué chat quedó ligado a qué
+      // paciente es justo lo que hace falta. Ni teléfono ni nombre.
+      this.logger.log(
+        `conversation ligada a paciente convoId=${conversationId} patientId=${patientId} clinicId=${clinicId}`,
+      );
+    }
   }
 
   /**
