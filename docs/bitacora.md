@@ -1,5 +1,12 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-11 — S8-bis: revisión de los pares `clinicId` + FK restantes (nota, sin migración)
+- Nota en [[notas/2026-09-11-revision-fks-compuestas-restantes]] con la decisión pareja por pareja y un plan de un solo PR.
+- **Comprobado contra la base**: cero filas cruzadas en los ocho pares. La query queda escrita para correrla contra producción antes de migrar.
+- **El que más urge es `Appointment → Patient`**: es el único de la lista donde cruzar el par no solo muestra datos ajenos sino que **contacta a alguien** — los recordatorios le mandarían un WhatsApp al paciente equivocado.
+- **Se quedan fuera** `BusinessHour` y `TimeOff` (tienen validación, los escriben endpoints estables y lo que filtran es un horario, cero PII) y `User → Professional`, que es un problema de modelo y no de integridad: `User.clinicId` es nullable por el SUPERADMIN.
+- **Trampa documentada**: con `MATCH SIMPLE` —el default de Postgres— una FK compuesta **no se comprueba si alguna columna es NULL**, y cinco de los ocho pares tienen la suya nullable. La FK añade una red, no sustituye la validación de código. Conviene no descubrirlo revisando el PR de la migración, ni creer que el problema quedó cerrado.
+
 ## 2026-09-11 — M10: exploración de STT para notas de voz (sin código)
 - Nota en [[notas/2026-09-11-exploracion-stt-notas-de-voz]] con comparativa, precios verificados en septiembre de 2026 y plan de 3 PRs.
 - **Recomendación: OpenAI `gpt-4o-mini-transcribe`.** No por precio —a este volumen las tres opciones cuestan céntimos— sino porque es el único proveedor **ya dentro del consent del ADR 0004**, que nombra explícitamente a OpenAI, DeepSeek y Google. Sumar Deepgram obligaría a reescribir el texto legal, versionarlo y volver a pedirlo.
