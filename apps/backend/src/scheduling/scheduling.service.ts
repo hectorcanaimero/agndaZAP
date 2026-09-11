@@ -150,10 +150,19 @@ export class SchedulingService {
     // Falla en vez de ignorar el id en silencio: si esto se dispara hay datos
     // inconsistentes, y una cita creada a medias —sin el enlace al chat del que
     // depende todo el flujo BOT_WEB— es peor que un error visible.
+    // Una sola lectura para las DOS guardas, que son distintas y ninguna
+    // sustituye a la otra (S23):
+    //   - TENANT (aquí): la conversación tiene que ser de esta clínica. Falla
+    //     duro, porque significa datos inconsistentes.
+    //   - PERSONA (más abajo): ese chat tiene que tener derecho a esta cita.
+    //     No falla: descarta el enlace y sigue.
+    // Si alguien ve una lectura y dos comprobaciones, que no borre "la
+    // repetida": protegen cosas diferentes.
+    let conversationPhone: string | null = null;
     if (source === 'BOT_WEB' && conversationId) {
       const convo = await this.prisma.conversation.findFirst({
         where: { id: conversationId, clinicId },
-        select: { id: true },
+        select: { id: true, phone: true },
       });
       if (!convo) {
         this.logger.error(
@@ -163,6 +172,7 @@ export class SchedulingService {
           'la conversación no pertenece a esta clínica',
         );
       }
+      conversationPhone = convo.phone;
     }
 
     // 2) Parseamos startAt en la TZ de la clínica y calculamos endAt con Luxon.
@@ -289,6 +299,43 @@ export class SchedulingService {
       }
     }
 
+    // ── Guarda de PERSONA (S5 / S23) ──
+    //
+    // El `conversationId` persistido es lo que después deja a ese chat ver y
+    // gestionar la cita: `findUpcomingAppointment` la resuelve por ahí. El
+    // teléfono del formulario público es DECLARADO —el campo llega readonly,
+    // pero eso es solo del lado del cliente y el token viaja en una URL—, así
+    // que solo atamos la cita al chat cuando ese chat tiene derecho a ella:
+    //
+    //   - el teléfono verificado por WAHA coincide con el del formulario, o
+    //   - la conversación no tiene teléfono (caso `@lid`) y el paciente nació
+    //     en ESTA llamada, así que la cita es genuinamente de este chat y el
+    //     nombre lo puso quien la creó.
+    //
+    // Sin la segunda condición, un chat `@lid` que escriba el teléfono de un
+    // paciente existente se queda con su cita y el bot le saluda con el nombre
+    // real de la víctima: un oráculo de enumeración por el canal del bot.
+    //
+    // Vive aquí y no en el caller porque aquí `patientCreated` ya es un hecho.
+    // Comprobarlo antes obligaba a un `findFirst` extra y dejaba una ventana de
+    // carrera entre la lectura y la escritura.
+    //
+    // No lanza: la cita se crea igual. El paciente no tiene por qué pagar por
+    // una discrepancia nuestra; lo que pierde es el atajo desde el chat.
+    let linkedConversationId: string | null = null;
+    if (source === 'BOT_WEB' && conversationId) {
+      const mayOwnConversation =
+        conversationPhone === patient.phone ||
+        (conversationPhone === null && patientCreated);
+      if (mayOwnConversation) {
+        linkedConversationId = conversationId;
+      } else {
+        this.logger.warn(
+          `conversationId no atado a la cita: el chat no corresponde al teléfono del formulario clinicId=${clinicId} convoId=${conversationId}`,
+        );
+      }
+    }
+
     const initialStatus = clinic.autoConfirm ? 'CONFIRMADA' : 'PENDIENTE';
 
     // 6) Creamos la cita en una transacción. El @@unique([professionalId, startAt])
@@ -310,11 +357,11 @@ export class SchedulingService {
             confirmedAt:
               initialStatus === 'CONFIRMADA' ? DateTime.now().toJSDate() : null,
             source,
-            // Solo persistimos conversationId cuando source === BOT_WEB.
-            // Silenciosamente lo ignoramos en otros casos para evitar FK
-            // spurios si un caller lo pasa por accidente.
-            conversationId:
-              source === 'BOT_WEB' && conversationId ? conversationId : null,
+            // Solo cuando `source === BOT_WEB` y el chat tiene derecho a esta
+            // cita — ver la guarda de PERSONA justo arriba. En otros casos se
+            // ignora en silencio para evitar FK spurios si un caller lo pasa
+            // por accidente.
+            conversationId: linkedConversationId,
           },
         });
       });
