@@ -6,6 +6,13 @@
 - **El que más urge es `Appointment → Patient`**: es el único de la lista donde cruzar el par no solo muestra datos ajenos sino que **contacta a alguien** — los recordatorios le mandarían un WhatsApp al paciente equivocado.
 - **Se quedan fuera** `BusinessHour` y `TimeOff` (tienen validación, los escriben endpoints estables y lo que filtran es un horario, cero PII) y `User → Professional`, que es un problema de modelo y no de integridad: `User.clinicId` es nullable por el SUPERADMIN.
 - **Trampa documentada**: con `MATCH SIMPLE` —el default de Postgres— una FK compuesta **no se comprueba si alguna columna es NULL**, y cinco de los ocho pares tienen la suya nullable. La FK añade una red, no sustituye la validación de código. Conviene no descubrirlo revisando el PR de la migración, ni creer que el problema quedó cerrado.
+## 2026-09-11 — S31: el fallback de Gemini estaba muerto y nadie lo sabía (rama `fix/router-gemini-modelo-vigente`)
+- **Dos fallos que se tapaban entre sí**: el router llamaba a `models/gemini-2.0-flash`, que Google marca como **(Shut down)** en su documentación, y además `GEMINI_API_KEY` nunca se configuró en producción. Como el router se saltaba **en silencio** los providers sin clave, la cadena real llevaba semanas siendo `deepseek → opencode` sin tercer eslabón.
+- Lo encontré preparando la nota de STT (M10), verificando la premisa de que "Gemini multimodal ya está en el router".
+- **Arreglos**: modelo por defecto `gemini-2.5-flash` (el que Google documenta como mejor relación precio/rendimiento para baja latencia y alto volumen) y **configurable por `GEMINI_MODEL`** — el fallo original fue quedarse clavado en un modelo retirado, así que migrar debe ser una variable de entorno y no un deploy.
+- **El router avisa al arrancar** qué providers se va a saltar y qué env les falta; si no queda ninguno, lo registra como `error` y no como `warn`, porque sin LLM el bot no clasifica intenciones ni responde consultas: degrada a "no te entendí" en cada mensaje.
+- **Caso real cubierto en test**: en Coolify hay variables duplicadas con valor vacío (`OPENCODE_API_KEY` aparece dos veces, una en blanco). Un provider "a medias" ahora cuenta como no disponible y se nombra qué le falta.
+- **Tests**: 1345 verdes.
 
 ## 2026-09-11 — M10: exploración de STT para notas de voz (sin código)
 - Nota en [[notas/2026-09-11-exploracion-stt-notas-de-voz]] con comparativa, precios verificados en septiembre de 2026 y plan de 3 PRs.
@@ -913,6 +920,48 @@
   exactamente lo que le pedimos y el bot no lo entendiera. Hay un test que fija esa correspondencia.
 - El override por tenant gana sobre el idioma: no traducimos lo que escribió un operador.
 - Detalle en [[notas/2026-09-11-bot-copy-es-pt]].
+## 2026-09-11 — P0 del bot · B4: mensajes sin texto no llegan al bot
+- PR A2 del reparto [[planes/2026-09-11-p0-bot-reparto]]. Antes, una nota de voz entraba a
+  `BotService.handleIncoming` con `text: ''` y terminaba en el fallback genérico (o gastando LLM).
+- Ahora `WebhookController` los detecta por `payload.type` / `_data.type` / `hasMedia` / `body` vacío,
+  los registra en la bandeja (`Conversation` + `Message IN` con `[audio]`, `[imagen]`, `[sticker]`,
+  `[ubicación]`, `[archivo]`, `[contacto]`, `[video]`) y responde una vez cada 6 h
+  "Por ahora solo puedo leer mensajes de texto…". Sin LLM.
+- Decisiones no obvias en [[notas/2026-09-11-waha-mensajes-sin-texto]]: throttle fail-closed
+  (al revés que el dedup), el registro se hace aunque la conversación esté en `HUMAN`, y el pie de
+  foto de una imagen se conserva (truncado a 500) detrás de la etiqueta.
+- **Dos blockers salidos de `code-reviewer` + `security-auditor`, corregidos antes del PR**:
+  (1) el camino nuevo se saltaba las dos capas de rate-limit del [[adr/0007-rate-limit-bot]],
+  porque viven dentro de `BotService.handleIncoming` — ahora `withinRateLimit` reusa las mismas
+  claves de Redis para compartir presupuesto; (2) `MEDIA_LABELS[type]` con `type: "constructor"`
+  devolvía algo de `Object.prototype` y provocaba 500 + reintento infinito de WAHA — ahora va con
+  `Object.hasOwn`. También: se ignoran reacciones y eventos de sistema, se cortan grupos y
+  estados (`@g.us`, `status@broadcast`), un `type: chat` con texto va al bot aunque marque
+  `hasMedia`, y el aviso pasó a best-effort (no relanza; libera el throttle).
+- Pendientes anotados en la nota, no hechos aquí: escalar a `NEEDS_HUMAN` tras varios adjuntos
+  (decisión de producto), hashear el `chatId` en las claves de Redis (junto con las de `bot:msg:`)
+  y una columna `kind` en `Message` para no concatenar etiqueta y contenido.
+- **PR A3 (S2, decisión del owner)**: el segundo adjunto seguido sin texto en medio pasa la
+  conversación a `NEEDS_HUMAN`, limpia la FSM y responde "Te paso con una persona del equipo para
+  escucharte." Contador `bot:media-count:{clinicId}:{chatId}` con ventana de 24 h, que un mensaje de
+  texto borra. Antes, el hilo se quedaba en `BOT` y no entraba en el filtro de triaje del panel: un
+  paciente que solo mandaba notas de voz recibía un aviso cada 6 h y nadie lo atendía. La
+  transcripción de audio queda en backlog como M10.
+
+## 2026-09-11 (noche) — Recuperado el handoff por audios seguidos, que nunca llegó a main
+- El PR de S2 (derivar a una persona tras dos adjuntos seguidos) figuraba MERGED pero sus commits
+  se quedaron en la rama base: estaba apilado sobre el PR de B4, y B4 entró en `main` antes de que
+  el apilado aterrizara en esa rama. Verificado: `mediaLabel` sí estaba en main, `MEDIA_HANDOFF` no.
+- Efecto real en producción: un paciente que mandaba dos notas de voz seguidas recibía el aviso de
+  "solo leo texto" y nada más; nunca acababa derivado a una persona.
+- Recuperado con cherry-pick sobre `main` actual, adaptando dos conflictos: se descartó la
+  reintroducción de `PER_CHAT_LIMIT`/`PER_CLINIC_HOURLY_LIMIT` en el controller (desde S1 viven en
+  `bot-rate-limit.ts`) y el reset de la racha se movió antes del encolado en `bot-inbound`.
+- **Añadido al recuperarlo**: el handoff ahora viaja como `handoff: true` en el evento `bot.turn`,
+  así que es la primera derivación que alimenta la tasa del dashboard de M9-b — que hasta ahora
+  salía en `null` porque nadie escribía ese contador.
+- Es la tercera vez en el día que `main` queda en un estado que no compila o al que le falta código
+  mergeado. Propuesta sobre la mesa: que CI compile el *merge result* y exigir la rama al día.
 ## 2026-09-11 — P1 · S4: `Feedback` admitía filas cruzadas entre clínicas
 - `FollowUpsService.recordFeedback` escribía `clinicId` y `appointmentId` sin comprobar que fueran
   juntos. `Feedback` tiene FKs separadas a `Clinic` y `Appointment`, así que la base lo permite, y el

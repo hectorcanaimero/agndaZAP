@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { LlmRouterService } from './llm-router.service';
 
 /** Fabricante de respuestas fetch OK con shape OpenAI-compat. */
@@ -200,3 +201,141 @@ describe('LlmRouterService', () => {
     ]);
   });
 });
+
+/**
+ * Aviso al arrancar (S31).
+ *
+ * El router se saltaba en silencio los providers sin clave, y eso hizo que
+ * durante semanas la cadena real fuera `deepseek → opencode` sin que nadie lo
+ * supiera: `GEMINI_API_KEY` nunca se configuró en producción y el modelo al que
+ * apuntaba llevaba meses retirado. Un provider mal configurado era
+ * indistinguible de uno que funciona.
+ */
+describe('LlmRouterService — aviso de configuración al arrancar', () => {
+  const envOriginal = { ...process.env };
+  let warn: jest.SpyInstance;
+  let error: jest.SpyInstance;
+  let log: jest.SpyInstance;
+
+  beforeEach(() => {
+    for (const k of [
+      'DEEPSEEK_API_KEY',
+      'OPENCODE_API_KEY',
+      'OPENCODE_BASE_URL',
+      'OPENCODE_PLAN',
+      'GEMINI_API_KEY',
+      'LLM_PROVIDER_ORDER',
+    ]) {
+      delete process.env[k];
+    }
+    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    process.env = { ...envOriginal };
+  });
+
+  it('nombra los providers que se van a saltar y qué env les falta', () => {
+    process.env.DEEPSEEK_API_KEY = 'k';
+
+    new LlmRouterService().onModuleInit();
+
+    const msg = warn.mock.calls[0][0] as string;
+    expect(msg).toContain('opencode');
+    expect(msg).toContain('OPENCODE_API_KEY');
+    expect(msg).toContain('gemini');
+    expect(msg).toContain('GEMINI_API_KEY');
+    // Y dice cuántos de cuántos, para que se vea de un vistazo en el log.
+    expect(msg).toContain('2 de 3');
+  });
+
+  it('con todo configurado no avisa de nada y confirma el orden', () => {
+    process.env.DEEPSEEK_API_KEY = 'k';
+    process.env.OPENCODE_API_KEY = 'k';
+    process.env.OPENCODE_BASE_URL = 'https://x';
+    process.env.OPENCODE_PLAN = 'p';
+    process.env.GEMINI_API_KEY = 'k';
+
+    new LlmRouterService().onModuleInit();
+
+    expect(warn).not.toHaveBeenCalled();
+    expect(log.mock.calls[0][0]).toContain('deepseek → opencode → gemini');
+  });
+
+  it('sin NINGÚN provider es error, no warn: el bot no puede responder', () => {
+    new LlmRouterService().onModuleInit();
+
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining('NINGÚN provider configurado'),
+    );
+  });
+
+  it('opencode a medias (con key pero sin base URL) cuenta como no disponible', () => {
+    // Es el caso real que vimos en Coolify: la variable existe pero vacía.
+    process.env.DEEPSEEK_API_KEY = 'k';
+    process.env.OPENCODE_API_KEY = 'k';
+
+    new LlmRouterService().onModuleInit();
+
+    const msg = warn.mock.calls[0][0] as string;
+    expect(msg).toContain('OPENCODE_BASE_URL');
+    expect(msg).toContain('OPENCODE_PLAN');
+    expect(msg).not.toContain('OPENCODE_API_KEY');
+  });
+
+  it('respeta LLM_PROVIDER_ORDER al contar', () => {
+    process.env.LLM_PROVIDER_ORDER = 'deepseek';
+    process.env.DEEPSEEK_API_KEY = 'k';
+
+    new LlmRouterService().onModuleInit();
+
+    expect(warn).not.toHaveBeenCalled();
+    expect(log.mock.calls[0][0]).toContain('1 provider(s)');
+  });
+});
+
+describe('LlmRouterService — modelo de Gemini', () => {
+  const envOriginal = { ...process.env };
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    process.env = { ...envOriginal };
+  });
+
+  it('usa un modelo vigente por defecto, NO el retirado gemini-2.0-flash', async () => {
+    process.env.GEMINI_API_KEY = 'k';
+    process.env.LLM_PROVIDER_ORDER = 'gemini';
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] }),
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await new LlmRouterService().complete({ system: 's', user: 'u' });
+
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).not.toContain('gemini-2.0-flash');
+    expect(url).toContain('gemini-2.5-flash');
+  });
+
+  it('GEMINI_MODEL permite cambiarlo sin desplegar', async () => {
+    // El fallo original fue quedarse clavado en un modelo que Google retiró.
+    // Con la env, migrar es cambiar una variable.
+    process.env.GEMINI_API_KEY = 'k';
+    process.env.GEMINI_MODEL = 'gemini-3.8-flash';
+    process.env.LLM_PROVIDER_ORDER = 'gemini';
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] }),
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await new LlmRouterService().complete({ system: 's', user: 'u' });
+
+    expect(fetchMock.mock.calls[0][0] as string).toContain('gemini-3.8-flash');
+  });
+});
+
