@@ -9,6 +9,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { createHash } from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import type Redis from 'ioredis';
 import { Public } from '../auth/decorators/public.decorator';
 import { Queue } from 'bullmq';
@@ -123,6 +124,18 @@ export class WebhookController {
   /** Tope del pie de foto que guardamos junto a la etiqueta. */
   private static readonly MAX_CAPTION_CHARS = 500;
 
+  /**
+   * Adjuntos seguidos (sin texto en medio) que disparan el handoff a una
+   * persona. El primero recibe el aviso de "solo leo texto"; al segundo
+   * asumimos que el paciente no puede o no quiere escribir.
+   */
+  private static readonly MEDIA_HANDOFF_THRESHOLD = 2;
+
+  /** Ventana del contador de adjuntos seguidos. */
+  private static readonly MEDIA_COUNT_TTL_SEC = 86_400;
+
+  private static readonly MEDIA_HANDOFF_TEXT =
+    'Te paso con una persona del equipo para escucharte.';
 
   /**
    * Una sola respuesta "solo leo texto" por conversación cada 6 h. Sin esto,
@@ -325,6 +338,7 @@ export class WebhookController {
     outcome: BotTurnOutcome;
     latencyMs?: number;
     reasonCode?: BotTurnReason;
+    turn?: Parameters<typeof buildBotTurn>[0]['turn'];
     log?: boolean;
   }): void {
     const event = buildBotTurn({
@@ -334,6 +348,7 @@ export class WebhookController {
       latencyMs: input.latencyMs,
       requestId: this.ctx.get('requestId'),
       reasonCode: input.reasonCode,
+      turn: input.turn,
     });
     if (input.log !== false) emitBotTurn(this.logger, event);
     void recordBotStats(
@@ -402,7 +417,12 @@ export class WebhookController {
     contactName: string | null;
     label: string;
     caption: string;
-  }): Promise<void> {
+    /**
+     * `true` si el mensaje acabó derivando la conversación a una persona.
+     * Lo devuelve para que el evento `bot.turn` lo refleje: es una derivación
+     * de verdad y cuenta para la tasa que ve la clínica en su panel.
+     */
+  }): Promise<{ handoff: boolean }> {
     const { clinic, chatId, phone, lid, contactName, label, caption } = params;
 
     // Mismo upsert que `BotService.handleIncoming`: en update sólo tocamos
@@ -431,8 +451,41 @@ export class WebhookController {
       },
     });
 
-    if (convo.state === 'HUMAN') return;
-    if (!(await this.claimMediaNotice(clinic.id, chatId))) return;
+    if (convo.state === 'HUMAN') return { handoff: false };
+
+    // Segundo adjunto seguido: el paciente no está escribiendo, y repetirle el
+    // mismo aviso cada 6 h lo deja sin atención (el hilo se queda en BOT y no
+    // aparece en el filtro de triaje del panel). Lo pasamos a una persona.
+    const consecutive = await this.bumpMediaCount(clinic.id, chatId);
+    if (consecutive >= WebhookController.MEDIA_HANDOFF_THRESHOLD) {
+      // Reiniciamos la racha para no repetir el handoff en cada adjunto
+      // siguiente: el tercero vuelve a contar como primero y cae en el aviso,
+      // que su propio throttle de 6 h ya tiene silenciado.
+      await this.resetMediaCount(clinic.id, chatId);
+      let escalated = false;
+      if (convo.state !== 'NEEDS_HUMAN') {
+        await this.prisma.conversation.update({
+          where: { id: convo.id },
+          data: {
+            state: 'NEEDS_HUMAN',
+            flowStep: null,
+            flowData: Prisma.JsonNull,
+          },
+        });
+        await this.sendAndPersist(
+          clinic,
+          chatId,
+          convo.id,
+          WebhookController.MEDIA_HANDOFF_TEXT,
+        );
+        escalated = true;
+      }
+      return { handoff: escalated };
+    }
+
+    if (!(await this.claimMediaNotice(clinic.id, chatId))) {
+      return { handoff: false };
+    }
 
     const text = caption
       ? WebhookController.MEDIA_NOTICE_TEXT_WITH_CAPTION
@@ -443,15 +496,80 @@ export class WebhookController {
     // `message.create` del IN duplicaría la fila en la bandeja y el throttle ya
     // consumido dejaría al paciente sin aviso durante 6 h. Liberamos la clave
     // para poder avisar en el próximo adjunto.
+    if (!(await this.sendAndPersist(clinic, chatId, convo.id, text))) {
+      await this.releaseMediaNotice(clinic.id, chatId);
+    }
+    return { handoff: false };
+  }
+
+  /**
+   * Manda el texto y persiste el `Message OUT`. Devuelve `false` si falló.
+   *
+   * NO relanza a propósito: lo durable (Conversation + Message IN) ya está
+   * escrito. Relanzar haría que WAHA reintentara, que `message.create`
+   * duplicara la fila IN en la bandeja (no es idempotente) y que el throttle
+   * ya consumido dejara al paciente sin aviso durante 6 h.
+   */
+  private async sendAndPersist(
+    clinic: { id: string; wahaSession: string },
+    chatId: string,
+    convoId: string,
+    text: string,
+  ): Promise<boolean> {
     try {
       await this.waha.sendText(clinic.wahaSession, chatId, text);
       await this.prisma.message.create({
-        data: { conversationId: convo.id, direction: 'OUT', body: text },
+        data: { conversationId: convoId, direction: 'OUT', body: text },
       });
+      return true;
     } catch (e) {
-      await this.releaseMediaNotice(clinic.id, chatId);
       this.logger.warn(
-        `aviso de media no enviado clinic=${clinic.id}: ${(e as Error).message}`,
+        `mensaje automático no enviado clinic=${clinic.id}: ${(e as Error).message}`,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Cuenta adjuntos SEGUIDOS (sin texto en medio) y devuelve el total.
+   * Se reinicia con `resetMediaCount` en cuanto entra un mensaje de texto, así
+   * que "audio, texto, audio" nunca llega a 2.
+   *
+   * Fail-open devolviendo 1 si Redis no está: ante la duda, tratarlo como
+   * primer adjunto (aviso normal) en vez de derivar a una persona por error.
+   */
+  private async bumpMediaCount(
+    clinicId: string,
+    chatId: string,
+  ): Promise<number> {
+    const key = `bot:media-count:${clinicId}:${chatId}`;
+    try {
+      const count = await this.redis.incr(key);
+      if (count === 1) {
+        await this.redis.expire(key, WebhookController.MEDIA_COUNT_TTL_SEC);
+      }
+      return count;
+    } catch (e) {
+      this.logger.warn(
+        `contador de adjuntos falló (redis) clinic=${clinicId}: ${(e as Error).message}`,
+      );
+      return 1;
+    }
+  }
+
+  /**
+   * Un mensaje de texto rompe la racha de adjuntos. Best-effort: si Redis
+   * falla, lo peor que pasa es un handoff de más, que es el lado seguro.
+   */
+  private async resetMediaCount(
+    clinicId: string,
+    chatId: string,
+  ): Promise<void> {
+    try {
+      await this.redis.del(`bot:media-count:${clinicId}:${chatId}`);
+    } catch (e) {
+      this.logger.warn(
+        `no se pudo reiniciar el contador de adjuntos clinic=${clinicId}: ${(e as Error).message}`,
       );
     }
   }
@@ -624,8 +742,9 @@ export class WebhookController {
           return { ok: true };
         }
         const mediaStartedAt = Date.now();
+        let handoff = false;
         try {
-          await this.handleUnsupportedMessage({
+          ({ handoff } = await this.handleUnsupportedMessage({
             clinic,
             chatId: from,
             phone,
@@ -636,7 +755,7 @@ export class WebhookController {
             // discriminador de tipo, así que acotamos lo que un tercero puede
             // escribir en la bandeja.
             caption: body.trim().slice(0, WebhookController.MAX_CAPTION_CHARS),
-          });
+          }));
         } catch (e) {
           if (dedupKey) await this.releaseMessage(dedupKey);
           throw e;
@@ -644,15 +763,23 @@ export class WebhookController {
         // Un adjunto es un turno igual: el paciente escribió y le
         // respondimos. Sin esto, las notas de voz serían un agujero en las
         // métricas justo donde más falta hace saber cuántas llegan.
+        // `handoff` va al evento y al contador: derivar por audios seguidos es
+        // una derivación de verdad, y es la única que hoy alimenta la tasa que
+        // la clínica ve en su panel (el resto la cableará `bot.service.ts`).
         this.recordTurn({
           clinicId: clinic.id,
           chatId: from,
           timezone: clinic.timezone,
           outcome: 'unsupported',
           latencyMs: Date.now() - mediaStartedAt,
+          turn: { handoff },
         });
         return { ok: true };
       }
+
+      // Un mensaje de texto rompe la racha de adjuntos seguidos: el paciente
+      // SÍ puede escribir, así que no hay que derivarlo a una persona.
+      await this.resetMediaCount(clinic.id, from);
 
       // Rate-limit del ADR 0007 ANTES de encolar. Es imprescindible que esté
       // aquí y no sólo dentro del bot: `handleIncoming` ahora corre en el
