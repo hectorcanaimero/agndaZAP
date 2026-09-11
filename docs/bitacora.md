@@ -1,5 +1,14 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-11 — M8: fallback léxico del RAG y spec de calibración (rama `feat/rag-fallback-lexico`)
+- **El hueco**: `text-embedding-3-small` falla justo con las preguntas cortas y coloquiales de WhatsApp. "Donde están ubicados" daba 0.619 contra el chunk correcto; el umbral está en 0.65, o sea que pasaba por poco, y "dónde queda la clínica" matcheaba el chunk equivocado.
+- **Arreglo**: cuando el vector no devuelve nada y la pregunta tiene ≤ 6 palabras, se busca con `word_similarity` de pg_trgm. Migración que instala la extensión + índice GIN.
+- **El umbral se midió, no se eligió a ojo**: con las preguntas reales de la nota contra las FAQ de la BD de desarrollo. Los aciertos inequívocos dan 0.650 y 0.548; el ruido ≤ 0.368, y por debajo de 0.22 además apunta al chunk equivocado. Umbral 0.5, conservador porque la muestra es pequeña.
+- **`word_similarity` y no `similarity`**: la segunda normaliza sobre las cadenas enteras, así que una pregunta de tres palabras contra un chunk largo da siempre un número diminuto.
+- **Solo preguntas cortas**: en una larga, que el vector no encuentre nada es información, y buscar coincidencias de texto solo añade ruido.
+- **`rag-calibracion.spec.ts`** fija las mediciones reales sin llamar a OpenAI. No re-embebe ni valida el modelo: fija la **frontera de decisión**, de modo que quien mueva un umbral vea exactamente qué preguntas de pacientes rompe. Incluye la propiedad de fondo —que existe un corte limpio entre preguntas de clínica y ajenas— y deja constancia de que el margen es estrecho (0.619 pasa, 0.723 no).
+- **Tests**: 1233 verdes.
+
 ## 2026-09-11 — S18: tests de integración contra Redis real en CI (rama `ci/tests-integracion-redis`)
 - **El motivo concreto**: escribiendo los tests unitarios del índice de tokens (S13), mi mock de `del` solo borraba claves de tipo string, así que el test de "borra también el índice" pasaba **sin que el índice —un SET— se borrara**. El `DEL` real borra la clave sea del tipo que sea. El mock confirmaba lo que yo creía en vez de lo que Redis hace.
 - **Qué se prueba**: lo que un mock no puede demostrar — atomicidad de `SET NX` (dedup del webhook) y de `INCR` (rate-limit) bajo concurrencia real, semántica de expiración, mezcla de tipos de clave, y el dedup por `jobId` de BullMQ.
