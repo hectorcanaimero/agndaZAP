@@ -1,5 +1,13 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-11 — S12: auditoría de `Clinic.status` en la superficie sin auth (rama `fix/clinic-status-endpoints-publicos`)
+- **Disparador**: al construir los endpoints de gestión de cita por link se me olvidó el filtro `status = ACTIVE` que los otros endpoints públicos sí tenían. Lo cazó el `security-auditor` y la pregunta obvia fue dónde más faltaba. Faltaba en tres sitios.
+- **El feed iCal era el peor**: servía nombre y teléfono del paciente en cada evento sin mirar el estado de la clínica, y la URL vive indefinidamente en la app de calendario del profesional — habría seguido sincronizando PII de salud meses después de cerrar la cuenta, sin que nadie visite nada. Ahora devuelve feed vacío.
+- **Invitaciones**: se podía entrar a una clínica suspendida. Comprobado en `getByToken` y otra vez en `accept`, porque entre ver la pantalla y pulsar el botón la clínica puede suspenderse y `accept` es el paso que da acceso de verdad.
+- **Token de agendamiento**: hidrataba el form con nombre y teléfono del paciente. Alcance menor (TTL 30 min) pero es PII igual.
+- **Ya estaban bien** y se verificaron: los tres endpoints de `/public/clinics`, el webhook WAHA (para `message`; `session.status` se procesa igual a propósito) y el login. `POST /public/leads` no es de clínica y los health checks no leen datos.
+- Regla que queda escrita en [[notas/2026-09-11-offboarding-clinic-status]]: un token emitido cuando la clínica estaba activa **no es un permiso permanente**; el estado se comprueba al usarlo.
+- **Tests**: 947 verdes, con caso `SUSPENDED`/`ARCHIVED` por endpoint.
 ## 2026-09-11 — M2-a: gestión de cita por link (rama `feat/cita-gestion-por-link-api`)
 - **Qué**: backend para que el paciente vea, cancele o mueva su cita desde `/agendar/{slug}/cita?t={token}`, sin escribir por WhatsApp. Token `manage` en Redis (no se consume al leerlo, TTL derivado de `startAt`), `SchedulingService.cancelByPatient`, tres endpoints públicos con rate-limit y `manageUrl` en la respuesta de creación. Ver [[adr/0020-gestion-cita-por-link]].
 - **Decisión que cambió el contrato**: el plan pedía que reagendar creara una cita nueva y cancelara la vieja. Se descartó porque el no-show rate se calcula sobre `ATENDIDA + NO_SHOW + CANCELADA`: cada reagendamiento habría inflado el denominador y **diluido hacia abajo la métrica estrella del producto**, justo cuando la feature funcionara bien. Se mueve in-place reusando `rescheduleAppointment`. La traza de reagendamientos va aparte como S6 (`rescheduleCount`), sin tocar el enum de estados.

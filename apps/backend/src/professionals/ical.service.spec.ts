@@ -93,7 +93,7 @@ describe('IcalService', () => {
         id: 'prof-1',
         clinicId: 'clinic-A',
         name: 'Dra. Ríos',
-        clinic: { name: 'Clínica A', timezone: 'America/Caracas' },
+        clinic: { name: 'Clínica A', timezone: 'America/Caracas', status: 'ACTIVE' },
       });
       prisma.appointment.findMany.mockResolvedValue([
         {
@@ -121,7 +121,7 @@ describe('IcalService', () => {
         id: 'prof-1',
         clinicId: 'clinic-A',
         name: 'Dra. Ríos',
-        clinic: { name: 'Clínica A', timezone: 'America/Caracas' },
+        clinic: { name: 'Clínica A', timezone: 'America/Caracas', status: 'ACTIVE' },
       });
       await svc.buildFeed('prof-1');
       const call = prisma.appointment.findMany.mock.calls[0][0];
@@ -134,7 +134,7 @@ describe('IcalService', () => {
         id: 'prof-1',
         clinicId: 'clinic-A',
         name: 'Dra. Ríos',
-        clinic: { name: 'Clínica A', timezone: 'America/Caracas' },
+        clinic: { name: 'Clínica A', timezone: 'America/Caracas', status: 'ACTIVE' },
       });
       prisma.appointment.findMany.mockResolvedValue([
         {
@@ -157,7 +157,7 @@ describe('IcalService', () => {
         id: 'prof-1',
         clinicId: 'clinic-A',
         name: 'Dra. Ríos',
-        clinic: { name: 'Clínica; A, con "chars"', timezone: 'UTC' },
+        clinic: { name: 'Clínica; A, con "chars"', timezone: 'UTC', status: 'ACTIVE' },
       });
       prisma.appointment.findMany.mockResolvedValue([
         {
@@ -182,7 +182,7 @@ describe('IcalService', () => {
         id: 'prof-1',
         clinicId: 'clinic-A',
         name: 'Dra. Ríos',
-        clinic: { name: 'Clínica A', timezone: 'UTC' },
+        clinic: { name: 'Clínica A', timezone: 'UTC', status: 'ACTIVE' },
       });
       prisma.appointment.findMany.mockResolvedValue([
         {
@@ -206,10 +206,61 @@ describe('IcalService', () => {
         id: 'prof-1',
         clinicId: 'clinic-A',
         name: 'Dra. Ríos',
-        clinic: { name: 'Clínica A', timezone: 'UTC' },
+        clinic: { name: 'Clínica A', timezone: 'UTC', status: 'ACTIVE' },
       });
       const ics = await svc.buildFeed('prof-1');
       expect(ics).toContain('\r\n');
     });
+  });
+});
+
+/**
+ * Offboarding (S12). El feed iCal es el endpoint con el offboarding más flojo:
+ * la URL vive indefinidamente en la app de calendario del profesional y cada
+ * evento lleva nombre y teléfono del paciente.
+ */
+describe('IcalService.buildFeed — clínica no activa', () => {
+  it.each(['SUSPENDED', 'ARCHIVED'])(
+    'clínica %s → feed vacío, sin datos de pacientes',
+    async (status) => {
+      const prisma: any = {
+        professional: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: 'prof-1',
+            clinicId: 'clinic-A',
+            name: 'Dra. Ríos',
+            clinic: { name: 'Clínica A', timezone: 'UTC', status },
+          }),
+        },
+        appointment: { findMany: jest.fn() },
+      };
+      const service = new IcalService(prisma as any);
+
+      const feed = await service.buildFeed('prof-1');
+
+      // Ni siquiera se consultan las citas.
+      expect(prisma.appointment.findMany).not.toHaveBeenCalled();
+      expect(feed).toContain('BEGIN:VCALENDAR');
+      expect(feed).not.toContain('BEGIN:VEVENT');
+    },
+  );
+
+  it('con la clínica ACTIVE el feed sigue trayendo las citas', async () => {
+    const prisma: any = {
+      professional: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'prof-1',
+          clinicId: 'clinic-A',
+          name: 'Dra. Ríos',
+          clinic: { name: 'Clínica A', timezone: 'UTC', status: 'ACTIVE' },
+        }),
+      },
+      appointment: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const service = new IcalService(prisma as any);
+
+    await service.buildFeed('prof-1');
+
+    expect(prisma.appointment.findMany).toHaveBeenCalled();
   });
 });

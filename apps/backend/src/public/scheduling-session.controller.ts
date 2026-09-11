@@ -7,6 +7,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Public } from '../auth/decorators/public.decorator';
+import { ClinicStatusCache } from '../common/redis/clinic-status.cache';
 import { SchedulingSessionService } from '../scheduling/scheduling-session.service';
 import { RateLimit } from './rate-limit.guard';
 
@@ -35,7 +36,10 @@ import { RateLimit } from './rate-limit.guard';
 export class PublicSchedulingSessionController {
   private readonly logger = new Logger('PublicSchedulingSessionController');
 
-  constructor(private readonly sessions: SchedulingSessionService) {}
+  constructor(
+    private readonly sessions: SchedulingSessionService,
+    private readonly clinicStatus: ClinicStatusCache,
+  ) {}
 
   /**
    * Hidrata el form desde el token.
@@ -67,6 +71,17 @@ export class PublicSchedulingSessionController {
       // "expiró" — el front trata ambos como "pedí otro link".
       this.logger.warn(
         `session hydrate miss token=${(token ?? '').slice(0, 6)}…`,
+      );
+      throw new NotFoundException('link inválido o expirado');
+    }
+
+    // El token se emitió cuando la clínica estaba activa, pero pudo suspenderse
+    // después. Sin esto el form seguiría hidratando con el NOMBRE Y TELÉFONO
+    // del paciente, que es PII de salud, y llevaría a un POST que igualmente
+    // acabaría en 404. Mismo mensaje que un token inexistente.
+    if (!(await this.clinicStatus.isActive(session.clinicId))) {
+      this.logger.warn(
+        `session hydrate rechazado: clínica no activa clinicId=${session.clinicId}`,
       );
       throw new NotFoundException('link inválido o expirado');
     }
