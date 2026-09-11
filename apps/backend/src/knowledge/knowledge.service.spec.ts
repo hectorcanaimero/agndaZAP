@@ -274,6 +274,58 @@ describe('KnowledgeService', () => {
       expect(opts.user).toMatch(/--- FUENTE 2 ---/);
     });
 
+    it('arma el system prompt en tuteo español LATAM neutro, sin voseo', async () => {
+      prisma.$queryRawUnsafe.mockResolvedValueOnce([
+        { id: 'f-1', content: 'Horario: L-V 9-18h.', distance: 0.15 },
+      ]);
+      mockOpenAIEmbeddingsOk();
+      llm.complete.mockResolvedValueOnce('Respuesta de prueba.');
+
+      await svc.answer({
+        clinicId: 'clinic-A',
+        question: '¿A qué hora abren?',
+        locale: 'es',
+      });
+
+      const opts = llm.complete.mock.calls[0][0];
+      expect(opts.system).toMatch(/^Eres el asistente de una clínica\./);
+      expect(opts.system).toMatch(/Respondes SIEMPRE/);
+      expect(opts.system).toMatch(/Usa ÚNICAMENTE/);
+      expect(opts.system).not.toMatch(/\bSos\b/);
+      expect(opts.system).not.toMatch(/Respondés/);
+      expect(opts.system).not.toMatch(/\bUsá\b/);
+      expect(opts.system).not.toMatch(/voseo/i);
+    });
+
+    it.each([
+      ['cercano', 'de tú'],
+      ['formal', 'de usted'],
+      ['tecnico', 'técnico'],
+    ])(
+      'tono "%s" queda en tuteo neutro, sin voseo ni "você"',
+      async (tone, expectedFragment) => {
+        prisma.$queryRawUnsafe.mockResolvedValueOnce([
+          { id: 'f-1', content: 'Horario: L-V 9-18h.', distance: 0.15 },
+        ]);
+        mockOpenAIEmbeddingsOk();
+        llm.complete.mockResolvedValueOnce('Respuesta de prueba.');
+
+        await svc.answer({
+          clinicId: 'clinic-A',
+          question: '¿A qué hora abren?',
+          locale: 'es',
+          tone,
+        });
+
+        const opts = llm.complete.mock.calls[0][0];
+        expect(opts.system).toContain(expectedFragment);
+        expect(opts.system).not.toMatch(/voseo/i);
+        expect(opts.system).not.toMatch(/você/i);
+        expect(opts.system).not.toMatch(/\bUsá\b/);
+        expect(opts.system).not.toMatch(/priorizá/);
+      },
+    );
+
     it('devuelve null si el LLM responde NULL_ANSWER', async () => {
       prisma.$queryRawUnsafe.mockResolvedValueOnce([
         { id: 'f-1', content: 'Horario 9-18h', distance: 0.2 },
