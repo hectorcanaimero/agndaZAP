@@ -572,12 +572,22 @@
   [[analisis/2026-09-11-chatbot-analisis-tecnico]]; reparto en [[plans/2026-09-11-p0-bot-reparto]]
   (ambos llegan por el PR #45).
 
-## 2026-09-11 — M6: cierre con acción tras responder una duda
-- Cuando el RAG responde una pregunta y el paciente NO tiene cita próxima, el bot anexa una línea
-  corta invitando a agendar, con el link público SIN token (responder una duda no debe escribir
-  una `SchedulingSession`).
-- No se anexa en dos casos: si ya tiene cita próxima (invitarlo a agendar otra confunde), y si el
-  mensaje anterior del bot ya llevaba el link. Lo segundo no estaba en el pedido: repetir la misma
-  llamada a la acción en cada respuesta es justo el patrón que delata a un bot, y quien hace tres
-  preguntas seguidas la leería tres veces. Se resuelve con el último `Message OUT`, sin estado nuevo.
-- El pool `ctaAfterAnswer` rota tres variantes, igual que el resto de mensajes default.
+## 2026-09-11 — El RAG del bot recibe el teléfono de la conversación
+- `bot.service.ts` pasa `phone: convo.phone` a `knowledge.answer` (paso 4 de M1, que la sesión B
+  dejó como parámetro opcional). Con eso el bloque de hechos de BD incluye "tu próxima cita" y el
+  bot puede responder "¿cuándo es mi cita?" sin inventar.
+- Va `convo.phone` y no el `phone` del mensaje: el upsert de la conversación conserva el número ya
+  conocido, así que un mensaje que llegue por `@lid` no borra el contexto. Sin teléfono el bloque
+  sale igual, sin la parte de la cita.
+- Es el teléfono que reporta WAHA, no uno declarado en un formulario. La distinción importa: ver
+  la decisión de S5 sobre no rellenar `Conversation.phone` con el número del form público.
+
+## 2026-09-11 — M4: navegación de horarios en la FSM
+- "0. Ver más horarios" avanza la ventana 7 días (`flowData.slotWindowCount`), con tope de 4
+  ventanas y después el link tokenizado. Sin resetear la FSM en ningún caso.
+- "Cualquier profesional" como última opción de `ASK_PROFESSIONAL`: mezcla los horarios de todos
+  y fija el `professionalId` al elegir el slot (`offeredProfessionalIds`, paralelo a `offeredSlots`).
+- Preferencia del mismo mensaje ("1, por la tarde", "el martes") filtra antes de mostrar; si queda
+  vacía lo dice y muestra todo.
+- Tras dos respuestas seguidas sin entender, ofrece el form web sin resetear la FSM.
+- Detalle y gotchas en [[notas/2026-09-11-fsm-navegacion-horarios]].
