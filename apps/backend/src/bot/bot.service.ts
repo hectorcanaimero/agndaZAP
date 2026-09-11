@@ -18,6 +18,10 @@ import { SchedulingSessionService } from '../scheduling/scheduling-session.servi
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { WahaService } from '../whatsapp/waha.service';
 import { hashChatId, withinBotRateLimit } from './bot-rate-limit';
+import {
+  schedulingUrl,
+  schedulingUrlWithToken,
+} from '../common/web-url.util';
 import { Intent, IntentService } from './intent.service';
 import {
   asksForSomethingElse,
@@ -137,10 +141,7 @@ export class BotService {
       lid: convo.lid,
       name: convo.contactName,
     });
-    const baseUrl = (
-      process.env.WEB_BASE_URL ?? 'http://localhost:3000'
-    ).replace(/\/+$/, '');
-    return `${baseUrl}/${clinic.locale}/agendar/${clinic.slug}?t=${token}`;
+    return schedulingUrlWithToken(clinic.locale, clinic.slug, token);
   }
 
   /**
@@ -231,8 +232,8 @@ export class BotService {
       'Cuando quieras agendar, escríbeme *agendar* o usa nuestra página: {link}',
     ],
     confirmAppointment: [
-      '✅ Listo. Tu cita de {service} con {professional} quedó {status} para el {when} en {clinicName}.{address}\n\nTe recordaré antes de la cita. Si necesitas cambiarla, escríbeme *reagendar*.',
-      '¡Perfecto! Reservé tu cita de {service} con {professional} para el {when} en {clinicName}.{address}\n\nTe avisaré antes para recordártela. Cualquier cambio, escríbeme *reagendar*.',
+      '✅ Listo. Tu cita de {service} con {professional} quedó {status} para el {when} en {clinicName}.{address}\n\nTe recordaré antes de la cita.{manageLine}',
+      '¡Perfecto! Reservé tu cita de {service} con {professional} para el {when} en {clinicName}.{address}\n\nTe avisaré antes para recordártela.{manageLine}',
     ],
   } as const;
 
@@ -361,10 +362,33 @@ export class BotService {
    * en DB). El link tokenizado con prefill sigue en `buildSchedulingLink`.
    */
   private publicSchedulingUrl(clinic: Pick<Clinic, 'slug' | 'locale'>): string {
-    const baseUrl = (
-      process.env.WEB_BASE_URL ?? 'http://localhost:3000'
-    ).replace(/\/+$/, '');
-    return `${baseUrl}/${clinic.locale}/agendar/${clinic.slug}`;
+    return schedulingUrl(clinic.locale, clinic.slug);
+  }
+
+  /**
+   * Link de gestión de una cita concreta (ADR 0020): ver, cambiar horario o
+   * cancelar desde la web. Emite un token nuevo por llamada.
+   *
+   * Devuelve `null` si no se pudo emitir (Redis caído): el bot sigue
+   * respondiendo por chat, que es lo que importa. Perder el link no puede
+   * costarle al paciente la gestión de su cita.
+   */
+  private async manageLink(
+    clinic: Pick<Clinic, 'id' | 'slug' | 'locale'>,
+    appt: { id: string; clinicId: string; startAt: Date },
+  ): Promise<string | null> {
+    try {
+      return await this.schedulingSessions.issueManageUrl(
+        appt,
+        clinic.slug,
+        clinic.locale,
+      );
+    } catch (e) {
+      this.logger.warn(
+        `no se pudo emitir el link de gestión clinicId=${clinic.id}: ${(e as Error).message}`,
+      );
+      return null;
+    }
   }
 
   /**
@@ -413,17 +437,23 @@ export class BotService {
     address: string;
     service: string;
     professional: string;
+    /** Link de gestión (ADR 0020). Sin él caemos al "escríbeme *reagendar*". */
+    manageUrl?: string | null;
   }): string {
     const template = this.pickVariant(
       BotService.DEFAULT_BOT_MESSAGES.confirmAppointment,
     );
+    const manageLine = input.manageUrl
+      ? `\n\nSi necesitas cambiarla o cancelarla, entra aquí:\n${input.manageUrl}`
+      : '\n\nSi necesitas cambiarla, escríbeme *reagendar*.';
     return template
       .replace(/\{status\}/g, input.status)
       .replace(/\{when\}/g, input.when)
       .replace(/\{clinicName\}/g, input.clinicName)
       .replace(/\{address\}/g, input.address)
       .replace(/\{service\}/g, input.service)
-      .replace(/\{professional\}/g, input.professional);
+      .replace(/\{professional\}/g, input.professional)
+      .replace(/\{manageLine\}/g, manageLine);
   }
 
   async handleIncoming(input: {
@@ -606,14 +636,23 @@ export class BotService {
         await this.handleReminderReply(clinic, convo, 'RESCHEDULE', phone);
         break;
 
-      case Intent.CANCELAR:
+      case Intent.CANCELAR: {
+        // Nota para el rebase: cuando entre S5, `findUpcomingAppointment`
+        // recibe `convo` en vez de `phone` y este guard sobra.
+        const appt = phone
+          ? await this.findUpcomingAppointment(clinicId, phone)
+          : null;
+        const link = appt ? await this.manageLink(clinic, appt) : null;
         await this.reply(
           clinic.wahaSession,
           chatId,
           convo.id,
-          'Para cancelar tu próxima cita, responde *CANCELAR*. No voy a cancelarla sin esa confirmación explícita.',
+          link
+            ? `Puedes cambiarla o cancelarla aquí:\n\n${link}\n\nSi prefieres, responde *CANCELAR* aquí mismo. No voy a cancelarla sin esa confirmación explícita.`
+            : 'Para cancelar tu próxima cita, responde *CANCELAR*. No voy a cancelarla sin esa confirmación explícita.',
         );
         break;
+      }
 
       case Intent.CONFIRMAR:
         await this.reply(
@@ -1481,6 +1520,9 @@ export class BotService {
       const when = this.formatWhen(data.startAtISO, clinic);
       const address = clinic.address ? `\nDirección: ${clinic.address}` : '';
       const status = appt.status === 'CONFIRMADA' ? 'confirmada' : 'agendada';
+      // Link de gestión en el cierre: el paciente lo tiene a mano desde el
+      // primer momento, sin tener que volver a escribir (M2-c).
+      const manageUrl = await this.manageLink(clinic, appt);
       await this.reply(
         clinic.wahaSession,
         convo.chatId,
@@ -1492,6 +1534,7 @@ export class BotService {
           address,
           service: confirmed.service?.name ?? 'consulta',
           professional: confirmed.professional?.name ?? 'el profesional',
+          manageUrl,
         }),
       );
     } catch (e) {
@@ -1779,13 +1822,26 @@ export class BotService {
       return;
     }
 
-    await this.reminders.cancelForAppointment(appt.id);
-    await this.markNeedsHuman(convo.id);
+    // Reagendar por link: el paciente elige el horario nuevo en la web y la
+    // cita se mueve in-place. Ya NO cancelamos los recordatorios: la cita sigue
+    // en pie mientras no la mueva, y apagarlos aquí la dejaba sin red justo
+    // cuando más riesgo de no-show tiene (M2-c / B5).
+    const link = await this.manageLink(clinic, appt);
+    if (!link) {
+      await this.markNeedsHuman(convo.id);
+      await this.reply(
+        clinic.wahaSession,
+        convo.chatId,
+        convo.id,
+        'Te derivo con recepción para reagendar esa cita. No voy a moverla hasta que confirmes el nuevo horario.',
+      );
+      return;
+    }
     await this.reply(
       clinic.wahaSession,
       convo.chatId,
       convo.id,
-      'Te derivo con recepción para reagendar esa cita. No voy a moverla hasta que confirmes el nuevo horario.',
+      `Puedes elegir el horario nuevo aquí:\n\n${link}\n\nTu cita actual sigue en pie hasta que la cambies. Si prefieres cancelarla, responde *CANCELAR*.`,
     );
   }
 

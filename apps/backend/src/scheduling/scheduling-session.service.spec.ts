@@ -227,6 +227,51 @@ describe('SchedulingSessionService — tokens de gestión', () => {
     expect(expiresInSeconds).toBe(30 * 60);
   });
 
+  describe('issueManageUrl (única fuente del link de gestión, S21)', () => {
+    const appt = {
+      id: 'appt-1',
+      clinicId: 'clinic-A',
+      startAt: new Date(Date.now() + 86_400_000),
+    };
+
+    afterEach(() => {
+      delete process.env.WEB_BASE_URL;
+    });
+
+    it('arma la URL de la página de la cita con el token recién emitido', async () => {
+      process.env.WEB_BASE_URL = 'https://showly.us';
+
+      const url = await service.issueManageUrl(appt, 'clinica-a', 'es');
+
+      expect(url).toMatch(
+        /^https:\/\/showly\.us\/es\/agendar\/clinica-a\/cita\?t=.+$/,
+      );
+    });
+
+    it('normaliza el trailing slash de WEB_BASE_URL', async () => {
+      process.env.WEB_BASE_URL = 'https://showly.us/';
+
+      const url = await service.issueManageUrl(appt, 'clinica-a', 'pt');
+
+      expect(url).toContain('https://showly.us/pt/agendar/clinica-a/cita?t=');
+      expect(url).not.toContain('//pt/');
+    });
+
+    it('el token emitido NO guarda PII del paciente', async () => {
+      // Viviría hasta 30 días en Redis sin que nadie lo consuma.
+      const url = await service.issueManageUrl(appt, 'clinica-a', 'es');
+      const token = url.split('?t=')[1];
+
+      const raw = redis._store.get(`sched:manage:${token}`);
+      expect(raw).toBeTruthy();
+      const payload = JSON.parse(raw as string);
+      expect(payload).not.toHaveProperty('phone');
+      expect(payload).not.toHaveProperty('name');
+      expect(payload.appointmentId).toBe('appt-1');
+      expect(payload.clinicId).toBe('clinic-A');
+    });
+  });
+
   it('resolveManage NO consume: el paciente puede recargar la página', async () => {
     const { token } = await service.createManage(BASE, in7Days());
 

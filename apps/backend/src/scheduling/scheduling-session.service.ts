@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type Redis from 'ioredis';
 import { REDIS_CLIENT } from '../public/rate-limit.guard';
+import { manageAppointmentUrl } from '../common/web-url.util';
 
 /**
  * Datos que viven detrás de un token de agendamiento por link WA.
@@ -209,6 +210,25 @@ export class SchedulingSessionService {
    * Lookup no destructivo: el paciente puede abrir el link, mirar la cita,
    * recargar y volver más tarde. Solo `cancel` y `reschedule` lo invalidan.
    */
+  /**
+   * Emite un token de gestión y devuelve la URL lista para mandar (ADR 0020).
+   *
+   * Única fuente del link de gestión: lo usan el endpoint público, el bot y el
+   * processor de recordatorios. Si cambia el dominio o la forma de la ruta, se
+   * cambia aquí y en `web-url.util.ts`, no en tres sitios (S21).
+   */
+  async issueManageUrl(
+    appt: { id: string; clinicId: string; startAt: Date },
+    clinicSlug: string,
+    locale: string,
+  ): Promise<string> {
+    const { token } = await this.createManage(
+      { appointmentId: appt.id, clinicId: appt.clinicId, clinicSlug },
+      appt.startAt,
+    );
+    return manageAppointmentUrl(locale, clinicSlug, token);
+  }
+
   async resolveManage(token: string): Promise<ManageSessionData | null> {
     if (!isPlausibleToken(token)) return null;
     const raw = await this.redis.get(MANAGE_KEY_PREFIX + token);

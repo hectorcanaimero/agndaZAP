@@ -182,6 +182,14 @@ describe('PublicController', () => {
       createManage: jest
         .fn()
         .mockResolvedValue({ token: 'mtok-abc', expiresInSeconds: 86400 }),
+      // El controller delega en el service, que es la única fuente del token y
+      // de la URL (S21). Lo que se guarda en el token —y que no lleve PII— se
+      // testea en `scheduling-session.service.spec.ts`.
+      issueManageUrl: jest
+        .fn()
+        .mockImplementation(async (_appt: any, slug: string, locale: string) =>
+          `${(process.env.WEB_BASE_URL ?? 'http://localhost:3000').replace(/\/+$/, '')}/${locale}/agendar/${slug}/cita?t=mtok-abc`,
+        ),
       resolveManage: jest.fn().mockResolvedValue(null),
       invalidateManage: jest.fn().mockResolvedValue(undefined),
     };
@@ -213,7 +221,7 @@ describe('PublicController', () => {
 
     it('si Redis está caído la cita se crea igual, solo sin manageUrl', async () => {
       // Fail-open: perder el link de gestión no puede costar la cita.
-      sessions.createManage.mockRejectedValue(new Error('redis down'));
+      sessions.issueManageUrl.mockRejectedValue(new Error('redis down'));
 
       const res: any = await controller.createAppointment('clinica-a', {
         phone: '+584141234567',
@@ -930,6 +938,12 @@ describe('PublicController — gestión de cita por link', () => {
       createManage: jest
         .fn()
         .mockResolvedValue({ token: 'mtok-new', expiresInSeconds: 3600 }),
+      // Emisor compartido (S21): el controller ya no arma la URL a mano.
+      issueManageUrl: jest
+        .fn()
+        .mockImplementation(async (_appt: any, slug: string, locale: string) =>
+          `${(process.env.WEB_BASE_URL ?? 'http://localhost:3000').replace(/\/+$/, '')}/${locale}/agendar/${slug}/cita?t=mtok-new`,
+        ),
     };
     controller = new PublicController(
       prisma as unknown as PrismaService,
@@ -1039,16 +1053,8 @@ describe('PublicController — gestión de cita por link', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('el token guardado NO lleva el teléfono del paciente', async () => {
-      // PII de salud viviendo hasta 30 días en Redis sin que nadie la consuma.
-      await controller.rescheduleManagedAppointment('clinica-a', TOKEN, {
-        startAtISO: '2030-06-02T14:00:00.000Z',
-      } as any);
-
-      const payload = sessions.createManage.mock.calls[0][0];
-      expect(payload).not.toHaveProperty('phone');
-      expect(JSON.stringify(payload)).not.toContain('584141234567');
-    });
+    // Que el token no guarde PII se testea donde se escribe:
+    // `scheduling-session.service.spec.ts` → "issueManageUrl".
 
     it('cita pasada o terminal → canCancel/canReschedule en false', async () => {
       prisma.appointment.findFirst.mockResolvedValue(
@@ -1294,7 +1300,7 @@ describe('PublicController — gestión de cita por link', () => {
       // Fail-open: lo que el paciente pidió ya está hecho. Pero el token viejo
       // no se quema hasta que el nuevo existe — si no, un fallo de Redis
       // dejaría al paciente sin ningún link para volver a su cita.
-      sessions.createManage.mockRejectedValue(new Error('redis down'));
+      sessions.issueManageUrl.mockRejectedValue(new Error('redis down'));
 
       const res = await controller.rescheduleManagedAppointment(
         'clinica-a',

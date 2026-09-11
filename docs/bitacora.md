@@ -666,3 +666,17 @@
   vacía lo dice y muestra todo.
 - Tras dos respuestas seguidas sin entender, ofrece el form web sin resetear la FSM.
 - Detalle y gotchas en [[notas/2026-09-11-fsm-navegacion-horarios]].
+
+## 2026-09-11 — M2-c: el link de gestión llega por WhatsApp
+- El bot manda el link de gestión (ADR 0020) en cuatro sitios: al responder `REAGENDAR`, al
+  detectar intención de cancelar, en la confirmación post-agendamiento y en el recordatorio.
+- **`REAGENDAR` deja de apagar los recordatorios.** La cita sigue en pie hasta que el paciente la
+  mueva, así que apagarlos la dejaba sin red justo cuando más riesgo de no-show tiene.
+- `CANCELAR` explícito sigue cancelando por chat: ya es una confirmación. El link se ofrece cuando
+  la intención viene del clasificador, antes de pedir la palabra.
+- Todo es best-effort: si no se puede emitir el token (Redis caído), el bot y el recordatorio
+  salen con las palabras de siempre. Perder el link no puede costar la respuesta ni el recordatorio.
+- **S21**: la URL se construye en un solo sitio (`common/web-url.util.ts` + 
+  `SchedulingSessionService.issueManageUrl`). Antes había tres lecturas de `WEB_BASE_URL` con su
+  propio `replace(/\/+$/)`. Con los tokens de gestión viviendo hasta 30 días y el dominio de prod
+  todavía en un `sslip.io` por IP, mover el dominio tenía que ser un env y no una cacería.

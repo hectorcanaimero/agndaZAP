@@ -396,26 +396,16 @@ export class PublicController {
   // ──────────────────── Gestión de cita por link (ADR 0020) ────────────────────
 
   /**
-   * Emite un token de gestión y arma la URL pública de la página de la cita.
-   * `{WEB_BASE_URL}/{locale}/agendar/{slug}/cita?t={token}`.
+   * Emite el link de gestión de una cita. Delega en `SchedulingSessionService`,
+   * que es la única fuente del token y de la URL — la comparten el bot y el
+   * processor de recordatorios (S21).
    */
-  private async issueManageUrl(
+  private issueManageUrl(
     appt: { id: string; clinicId: string; startAt: Date },
     slug: string,
     locale: string,
   ): Promise<string> {
-    const { token } = await this.sessions.createManage(
-      {
-        appointmentId: appt.id,
-        clinicId: appt.clinicId,
-        clinicSlug: slug,
-      },
-      appt.startAt,
-    );
-    const baseUrl = (
-      process.env.WEB_BASE_URL ?? 'http://localhost:3000'
-    ).replace(/\/+$/, '');
-    return `${baseUrl}/${locale}/agendar/${slug}/cita?t=${token}`;
+    return this.sessions.issueManageUrl(appt, slug, locale);
   }
 
   /**

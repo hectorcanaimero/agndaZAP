@@ -181,6 +181,10 @@ describe('BotService — FSM de agendamiento', () => {
       create: jest
         .fn()
         .mockResolvedValue({ token: 'tok-abc', expiresInSeconds: 1800 }),
+      // Link de gestión de una cita concreta (ADR 0020 / M2-c).
+      issueManageUrl: jest
+        .fn()
+        .mockResolvedValue('http://localhost:3000/es/agendar/clinica-a/cita?t=mtok-abc'),
       resolve: jest.fn().mockResolvedValue(null),
       consume: jest.fn().mockResolvedValue(null),
     };
@@ -1449,24 +1453,59 @@ describe('BotService — FSM de agendamiento', () => {
     );
 
     it.each(['reagendar', 'reprogramar'])(
-      '"%s" → detiene los recordatorios, deriva a recepción (NEEDS_HUMAN) y NO mueve la cita',
+      '"%s" → manda el link de gestión, NO mueve la cita y NO apaga los recordatorios',
       async (text) => {
         await say(text);
 
-        expect(reminders.cancelForAppointment).toHaveBeenCalledWith('appt-7');
+        // M2-c: la cita sigue en pie hasta que el paciente la mueva, así que
+        // apagarle los recordatorios la dejaba sin red justo cuando más riesgo
+        // de no-show tiene.
+        expect(reminders.cancelForAppointment).not.toHaveBeenCalled();
         expect(prisma.appointment.update).not.toHaveBeenCalled();
-        expect(convoState.state).toBe('NEEDS_HUMAN');
-        expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/recepción/i);
+        expect(convoState.state).toBe('BOT');
+        const msg = waha.sendText.mock.calls.at(-1)![2];
+        expect(msg).toContain('/cita?t=');
+        expect(msg).toMatch(/\*CANCELAR\*/);
       },
     );
+
+    it('si no se puede emitir el link, reagendar sigue derivando a recepción', async () => {
+      schedulingSessions.issueManageUrl.mockRejectedValue(new Error('redis down'));
+
+      await say('reagendar');
+
+      expect(convoState.state).toBe('NEEDS_HUMAN');
+      expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/recepción/i);
+    });
 
     it('Intent.REPROGRAMAR del LLM sigue el mismo camino que "reagendar"', async () => {
       intent.detect.mockResolvedValue(Intent.REPROGRAMAR);
 
       await say('quiero mover mi turno de la semana que viene');
 
-      expect(reminders.cancelForAppointment).toHaveBeenCalledWith('appt-7');
-      expect(convoState.state).toBe('NEEDS_HUMAN');
+      expect(reminders.cancelForAppointment).not.toHaveBeenCalled();
+      expect(waha.sendText.mock.calls.at(-1)![2]).toContain('/cita?t=');
+    });
+
+    it('Intent.CANCELAR ofrece el link antes de pedir la palabra explícita', async () => {
+      intent.detect.mockResolvedValue(Intent.CANCELAR);
+
+      await say('creo que no voy a poder ir el martes');
+
+      const msg = waha.sendText.mock.calls.at(-1)![2];
+      expect(msg).toContain('/cita?t=');
+      expect(msg).toMatch(/\*CANCELAR\*/);
+      // Nunca cancela sin la palabra explícita.
+      expect(prisma.appointment.update).not.toHaveBeenCalled();
+    });
+
+    it('"CANCELAR" explícito sigue cancelando en el chat, sin link de por medio', async () => {
+      await say('cancelar');
+
+      expect(prisma.appointment.update).toHaveBeenCalledWith({
+        where: { id: 'appt-7' },
+        data: expect.objectContaining({ status: 'CANCELADA' }),
+      });
     });
 
     it('sin cita próxima: responde que no la encontró y no toca reminders', async () => {
