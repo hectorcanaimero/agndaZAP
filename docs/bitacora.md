@@ -1,5 +1,11 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-11 — S8-bis: revisión de los pares `clinicId` + FK restantes (nota, sin migración)
+- Nota en [[notas/2026-09-11-revision-fks-compuestas-restantes]] con la decisión pareja por pareja y un plan de un solo PR.
+- **Comprobado contra la base**: cero filas cruzadas en los ocho pares. La query queda escrita para correrla contra producción antes de migrar.
+- **El que más urge es `Appointment → Patient`**: es el único de la lista donde cruzar el par no solo muestra datos ajenos sino que **contacta a alguien** — los recordatorios le mandarían un WhatsApp al paciente equivocado.
+- **Se quedan fuera** `BusinessHour` y `TimeOff` (tienen validación, los escriben endpoints estables y lo que filtran es un horario, cero PII) y `User → Professional`, que es un problema de modelo y no de integridad: `User.clinicId` es nullable por el SUPERADMIN.
+- **Trampa documentada**: con `MATCH SIMPLE` —el default de Postgres— una FK compuesta **no se comprueba si alguna columna es NULL**, y cinco de los ocho pares tienen la suya nullable. La FK añade una red, no sustituye la validación de código. Conviene no descubrirlo revisando el PR de la migración, ni creer que el problema quedó cerrado.
 ## 2026-09-11 — S31: el fallback de Gemini estaba muerto y nadie lo sabía (rama `fix/router-gemini-modelo-vigente`)
 - **Dos fallos que se tapaban entre sí**: el router llamaba a `models/gemini-2.0-flash`, que Google marca como **(Shut down)** en su documentación, y además `GEMINI_API_KEY` nunca se configuró en producción. Como el router se saltaba **en silencio** los providers sin clave, la cadena real llevaba semanas siendo `deepseek → opencode` sin tercer eslabón.
 - Lo encontré preparando la nota de STT (M10), verificando la premisa de que "Gemini multimodal ya está en el router".
