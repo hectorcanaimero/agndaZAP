@@ -22,6 +22,10 @@ import {
 } from '../scheduling/scheduling.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { alertReception } from '../conversations/reception-alert';
+import {
+  RescheduleLimitExceededException,
+  SlotTakenException,
+} from '../scheduling/scheduling.errors';
 import { Public } from '../auth/decorators/public.decorator';
 import { CreatePublicAppointmentDto } from './dto/create-public-appointment.dto';
 import { RescheduleByTokenDto } from './dto/reschedule-by-token.dto';
@@ -399,8 +403,10 @@ export class PublicController {
       }));
     } catch (e) {
       if (e instanceof ConflictException) {
-        // Mensaje orientado al usuario final del form público.
-        throw new ConflictException(
+        // Mensaje orientado al usuario final del form público. Se re-emite como
+        // `SlotTakenException` para que el cuerpo lleve el `code` y la web no
+        // dependa del texto.
+        throw new SlotTakenException(
           'El horario elegido ya no está disponible. Elige otro.',
         );
       }
@@ -747,16 +753,18 @@ export class PublicController {
         maxPatientReschedules: PublicController.MAX_PATIENT_RESCHEDULES,
       });
     } catch (e) {
-      if (e instanceof ConflictException) {
-        // El servicio usa 409 para dos cosas distintas y el paciente necesita
-        // mensajes distintos: el tope lo deriva a la clínica, el slot ocupado
-        // le pide otro horario.
-        if (e.message.includes('tope de reagendamientos')) {
-          throw new ConflictException(
-            'Ya cambiaste el horario de esta cita varias veces. Escríbele a la clínica y lo resolvemos contigo.',
-          );
-        }
-        throw new ConflictException(
+      // El servicio usa 409 para dos cosas distintas y el paciente necesita
+      // respuestas OPUESTAS: el tope lo deriva a la clínica, el slot ocupado le
+      // pide otro horario. Se distinguen por tipo y el `code` viaja al cliente,
+      // para que ni el backend ni la web tengan que mirar el texto del mensaje
+      // —que cambia con cada pasada de copy o de traducción.
+      if (e instanceof RescheduleLimitExceededException) {
+        throw new RescheduleLimitExceededException(
+          'Ya cambiaste el horario de esta cita varias veces. Escríbele a la clínica y lo resolvemos contigo.',
+        );
+      }
+      if (e instanceof SlotTakenException) {
+        throw new SlotTakenException(
           'Ese horario ya no está disponible. Elige otro.',
         );
       }

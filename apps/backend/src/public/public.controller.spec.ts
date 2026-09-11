@@ -11,6 +11,10 @@ import { SchedulingSessionService } from '../scheduling/scheduling-session.servi
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePublicAppointmentDto } from './dto/create-public-appointment.dto';
+import {
+  RescheduleLimitExceededException,
+  SlotTakenException,
+} from '../scheduling/scheduling.errors';
 import { PublicController } from './public.controller';
 import { extractIp, RateLimit, REDIS_CLIENT } from './rate-limit.guard';
 import { SlugValidationPipe } from './slug.pipe';
@@ -1316,14 +1320,17 @@ describe('PublicController — gestión de cita por link', () => {
 
     it('tope alcanzado → 409 que deriva a la clínica, distinto del de slot ocupado', async () => {
       scheduling.rescheduleAppointment.mockRejectedValue(
-        new ConflictException('tope de reagendamientos alcanzado'),
+        new RescheduleLimitExceededException(),
       );
 
       const err = await controller
         .rescheduleManagedAppointment('clinica-a', TOKEN, body as any)
         .catch((e) => e);
 
-      expect(err).toBeInstanceOf(ConflictException);
+      expect(err).toBeInstanceOf(RescheduleLimitExceededException);
+      // Lo que el cliente debe mirar es el código, no el texto: el copy cambia
+      // con cada pasada de tono o de traducción.
+      expect(err.getResponse()).toMatchObject({ code: 'RESCHEDULE_LIMIT' });
       expect(err.message).toContain('Escríbele a la clínica');
     });
 
@@ -1397,14 +1404,15 @@ describe('PublicController — gestión de cita por link', () => {
 
     it('slot ocupado → 409 con mensaje para el paciente, en tuteo', async () => {
       scheduling.rescheduleAppointment.mockRejectedValue(
-        new ConflictException('slot no disponible'),
+        new SlotTakenException('slot no disponible'),
       );
 
       const err = await controller
         .rescheduleManagedAppointment('clinica-a', TOKEN, body as any)
         .catch((e) => e);
 
-      expect(err).toBeInstanceOf(ConflictException);
+      expect(err).toBeInstanceOf(SlotTakenException);
+      expect(err.getResponse()).toMatchObject({ code: 'SLOT_TAKEN' });
       expect(err.message).toBe('Ese horario ya no está disponible. Elige otro.');
     });
 
