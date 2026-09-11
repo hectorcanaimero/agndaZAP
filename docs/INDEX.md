@@ -89,6 +89,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[notas/2026-09-11-cola-bot-inbound|2026-09-11 — Cola `bot-inbound`: los gotchas]]
 - [[notas/2026-09-11-evento-bot-turn|2026-09-11 — Evento `bot.turn`: lo que costó que fuera útil y seguro]]
 - [[notas/2026-09-11-dashboard-actividad-bot|2026-09-11 — Actividad del bot en el panel: criterios de agregación]]
+- [[notas/2026-09-11-exploracion-stt-notas-de-voz|2026-09-11 — Notas de voz: comparativa de STT, privacidad y plan de 3 PRs]]
 
 ## Análisis
 - [[analisis/2026-09-11-chatbot-analisis-tecnico|2026-09-11 — Análisis técnico del asistente de WhatsApp]] — premisas, bugs (B1-B10), mejoras (M1-M10), seguimiento (S1-S5) y checklist por prioridad

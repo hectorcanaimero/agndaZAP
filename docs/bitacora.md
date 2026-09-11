@@ -1,5 +1,12 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-11 — M10: exploración de STT para notas de voz (sin código)
+- Nota en [[notas/2026-09-11-exploracion-stt-notas-de-voz]] con comparativa, precios verificados en septiembre de 2026 y plan de 3 PRs.
+- **Recomendación: OpenAI `gpt-4o-mini-transcribe`.** No por precio —a este volumen las tres opciones cuestan céntimos— sino porque es el único proveedor **ya dentro del consent del ADR 0004**, que nombra explícitamente a OpenAI, DeepSeek y Google. Sumar Deepgram obligaría a reescribir el texto legal, versionarlo y volver a pedirlo.
+- **Deepgram es la mejor tecnología de las tres y aun así la peor opción aquí**: su ventaja es la latencia de streaming, y una nota de voz llega entera. Pagaríamos un coste legal real por una ventaja que este caso de uso no usa.
+- **Regla propuesta: transcribir y NO guardar el audio.** Una nota de voz es mucho más sensible que el texto equivalente —lleva la voz, el ruido de fondo, quién más está en la habitación— y el ADR 0004 §1 ni siquiera cifra las `notes` at-rest.
+- **Tres premisas del encargo que no se sostenían**, verificadas: (a) Gemini NO está usable en el router —llama a `gemini-2.0-flash`, retirado en junio de 2026, y `GEMINI_API_KEY` no está en Coolify, así que la cadena real es `deepseek → opencode`—; (b) WAHA no descarga media (faltan las envs `WAHA_MEDIA_*`), así que hoy llega `hasMedia: true` con `media: null`; (c) el handoff tras dos adjuntos no está en producción porque #46 quedó huérfano.
+
 ## 2026-09-11 — M3-a: clasificador de intención v2 (rama `feat/intent-clasificador-v2`)
 - **Prompt con definición y 2 ejemplos por intención**, en es/pt según el locale de la clínica. Es lo que de verdad mueve la precisión con un modelo barato: sin definiciones, el modelo inventa su propio criterio para las clases ambiguas. Los ejemplos son frases reales de WhatsApp, no prosa de manual.
 - **Salida JSON `{ intent, confidence }`** con parseo de igualdad EXACTA contra el enum. El parser viejo usaba `includes`, así que una respuesta como "no es agendar" clasificaba como AGENDAR — y había un test que lo daba por bueno. Confianza < 0.6 → `OTRO`: preferimos "no te entendí" a ejecutar la acción equivocada, porque un CANCELAR mal clasificado le cancela la cita a alguien que solo preguntaba.
