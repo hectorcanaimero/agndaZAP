@@ -80,9 +80,12 @@ describe('SchedulingService.createAppointment', () => {
         findFirst: jest.fn().mockResolvedValue(makeProfessional()),
       },
       conversation: {
-        // Por defecto la conversación SÍ es de esta clínica. Los tests de
-        // cross-tenant la ponen a null.
-        findFirst: jest.fn().mockResolvedValue({ id: 'convo-1' }),
+        // Por defecto la conversación SÍ es de esta clínica y su teléfono
+        // verificado coincide con el del formulario. Los tests de cross-tenant
+        // la ponen a null; los de la guarda de persona cambian el `phone`.
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: 'convo-1', phone: '+584141234567' }),
       },
       patient: {
         // Por defecto el paciente NO existe → camino `create` y
@@ -284,6 +287,99 @@ describe('SchedulingService.createAppointment', () => {
     expect(prisma.appointment.create).not.toHaveBeenCalled();
   });
 
+  // ── S23: la misma lectura sirve a la guarda de PERSONA ──
+  //
+  // El teléfono del formulario es declarado; el de la conversación lo reporta
+  // WAHA. Atar la cita al chat es lo que después le deja verla y gestionarla.
+
+  it('@lid (sin teléfono) con paciente NUEVO: ata la cita al chat', async () => {
+    prisma.conversation.findFirst.mockResolvedValue({
+      id: 'convo-1',
+      phone: null,
+    });
+    prisma.patient.findUnique.mockResolvedValue(null); // nace en esta llamada
+
+    const { patientCreated } = await service.createAppointment({
+      clinicId: 'clinic-A',
+      patient: { phone: '+584141234567', name: 'Ana' },
+      serviceId: 'svc-1',
+      professionalId: 'prof-1',
+      startAtISO,
+      source: 'BOT_WEB',
+      conversationId: 'convo-1',
+    });
+
+    expect(patientCreated).toBe(true);
+    expect(prisma.appointment.create.mock.calls[0][0].data.conversationId).toBe(
+      'convo-1',
+    );
+  });
+
+  it('@lid declarando el teléfono de un paciente YA existente: NO ata la cita', async () => {
+    // Secuestro de agenda: ese chat resolvería la cita de la víctima por
+    // `conversationId` y el bot le saludaría con su nombre real.
+    prisma.conversation.findFirst.mockResolvedValue({
+      id: 'convo-1',
+      phone: null,
+    });
+    prisma.patient.findUnique.mockResolvedValue({
+      id: 'pat-victima',
+      clinicId: 'clinic-A',
+      phone: '+584141234567',
+    });
+
+    await service.createAppointment({
+      clinicId: 'clinic-A',
+      patient: { phone: '+584141234567', name: 'Quien sea' },
+      serviceId: 'svc-1',
+      professionalId: 'prof-1',
+      startAtISO,
+      source: 'BOT_WEB',
+      conversationId: 'convo-1',
+    });
+
+    expect(
+      prisma.appointment.create.mock.calls[0][0].data.conversationId,
+    ).toBeNull();
+  });
+
+  it('teléfono verificado distinto al del formulario: NO ata la cita, pero la crea', async () => {
+    prisma.conversation.findFirst.mockResolvedValue({
+      id: 'convo-1',
+      phone: '+584149999999',
+    });
+
+    await service.createAppointment({
+      clinicId: 'clinic-A',
+      patient: { phone: '+584141234567', name: 'Ana' },
+      serviceId: 'svc-1',
+      professionalId: 'prof-1',
+      startAtISO,
+      source: 'BOT_WEB',
+      conversationId: 'convo-1',
+    });
+
+    // La cita se crea: el paciente no paga por una discrepancia nuestra.
+    expect(prisma.appointment.create).toHaveBeenCalled();
+    expect(
+      prisma.appointment.create.mock.calls[0][0].data.conversationId,
+    ).toBeNull();
+  });
+
+  it('una sola lectura de Conversation sirve a las dos guardas', async () => {
+    await service.createAppointment({
+      clinicId: 'clinic-A',
+      patient: { phone: '+584141234567', name: 'Ana' },
+      serviceId: 'svc-1',
+      professionalId: 'prof-1',
+      startAtISO,
+      source: 'BOT_WEB',
+      conversationId: 'convo-1',
+    });
+
+    expect(prisma.conversation.findFirst).toHaveBeenCalledTimes(1);
+  });
+
   it('la conversación se busca SIEMPRE acotada por clinicId', async () => {
     await service.createAppointment({
       clinicId: 'clinic-A',
@@ -297,7 +393,7 @@ describe('SchedulingService.createAppointment', () => {
 
     expect(prisma.conversation.findFirst).toHaveBeenCalledWith({
       where: { id: 'convo-1', clinicId: 'clinic-A' },
-      select: { id: true },
+      select: { id: true, phone: true },
     });
   });
 

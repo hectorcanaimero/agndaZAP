@@ -331,49 +331,10 @@ export class PublicController {
       throw new BadRequestException('phone inválido');
     }
 
-    // El `conversationId` que se persiste en la cita es lo que después deja al
-    // chat gestionarla (`findUpcomingAppointment` la resuelve por ahí). Así que
-    // solo lo guardamos cuando ese chat tiene derecho a esa cita:
-    //
-    //  - la conversación tiene teléfono verificado por WAHA y coincide con el
-    //    del formulario, o
-    //  - la conversación no tiene teléfono (caso `@lid`) y ese número todavía
-    //    no es paciente de la clínica, así que la cita nace de este chat y el
-    //    nombre lo pone quien la crea.
-    //
-    // La segunda condición es imprescindible: sin ella, un chat `@lid` que
-    // escriba el teléfono de un paciente YA existente se quedaría con su cita.
-    //
-    // El caso que cierra: alguien con un token propio escribe en el formulario
-    // el teléfono de OTRA persona que ya es paciente. El campo llega readonly,
-    // pero eso es solo cliente. Sin este filtro la cita quedaría atada a su
-    // chat y el bot le saludaría con el nombre real de la víctima — el mismo
-    // oráculo de enumeración que este endpoint evita con `patientCreated`.
-    if (conversationId) {
-      const convo = await this.prisma.conversation.findFirst({
-        where: { id: conversationId, clinicId: clinic.id },
-        select: { phone: true },
-      });
-      const verifiedMatch = convo?.phone === normalizedPhone;
-      // Se consulta antes de crear porque `conversationId` viaja dentro de
-      // `createAppointment`. La carrera (que el paciente nazca justo entre
-      // esta lectura y la escritura) solo puede hacernos atar una cita a un
-      // chat que declaró ese mismo número: conservador de sobra.
-      const alreadyPatient =
-        convo?.phone === null
-          ? (await this.prisma.patient.findFirst({
-              where: { clinicId: clinic.id, phone: normalizedPhone },
-              select: { id: true },
-            })) !== null
-          : false;
-      const unclaimedLid = convo != null && convo.phone === null && !alreadyPatient;
-      if (!verifiedMatch && !unclaimedLid) {
-        this.logger.warn(
-          `conversationId no atado a la cita: el teléfono del formulario no corresponde a la conversación convoId=${conversationId} clinicId=${clinic.id}`,
-        );
-        conversationId = undefined;
-      }
-    }
+    // La guarda de PERSONA —si este chat tiene derecho a esta cita— vive en
+    // `SchedulingService.createAppointment`, junto a la de TENANT: ahí basta
+    // una lectura de `Conversation` para las dos, y `patientCreated` ya es un
+    // hecho, sin la ventana de carrera que tenía comprobarlo aquí (S23).
 
     // 5) Delegamos. SchedulingService tira ConflictException / NotFoundException
     // / BadRequestException con sus mensajes internos; el endpoint público
