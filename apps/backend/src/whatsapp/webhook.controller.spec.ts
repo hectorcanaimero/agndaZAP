@@ -820,6 +820,30 @@ describe('WebhookController', () => {
       const audio = (id: string) =>
         mediaEvent({ type: 'ptt', hasMedia: true }, id);
 
+      it('el handoff cuenta como derivación en el evento y en el contador', async () => {
+        // Es la única derivación que hoy alimenta la tasa del panel: el resto
+        // la cableará `bot.service.ts`. Sin esto, la clínica vería un 0%
+        // aunque el bot sí esté derivando pacientes.
+        const logSpy = jest
+          .spyOn(Logger.prototype, 'log')
+          .mockImplementation(() => undefined);
+        try {
+          await post(audio('a-1'));
+          await post(audio('a-2'));
+
+          const events = logSpy.mock.calls
+            .map((c) => c[0])
+            .filter((a) => typeof a === 'object' && a?.event === 'bot.turn');
+          expect(events.at(-1)).toMatchObject({
+            outcome: 'unsupported',
+            handoff: true,
+          });
+          expect(events.at(-2)).toMatchObject({ handoff: false });
+        } finally {
+          logSpy.mockRestore();
+        }
+      });
+
       it('audio, audio → NEEDS_HUMAN, limpia la FSM y avisa del handoff', async () => {
         await post(audio('a-1'));
         await post(audio('a-2'));

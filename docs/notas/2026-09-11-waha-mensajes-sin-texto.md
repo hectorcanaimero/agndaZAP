@@ -143,6 +143,36 @@ Detalles que no se ven en el código a primera vista:
 > el throttle de 6 h no existe y los tests de racha mienten — el tercer adjunto
 > "responde" cuando en producción calla.
 
+## El handoff alimenta la tasa del panel
+
+Derivar por audios seguidos **es** una derivación, así que va al evento
+`bot.turn` con `handoff: true` y suma al contador que lee el dashboard. Hoy es
+**la única** que lo alimenta: el resto las anotará `bot.service.ts` cuando se
+cablee `recordBotTurn`. Sin esto, la clínica vería un 0% de derivaciones
+mientras el bot sí está derivando pacientes.
+
+## Nota de recuperación (misma fecha, más tarde)
+
+Este handoff **estuvo semanas sin llegar a producción**. Su PR estaba apilado
+sobre el de B4, y B4 se mergeó a `main` antes de que el apilado aterrizara en
+su rama base: cuando entró, esa base ya estaba consumida. GitHub lo daba por
+MERGED y `main` no tenía ni una línea.
+
+Lo descubrió otra sesión preparando una feature distinta, al ir a documentar
+"qué le pasa hoy a un paciente que manda notas de voz" y encontrar que la
+respuesta real no era la que decía la nota. El efecto en producción: un
+paciente que mandaba dos audios seguidos recibía el aviso de "solo leo texto" y
+nada más — nunca acababa con una persona.
+
+**La lección no es "revisar mejor", es de proceso**: cuando se mergea una rama
+base, hay que reapuntar el apilado a `main` en ese momento, y avisar a quien lo
+tenga. Quien sufre el agujero no se entera hasta mucho después, y por
+casualidad.
+
+Al recuperarlo hubo que adaptarlo al webhook actual, que cambió bastante: ahora
+encola en `bot-inbound` en vez de llamar al bot, y el rate-limit del ADR 0007
+vive en `bot-rate-limit.ts` en vez de duplicado en el controller.
+
 ## Pendiente, decidido no hacer aquí
 
 - **Transcripción de audio** (backlog como M10): resolvería el caso de raíz en

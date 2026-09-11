@@ -919,3 +919,18 @@
   texto borra. Antes, el hilo se quedaba en `BOT` y no entraba en el filtro de triaje del panel: un
   paciente que solo mandaba notas de voz recibía un aviso cada 6 h y nadie lo atendía. La
   transcripción de audio queda en backlog como M10.
+
+## 2026-09-11 (noche) — Recuperado el handoff por audios seguidos, que nunca llegó a main
+- El PR de S2 (derivar a una persona tras dos adjuntos seguidos) figuraba MERGED pero sus commits
+  se quedaron en la rama base: estaba apilado sobre el PR de B4, y B4 entró en `main` antes de que
+  el apilado aterrizara en esa rama. Verificado: `mediaLabel` sí estaba en main, `MEDIA_HANDOFF` no.
+- Efecto real en producción: un paciente que mandaba dos notas de voz seguidas recibía el aviso de
+  "solo leo texto" y nada más; nunca acababa derivado a una persona.
+- Recuperado con cherry-pick sobre `main` actual, adaptando dos conflictos: se descartó la
+  reintroducción de `PER_CHAT_LIMIT`/`PER_CLINIC_HOURLY_LIMIT` en el controller (desde S1 viven en
+  `bot-rate-limit.ts`) y el reset de la racha se movió antes del encolado en `bot-inbound`.
+- **Añadido al recuperarlo**: el handoff ahora viaja como `handoff: true` en el evento `bot.turn`,
+  así que es la primera derivación que alimenta la tasa del dashboard de M9-b — que hasta ahora
+  salía en `null` porque nadie escribía ese contador.
+- Es la tercera vez en el día que `main` queda en un estado que no compila o al que le falta código
+  mergeado. Propuesta sobre la mesa: que CI compile el *merge result* y exigir la rama al día.

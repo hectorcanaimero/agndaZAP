@@ -338,6 +338,7 @@ export class WebhookController {
     outcome: BotTurnOutcome;
     latencyMs?: number;
     reasonCode?: BotTurnReason;
+    turn?: Parameters<typeof buildBotTurn>[0]['turn'];
     log?: boolean;
   }): void {
     const event = buildBotTurn({
@@ -347,6 +348,7 @@ export class WebhookController {
       latencyMs: input.latencyMs,
       requestId: this.ctx.get('requestId'),
       reasonCode: input.reasonCode,
+      turn: input.turn,
     });
     if (input.log !== false) emitBotTurn(this.logger, event);
     void recordBotStats(
@@ -415,7 +417,12 @@ export class WebhookController {
     contactName: string | null;
     label: string;
     caption: string;
-  }): Promise<void> {
+    /**
+     * `true` si el mensaje acabó derivando la conversación a una persona.
+     * Lo devuelve para que el evento `bot.turn` lo refleje: es una derivación
+     * de verdad y cuenta para la tasa que ve la clínica en su panel.
+     */
+  }): Promise<{ handoff: boolean }> {
     const { clinic, chatId, phone, lid, contactName, label, caption } = params;
 
     // Mismo upsert que `BotService.handleIncoming`: en update sólo tocamos
@@ -444,7 +451,7 @@ export class WebhookController {
       },
     });
 
-    if (convo.state === 'HUMAN') return;
+    if (convo.state === 'HUMAN') return { handoff: false };
 
     // Segundo adjunto seguido: el paciente no está escribiendo, y repetirle el
     // mismo aviso cada 6 h lo deja sin atención (el hilo se queda en BOT y no
@@ -455,6 +462,7 @@ export class WebhookController {
       // siguiente: el tercero vuelve a contar como primero y cae en el aviso,
       // que su propio throttle de 6 h ya tiene silenciado.
       await this.resetMediaCount(clinic.id, chatId);
+      let escalated = false;
       if (convo.state !== 'NEEDS_HUMAN') {
         await this.prisma.conversation.update({
           where: { id: convo.id },
@@ -470,11 +478,14 @@ export class WebhookController {
           convo.id,
           WebhookController.MEDIA_HANDOFF_TEXT,
         );
+        escalated = true;
       }
-      return;
+      return { handoff: escalated };
     }
 
-    if (!(await this.claimMediaNotice(clinic.id, chatId))) return;
+    if (!(await this.claimMediaNotice(clinic.id, chatId))) {
+      return { handoff: false };
+    }
 
     const text = caption
       ? WebhookController.MEDIA_NOTICE_TEXT_WITH_CAPTION
@@ -488,6 +499,7 @@ export class WebhookController {
     if (!(await this.sendAndPersist(clinic, chatId, convo.id, text))) {
       await this.releaseMediaNotice(clinic.id, chatId);
     }
+    return { handoff: false };
   }
 
   /**
@@ -730,8 +742,9 @@ export class WebhookController {
           return { ok: true };
         }
         const mediaStartedAt = Date.now();
+        let handoff = false;
         try {
-          await this.handleUnsupportedMessage({
+          ({ handoff } = await this.handleUnsupportedMessage({
             clinic,
             chatId: from,
             phone,
@@ -742,7 +755,7 @@ export class WebhookController {
             // discriminador de tipo, así que acotamos lo que un tercero puede
             // escribir en la bandeja.
             caption: body.trim().slice(0, WebhookController.MAX_CAPTION_CHARS),
-          });
+          }));
         } catch (e) {
           if (dedupKey) await this.releaseMessage(dedupKey);
           throw e;
@@ -750,12 +763,16 @@ export class WebhookController {
         // Un adjunto es un turno igual: el paciente escribió y le
         // respondimos. Sin esto, las notas de voz serían un agujero en las
         // métricas justo donde más falta hace saber cuántas llegan.
+        // `handoff` va al evento y al contador: derivar por audios seguidos es
+        // una derivación de verdad, y es la única que hoy alimenta la tasa que
+        // la clínica ve en su panel (el resto la cableará `bot.service.ts`).
         this.recordTurn({
           clinicId: clinic.id,
           chatId: from,
           timezone: clinic.timezone,
           outcome: 'unsupported',
           latencyMs: Date.now() - mediaStartedAt,
+          turn: { handoff },
         });
         return { ok: true };
       }
