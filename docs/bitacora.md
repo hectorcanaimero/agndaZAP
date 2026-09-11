@@ -800,3 +800,17 @@
   borrara "la repetida", quedándose sin uno de los dos controles.
 - Efecto lateral: la regla aplica ahora a **todos** los callers de `createAppointment`, no solo al
   endpoint público.
+
+## 2026-09-11 — S26: el contexto de la FSM se conserva por defecto
+- `carryFlowContext` sustituye a la reconstrucción campo a campo de `flowData` en los dos
+  re-ofrecimientos de horarios y en `advanceToSlot`.
+- **La polaridad es el punto**: conserva todo y descarta solo una lista explícita de campos
+  atados al paso actual (`startAtISO`, `offeredSlots`, `choices`, contadores…). Al revés —
+  enumerar lo que se conserva — fue lo que perdió `rescheduleOf` en B5 y dejaba al paciente con
+  dos citas. Nada falló entonces: ni el compilador, porque todos los campos son opcionales, ni los
+  tests, porque ninguno cubría "re-listar horarios en mitad de un reagendado".
+- De paso arregla un caso latente: una lista de "cualquier profesional" dejaba `anyProfessional`
+  y sus ids pegados a la lista siguiente aunque ya fuera de un profesional concreto.
+- El bot pasa a distinguir los dos 409 de `rescheduleAppointment` por **tipo**
+  (`RescheduleLimitExceededException`, S25) en vez de por el texto del mensaje. Los tests también:
+  reescribir el copy ya no puede romper la lógica en silencio.
