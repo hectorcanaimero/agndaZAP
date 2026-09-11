@@ -23,6 +23,7 @@ import { normalizeE164 } from '../common/phone.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { RemindersService } from '../reminders/reminders.service';
 import { AvailabilityService } from '../scheduling/availability.service';
+import { SchedulingSessionService } from '../scheduling/scheduling-session.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import {
   assertReschedulable,
@@ -61,6 +62,7 @@ export class AppointmentsController {
     private readonly reminders: RemindersService,
     private readonly followUps: FollowUpsService,
     private readonly scheduling: SchedulingService,
+    private readonly sessions: SchedulingSessionService,
     private readonly availability: AvailabilityService,
     @InjectPinoLogger() private readonly logger: PinoLogger,
   ) {
@@ -375,11 +377,17 @@ export class AppointmentsController {
         // Además, si se revierte una ATENDIDA, cancelamos el follow-up
         // pendiente. `cancelForAppointment` es silent-fail.
         await this.followUps.cancelForAppointment(id);
+        // Y quemamos los links de gestión vivos: la cita dejó de ser
+        // gestionable, así que a partir de acá un token solo sirve para leer
+        // datos del paciente durante los hasta 30 días que vive el link.
+        await this.sessions.invalidateAllForAppointment(id);
       } else if (dto.status === AppointmentStatus.ATENDIDA) {
         // Encolamos el follow-up post-atención. Respeta la config del
         // profesional (`followUpEnabled` + `followUpDelayHours`). Si el
         // profesional lo tiene apagado, es no-op.
         await this.followUps.scheduleForAppointment(id);
+        // ATENDIDA también es terminal: el link ya no gestiona nada.
+        await this.sessions.invalidateAllForAppointment(id);
       }
     } catch (e) {
       this.logger.error(

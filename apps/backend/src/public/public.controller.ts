@@ -698,8 +698,11 @@ export class PublicController {
       appointmentId: appointment.id,
     });
 
-    // La cita ya no es gestionable: el token no tiene nada más que ofrecer.
-    await this.sessions.invalidateManage(token);
+    // La cita ya no es gestionable: se queman TODOS los links vivos, no solo
+    // el que se acaba de usar. Se emiten varios por cita (respuesta del POST,
+    // recordatorios, mensajes del bot) y los demás seguirían mostrando nombre,
+    // servicio, profesional y horario durante el resto de su TTL.
+    await this.sessions.invalidateAllForAppointment(appointment.id);
 
     await this.alertReceptionOfPatientChange(appointment, 'cancel', {});
 

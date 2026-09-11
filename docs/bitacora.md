@@ -1,5 +1,13 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-11 — S13: los links de gestión mueren con la cita (rama `fix/invalidar-tokens-gestion`)
+- **El problema**: solo se podía quemar el token que el paciente acababa de usar. Se emiten varios por cita (respuesta del POST, recordatorios, mensajes del bot), así que los demás sobrevivían apuntando a una cita ya cancelada y seguían mostrando nombre, servicio, profesional y horario hasta agotar su TTL de 30 días. No permitían mutar nada, pero era PII expuesta sin motivo.
+- **Arreglo**: índice `sched:manage:appt:{id}` en Redis e `invalidateAllForAppointment`, llamado desde el panel (al pasar a estado terminal) y desde la cancelación por link.
+- **Solo en estados terminales, no al reagendar** — discrepé aquí con el plan y se aceptó: tras un reagendamiento la cita sigue viva y el token sigue apuntando a la cita correcta mostrando el horario nuevo. Invalidarlo rompería un link que funciona justo después de que la clínica le moviera la cita al paciente, sin ninguna ganancia de seguridad.
+- **El TTL del índice es el techo (30 días), no el del último token**: si heredara uno más corto, el índice moriría antes que un token más antiguo y lo dejaría huérfano — justo lo que esto viene a evitar.
+- Todo best-effort: si Redis falla, ni la emisión del link ni la cancelación se caen. Perder la capacidad de revocar antes del TTL es malo; no poder mandarle el link al paciente, o revertirle una cancelación ya hecha, es peor.
+- **Tests**: 1038 verdes.
+
 ## 2026-09-11 — S22: validar el tenant del `conversationId` al crear cita (rama `fix/appointment-conversation-tenant`)
 - Salió del barrido de [[adr/0022-fk-compuestas-multi-tenant|S8]]: era el único de los diez pares `clinicId` + FK **sin ninguna validación**. `createAppointment` persistía `conversationId` con `source === 'BOT_WEB'` sin comprobar que la conversación fuera de la misma clínica.
 - **Por qué importa aunque hoy no sea alcanzable**: `findUpcomingAppointment` resuelve por `appointment.conversationId` (S5), así que una cita atada a la conversación de otra clínica dejaría que ese chat viera y gestionara la cita de un paciente ajeno. Hoy el id llega de un token que ya valida el slug — exactamente lo que se decía de `Feedback` antes de S4, hasta que alguien miró el `include`.
@@ -735,3 +743,19 @@
   y lo vea ausente podría "restaurarlo" de buena fe.
 - La cobertura se muda al spec del webhook, que además gana el fail-open del camino de texto.
 - ADR 0007 actualizado.
+
+## 2026-09-11 — B5: reagendar por chat
+- `REAGENDAR` con cita deja la FSM en `ASK_SLOT` con el mismo servicio y profesional y
+  `rescheduleOf` en `flowData`; al confirmar, `rescheduleAppointment` mueve la cita **in-place**
+  (mismo id). El link de gestión queda como alternativa en el mismo mensaje.
+- Crear+cancelar habría inflado `CANCELADA` y diluido el no-show rate, que es la métrica del
+  producto. Ver la tabla de M2 en el plan del P1.
+- Dos bugs que los tests no cubrían y salieron al escribirlos:
+  - los dos re-ofrecimientos de horarios (`reofferSlotsAfterConflict` y `…AfterExpired`) perdían
+    `rescheduleOf`, así que tras un choque de horario la FSM creaba una cita nueva y el paciente
+    acababa con **dos**: la vieja sin mover y otra recién creada;
+  - el tope de movimientos del paciente llega como `ConflictException`, **el mismo tipo** que el
+    slot ocupado. Sin distinguirlos, alcanzar el tope re-ofrecía horarios en bucle infinito. Se
+    distingue por el mensaje, que no es ideal: si el service expone un error tipado, cambiarlo.
+- El tope por chat es el mismo que en el borde público (3): el canal no debe cambiar cuántas veces
+  puede moverla.

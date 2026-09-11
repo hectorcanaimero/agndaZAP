@@ -11,6 +11,7 @@ import {
  */
 function makeRedisMock() {
   const store = new Map<string, string>();
+  const sets = new Map<string, Set<string>>();
   const api = {
     get: jest.fn(async (key: string) => store.get(key) ?? null),
     set: jest.fn(
@@ -19,7 +20,22 @@ function makeRedisMock() {
         return 'OK';
       },
     ),
-    del: jest.fn(async (key: string) => (store.delete(key) ? 1 : 0)),
+    // Como el DEL real: borra la clave sea del tipo que sea (string o set).
+    del: jest.fn(async (...keys: string[]) => {
+      let n = 0;
+      for (const k of keys) {
+        if (store.delete(k)) n++;
+        else if (sets.delete(k)) n++;
+      }
+      return n;
+    }),
+    sadd: jest.fn(async (key: string, member: string) => {
+      const set = (sets.get(key) ?? new Set<string>()).add(member);
+      sets.set(key, set);
+      return 1;
+    }),
+    smembers: jest.fn(async (key: string) => [...(sets.get(key) ?? [])]),
+    expire: jest.fn(async (_key: string, _ttl: number) => 1),
     pipeline: jest.fn(() => {
       const ops: Array<() => Promise<unknown>> = [];
       const pipe: any = {
@@ -42,6 +58,7 @@ function makeRedisMock() {
       return pipe;
     }),
     _store: store,
+    _sets: sets,
   };
   return api;
 }
@@ -330,3 +347,97 @@ describe('SchedulingSessionService — tokens de gestión', () => {
     expect(await service.resolveManage('y'.repeat(32))).toBeNull();
   });
 });
+
+/**
+ * Índice `appointmentId → tokens` (S13). Sin él solo se puede quemar el token
+ * que el paciente acaba de usar, y se emiten varios por cita: los demás
+ * sobrevivirían apuntando a una cita ya cancelada y seguirían mostrando nombre,
+ * servicio, profesional y horario hasta agotar su TTL.
+ */
+describe('SchedulingSessionService — invalidar todos los tokens de una cita', () => {
+  let redis: ReturnType<typeof makeRedisMock>;
+  let service: SchedulingSessionService;
+
+  const BASE = {
+    appointmentId: 'appt-1',
+    clinicId: 'clinic-A',
+    clinicSlug: 'demo',
+  };
+  const in7Days = () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  beforeEach(() => {
+    redis = makeRedisMock();
+    service = new SchedulingSessionService(redis as unknown as Redis);
+  });
+
+  it('quema TODOS los tokens vivos de la cita, no solo el último', async () => {
+    // Se emiten varios por cita: respuesta del POST, recordatorios, mensajes
+    // del bot.
+    const a = await service.createManage(BASE, in7Days());
+    const b = await service.createManage(BASE, in7Days());
+    const c = await service.createManage(BASE, in7Days());
+
+    const n = await service.invalidateAllForAppointment('appt-1');
+
+    expect(n).toBe(3);
+    for (const { token } of [a, b, c]) {
+      expect(await service.resolveManage(token)).toBeNull();
+    }
+  });
+
+  it('no toca los tokens de OTRA cita', async () => {
+    const mia = await service.createManage(BASE, in7Days());
+    const ajena = await service.createManage(
+      { ...BASE, appointmentId: 'appt-2' },
+      in7Days(),
+    );
+
+    await service.invalidateAllForAppointment('appt-1');
+
+    expect(await service.resolveManage(mia.token)).toBeNull();
+    expect(await service.resolveManage(ajena.token)).not.toBeNull();
+  });
+
+  it('borra también el índice, para no dejar basura en Redis', async () => {
+    await service.createManage(BASE, in7Days());
+
+    await service.invalidateAllForAppointment('appt-1');
+
+    expect(redis._store.has('sched:manage:appt:appt-1')).toBe(false);
+    expect([...redis._sets.keys()]).not.toContain('sched:manage:appt:appt-1');
+  });
+
+  it('una cita sin tokens no es un error', async () => {
+    expect(await service.invalidateAllForAppointment('appt-sin-links')).toBe(0);
+  });
+
+  it('el índice vive el TTL máximo, no el del último token', async () => {
+    // Si heredara el TTL del último y ese fuera más corto, el índice moriría
+    // antes que un token más antiguo y lo dejaría huérfano: justo lo que esto
+    // viene a evitar.
+    await service.createManage(BASE, in7Days());
+
+    const ttl = redis.expire.mock.calls[0][1] as number;
+    expect(ttl).toBe(30 * 24 * 60 * 60);
+  });
+
+  it('si Redis falla al invalidar, no lanza: la cancelación ya está hecha', async () => {
+    await service.createManage(BASE, in7Days());
+    redis.smembers.mockRejectedValueOnce(new Error('redis down'));
+
+    await expect(
+      service.invalidateAllForAppointment('appt-1'),
+    ).resolves.toBe(0);
+  });
+
+  it('si falla el indexado, el token se emite igual', async () => {
+    // Perder la capacidad de revocar antes del TTL es malo; no poder mandarle
+    // el link al paciente es peor.
+    redis.sadd.mockRejectedValueOnce(new Error('redis down'));
+
+    const { token } = await service.createManage(BASE, in7Days());
+
+    expect(await service.resolveManage(token)).not.toBeNull();
+  });
+});
+
