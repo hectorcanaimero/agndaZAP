@@ -219,6 +219,11 @@ export class AppointmentsController {
         startAt: true,
         endAt: true,
         status: true,
+        // Señal de riesgo del "reagendador reincidente" (S6): el estado no
+        // sirve para eso, porque reagendar devuelve la cita a PENDIENTE. A
+        // partir de 2 conviene que recepción llame.
+        rescheduleCount: true,
+        lastRescheduledAt: true,
         patient: { select: { id: true, name: true, phone: true } },
         service: { select: { id: true, name: true, durationMin: true } },
       },
@@ -446,9 +451,20 @@ export class AppointmentsController {
    *  - 400 si `startAtISO` es inválido o pasado.
    *  - 409 si el nuevo slot no está disponible (fuera BH, TimeOff, ya tomado).
    *
-   * NO cambia el `status` — la cita reagendada mantiene su estado (PENDIENTE
-   * queda PENDIENTE, CONFIRMADA queda CONFIRMADA). Si querés forzar re-confirmación,
-   * pasá por PATCH /:id/status en flujo separado.
+   * Desde S6 **sí reinicia el ciclo de confirmación**: la cita vuelve a
+   * PENDIENTE y se limpia `confirmedAt`, porque una confirmación vale para un
+   * horario concreto. La confirmación se vuelve a ganar con el recordatorio del
+   * horario nuevo.
+   *
+   * Excepción deliberada: si el horario nuevo está tan cerca que no cabe ningún
+   * recordatorio ni el `check-risk`, el estado se conserva. Degradar ahí dejaría
+   * la cita desconfirmada para siempre y en silencio — y el caso típico es
+   * recepción moviendo una cita de hoy un par de horas, justo cuando el paciente
+   * acaba de confirmar por teléfono.
+   *
+   * También incrementa `rescheduleCount` (traza del reagendador reincidente).
+   * NO toca `patientRescheduleCount`: el cupo del link es del paciente y los
+   * movimientos del staff no se lo gastan.
    */
   @Patch(':id/reschedule')
   @Roles('CLINIC_ADMIN', 'SUPERADMIN')

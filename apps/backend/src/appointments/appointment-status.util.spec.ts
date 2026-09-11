@@ -8,6 +8,10 @@ import { assertTransition } from './appointment-status.util';
  * CONFIRMADA  → ATENDIDA | CANCELADA | NO_SHOW
  * EN_RIESGO   → CONFIRMADA | CANCELADA | NO_SHOW | ATENDIDA
  * ATENDIDA/CANCELADA/NO_SHOW → nada (terminales).
+ *
+ * Son las transiciones que un HUMANO puede pedir por `PATCH /:id/status`. El
+ * reset a PENDIENTE que hace el reagendamiento es una operación de sistema y
+ * NO entra acá a propósito (ver el util).
  */
 describe('assertTransition', () => {
   const allowed: [AppointmentStatus, AppointmentStatus][] = [
@@ -25,9 +29,12 @@ describe('assertTransition', () => {
   const illegal: [AppointmentStatus, AppointmentStatus][] = [
     ['PENDIENTE', 'ATENDIDA'], // no se puede saltar
     ['PENDIENTE', 'NO_SHOW'],
+    // El reset a PENDIENTE del reagendamiento es de sistema: por `PATCH
+    // /status` sigue siendo 422, porque esa ruta no limpiaría `confirmedAt` ni
+    // reprogramaría nada y dejaría la cita contada dos veces en el dashboard.
     ['CONFIRMADA', 'PENDIENTE'],
-    ['CONFIRMADA', 'EN_RIESGO'],
     ['EN_RIESGO', 'PENDIENTE'],
+    ['CONFIRMADA', 'EN_RIESGO'],
     ['ATENDIDA', 'CONFIRMADA'],
     ['ATENDIDA', 'CANCELADA'],
     ['CANCELADA', 'PENDIENTE'],

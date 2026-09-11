@@ -876,6 +876,8 @@ describe('PublicController — gestión de cita por link', () => {
       startAt: future(),
       serviceId: 'svc-1',
       professionalId: 'prof-1',
+      rescheduleCount: 0,
+      patientRescheduleCount: 0,
       service: { id: 'svc-1', name: 'Consulta', durationMin: 30 },
       professional: { id: 'prof-1', name: 'Dra. Ríos' },
       patient: { name: 'Ana Pérez' },
@@ -910,8 +912,10 @@ describe('PublicController — gestión de cita por link', () => {
         clinicId: 'clinic-A',
         serviceId: 'svc-1',
         professionalId: 'prof-1',
-        status: 'CONFIRMADA',
+        // Reagendar reinicia el ciclo de confirmación (S6).
+        status: 'PENDIENTE',
         startAt: new Date('2030-06-02T14:00:00Z'),
+        patientRescheduleCount: 1,
       }),
     };
     sessions = {
@@ -943,6 +947,7 @@ describe('PublicController — gestión de cita por link', () => {
         professionalName: 'Dra. Ríos',
         durationMin: 30,
         status: 'CONFIRMADA',
+        rescheduleCount: 0,
       });
       expect(res.clinic.name).toBe('Clínica A');
       expect(res.patient.name).toBe('Ana Pérez');
@@ -1002,6 +1007,20 @@ describe('PublicController — gestión de cita por link', () => {
       expect(expirado).toBeInstanceOf(NotFoundException);
       expect(borrada).toBeInstanceOf(NotFoundException);
       expect(expirado.message).toBe(borrada.message);
+    });
+
+    it('alcanzado el tope, canReschedule es false pero canCancel sigue true', async () => {
+      // Deliberado: cancelar es justo la acción que queremos que sea más fácil
+      // que no aparecer, así que el tope de reagendamientos no la toca.
+      prisma.appointment.findFirst.mockResolvedValue(
+        makeAppt({ patientRescheduleCount: 3 }),
+      );
+
+      const res = await controller.getManagedAppointment('clinica-a', TOKEN);
+
+      expect(res.canReschedule).toBe(false);
+      expect(res.canCancel).toBe(true);
+      expect(res.appointment.rescheduleCount).toBe(3);
     });
 
     it('clínica suspendida o archivada → 404: deja de servir datos de pacientes', async () => {
@@ -1089,14 +1108,39 @@ describe('PublicController — gestión de cita por link', () => {
         clinicId: 'clinic-A',
         appointmentId: 'appt-1',
         startAtISO: body.startAtISO,
+        byPatient: true,
+        maxPatientReschedules: 3,
       });
       // Mismo id: no se crea una cita nueva ni queda una CANCELADA que
       // ensuciaría el no-show rate.
       expect(res.appointment.id).toBe('appt-1');
-      expect(res.appointment.status).toBe('CONFIRMADA');
+      expect(res.appointment.status).toBe('PENDIENTE');
       expect(res.manageUrl).toBe(
         'https://showly.us/es/agendar/clinica-a/cita?t=mtok-new',
       );
+    });
+
+    it('el tope lo aplica el servicio de forma atómica, no un if previo', async () => {
+      // Con el check fuera del update, una ráfaga con el mismo token pasaría
+      // varias veces entre la lectura y la escritura.
+      await controller.rescheduleManagedAppointment('clinica-a', TOKEN, body as any);
+
+      expect(scheduling.rescheduleAppointment).toHaveBeenCalledWith(
+        expect.objectContaining({ byPatient: true, maxPatientReschedules: 3 }),
+      );
+    });
+
+    it('tope alcanzado → 409 que deriva a la clínica, distinto del de slot ocupado', async () => {
+      scheduling.rescheduleAppointment.mockRejectedValue(
+        new ConflictException('tope de reagendamientos alcanzado'),
+      );
+
+      const err = await controller
+        .rescheduleManagedAppointment('clinica-a', TOKEN, body as any)
+        .catch((e) => e);
+
+      expect(err).toBeInstanceOf(ConflictException);
+      expect(err.message).toContain('Escríbele a la clínica');
     });
 
     it('invalida el token viejo: no quedan dos links vivos para la misma cita', async () => {

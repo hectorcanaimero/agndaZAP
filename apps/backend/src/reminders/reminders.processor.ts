@@ -149,6 +149,23 @@ export function createRemindersWorker(
       });
       if (!appt) return;
 
+      // Job rancio: la cita se movió después de programarlo. Puede pasar si el
+      // `remove()` del job viejo falló (estaba activo, o Redis tuvo un hipo) y
+      // el `add` posterior no lo reemplazó por reusar el mismo jobId. Antes era
+      // inofensivo porque una cita reagendada conservaba su CONFIRMADA; desde
+      // S6 vuelve a PENDIENTE, así que el job rancio la marcaría EN_RIESGO y
+      // alertaría a recepción a destiempo.
+      const scheduledForMs = (job.data as { startAtMs?: number }).startAtMs;
+      if (
+        typeof scheduledForMs === 'number' &&
+        scheduledForMs !== appt.startAt.getTime()
+      ) {
+        logger.log(
+          `check-risk obsoleto para ${appointmentId} (la cita se movió) — se descarta`,
+        );
+        return;
+      }
+
       const updated = await prisma.appointment.updateMany({
         where: { id: appointmentId, status: 'PENDIENTE' },
         data: { status: 'EN_RIESGO' },

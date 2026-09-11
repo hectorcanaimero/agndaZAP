@@ -48,7 +48,18 @@ export class RemindersService {
   }
 
   /** Programa todos los recordatorios de una cita (idempotente). */
-  async scheduleForAppointment(appointmentId: string): Promise<void> {
+  /**
+   * Programa recordatorios + `check-risk` para una cita.
+   *
+   * Devuelve cuántos avisos quedaron realmente armados. Importa porque los
+   * offsets que ya pasaron se saltan: una cita movida a dentro de dos horas con
+   * offsets `[24, 3]` no genera NINGÚN aviso, y quien reagenda necesita saberlo
+   * para no dejar la cita sin ninguna vía de recuperar la confirmación
+   * (ver `SchedulingService.rescheduleAppointment`).
+   */
+  async scheduleForAppointment(
+    appointmentId: string,
+  ): Promise<{ remindersScheduled: number; riskScheduled: boolean }> {
     const appt = await this.prisma.appointment.findUniqueOrThrow({
       where: { id: appointmentId },
       include: { clinic: true },
@@ -60,6 +71,7 @@ export class RemindersService {
     const offsets = appt.clinic.reminderOffsetsH ?? [24, 3];
     const now = DateTime.utc();
     const startAt = DateTime.fromJSDate(appt.startAt).toUTC();
+    let remindersScheduled = 0;
 
     for (const offsetH of offsets) {
       const fireAt = startAt.minus({ hours: offsetH });
@@ -92,17 +104,25 @@ export class RemindersService {
         where: { id: reminder.id },
         data: { jobId: job.id },
       });
+      remindersScheduled += 1;
     }
 
     // Job que revisa el umbral sin confirmar (EN_RIESGO)
     const threshold = startAt.minus({
       hours: appt.clinic.confirmThresholdH,
     });
+    let riskScheduled = false;
     if (threshold > now) {
       await this.queue.add(
         'check-risk',
         {
           appointmentId,
+          // Sella el horario para el que se programó. `cancelForAppointment`
+          // borra el job viejo con `.catch(() => undefined)` y el `add` de acá
+          // reusa el MISMO jobId, que BullMQ deduplica: si el borrado falló, el
+          // job rancio sobrevive con el delay del horario anterior. El
+          // processor compara y se descarta solo.
+          startAtMs: appt.startAt.getTime(),
           ...this.jobContextPayload(appt.clinicId),
         },
         {
@@ -112,7 +132,10 @@ export class RemindersService {
           removeOnFail: 100,
         },
       );
+      riskScheduled = true;
     }
+
+    return { remindersScheduled, riskScheduled };
   }
 
   /** Cancela todos los recordatorios y jobs de una cita. */

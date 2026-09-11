@@ -74,8 +74,10 @@ revés: `todayCanceled` diría "3 cancelaciones hoy" sin que nadie hubiera cance
 
 Así que se reutiliza `SchedulingService.rescheduleAppointment`, que ya existía para el panel
 y mueve la cita conservando el id. La traza de reagendamientos, que sí es una señal legítima
-de riesgo de no-show, se hará con campos propios (`rescheduleCount`, `lastRescheduledAt`) que
-no tocan el enum de estados ni, por tanto, las métricas.
+de riesgo de no-show, se hace con campos propios (`rescheduleCount`,
+`patientRescheduleCount`, `lastRescheduledAt`) implementados en S6. Esos campos no tocan el
+enum de estados; lo que S6 **sí** hace es devolver la cita a `PENDIENTE` y limpiar
+`confirmedAt`, con el efecto sobre métricas que se detalla en el SPEC.
 
 ## Seguridad
 
@@ -136,9 +138,8 @@ no tocan el enum de estados ni, por tanto, las métricas.
   caducan. No permiten mutar (`isPatientMutable` corta), pero es lectura de PII sin motivo.
   Arreglarlo bien exige un índice `appointmentId → tokens` para poder quemarlos todos; queda
   como seguimiento.
-- **Sin tope de reagendamientos**: quien tenga el link puede mover la cita indefinidamente
-  dentro del rate-limit, y cada movimiento recalcula disponibilidad y reencola recordatorios.
-  El tope natural es `rescheduleCount` de S6; hasta entonces solo lo acota el rate-limit.
+- ~~Sin tope de reagendamientos~~ **resuelto en S6**: `rescheduleCount` acota a 3 los
+  movimientos por link, y el 409 deriva a la clínica en vez de dejar al paciente sin salida.
 - `WEB_BASE_URL` pasa a ser obligatoria en producción: ahora los links no solo los manda el
   bot, también viajan en el cuerpo de una respuesta pública, y un default a `localhost` sería
   un link roto enviado a pacientes reales.
