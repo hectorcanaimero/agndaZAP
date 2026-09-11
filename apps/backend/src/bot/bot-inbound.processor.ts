@@ -166,11 +166,11 @@ export function createBotInboundWorker(
     // El `try` no sobra: si Postgres se cae, `handle` reventaba aquí y NO se
     // emitía ningún evento. La clínica vería cero turnos y cero errores, que es
     // indistinguible de "no escribió nadie" — justo durante una caída.
-    let clinic: { status: string; timezone: string } | null;
+    let clinic: { status: string } | null;
     try {
       clinic = await prisma.clinic.findUnique({
         where: { id: clinicId },
-        select: { status: true, timezone: true },
+        select: { status: true },
       });
     } catch (err) {
       emit({ job, outcome: 'error', reasonCode: 'bot-error' });
@@ -205,7 +205,6 @@ export function createBotInboundWorker(
       outcome: turn.ok ? 'ok' : 'error',
       latencyMs,
       turn: turn.data,
-      timezone: clinic.timezone,
       ...(turn.ok ? {} : { reasonCode: 'bot-error' as const }),
     });
     if (!turn.ok) throw turn.error;
@@ -226,10 +225,8 @@ export function createBotInboundWorker(
     latencyMs?: number;
     turn?: Parameters<typeof buildBotTurn>[0]['turn'];
     reasonCode?: BotTurnReason;
-    /** TZ de la clínica, para que el contador caiga en el día correcto. */
-    timezone?: string;
   }): void {
-    const { job, outcome, latencyMs, turn, reasonCode, timezone } = input;
+    const { job, outcome, latencyMs, turn, reasonCode } = input;
     const jobData = job.data;
     // 1-based, y sólo se emite si hubo reintento: un `attempt: 1` en cada
     // línea es ruido.
@@ -253,7 +250,9 @@ export function createBotInboundWorker(
     // 3 turnos y 2 errores para UN mensaje del paciente, y el panel de la
     // clínica estaría mintiendo sobre su propio volumen.
     if (attempt === 1) {
-      void recordBotStats(redis, logger, event, timezone).catch(
+      // La TZ sale del job, no de la base: así el contador cae en el día
+      // correcto incluso cuando el turno falló porque Postgres no responde.
+      void recordBotStats(redis, logger, event, jobData.timezone).catch(
         () => undefined,
       );
     }

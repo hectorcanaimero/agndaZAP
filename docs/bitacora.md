@@ -810,6 +810,18 @@
 - Efecto lateral: la regla aplica ahora a **todos** los callers de `createAppointment`, no solo al
   endpoint público.
 
+## 2026-09-11 — P1 · M9-b: actividad del bot en el dashboard
+- Bloque nuevo en `/api/dashboard/metrics` y en el panel: turnos, atendidos, adjuntos, tasa de
+  derivación y de NULL_ANSWER, desglose por intención y citas por origen.
+- **La regla del bloque: un `null` no es un 0.** El revisor cazó que `handoffRate` daba 0% porque
+  nadie escribe ese contador todavía — o sea, el panel habría afirmado "el bot lo resuelve todo
+  solo", justo lo contrario de "no lo medimos". Ahora los contadores no cableados son `null` y el
+  panel lo dice con palabras.
+- Otros dos blockers corregidos: las citas por origen se agrupaban por `startAt` (o sea, "las que ya
+  se celebraron", dejando fuera las que el bot agendó para la semana siguiente) y el estado vacío
+  pintaba la clave i18n cruda por llamar a `t('description')` sin su parámetro — el estado que ve
+  toda clínica sin bot el día del deploy.
+- Criterios de agregación y el umbral de privacidad, en [[notas/2026-09-11-dashboard-actividad-bot]].
 ## 2026-09-11 — S26: el contexto de la FSM se conserva por defecto
 - `carryFlowContext` sustituye a la reconstrucción campo a campo de `flowData` en los dos
   re-ofrecimientos de horarios y en `advanceToSlot`.

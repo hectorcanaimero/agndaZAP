@@ -43,6 +43,7 @@ const DATA: BotInboundJobData = {
   lid: null,
   contactName: 'Ana',
   text: 'hola, quiero agendar',
+  timezone: 'America/Caracas',
   requestId: 'req-1',
 };
 

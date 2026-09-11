@@ -365,6 +365,29 @@
         "ATENDIDA": "Atendida",
         "CANCELADA": "Cancelada",
         "NO_SHOW": "No-show"
+      },
+      "botActivity": {
+        "title": "Assistente de WhatsApp",
+        "description": "Últimos {days} dias",
+        "empty": "Ainda não há atividade registrada do assistente.",
+        "notMeasured": "Sem dados",
+        "attendedHint": "de {total} mensagens recebidas",
+        "intentsTitle": "O que os pacientes pediram",
+        "intentsHidden": "O detalhamento por tipo de consulta aparece a partir de 10 mensagens no período, para não identificar um paciente específico.",
+        "sourceTitle": "Como chegaram as consultas",
+        "rows": {
+          "attended": "Respondidas",
+          "unsupported": "Áudios e imagens",
+          "handoff": "Encaminhadas a uma pessoa",
+          "nullAnswer": "Perguntas sem resposta"
+        },
+        "sources": {
+          "BOT": "Pelo WhatsApp",
+          "PUBLIC": "Página de agendamento",
+          "BOT_WEB": "Link enviado pelo WhatsApp"
+        },
+        "intentsNotMeasured": "O detalhamento por tipo de consulta ainda não está disponível.",
+        "partial": "Faltam dados de alguns dias: os totais podem ficar abaixo do real."
       }
     },
     "agenda": {

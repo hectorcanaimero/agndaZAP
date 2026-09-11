@@ -87,6 +87,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[notas/2026-09-11-feedback-cross-tenant|2026-09-11 — `Feedback` admitía filas cruzadas entre clínicas (S4)]]
 - [[notas/2026-09-11-cola-bot-inbound|2026-09-11 — Cola `bot-inbound`: los gotchas]]
 - [[notas/2026-09-11-evento-bot-turn|2026-09-11 — Evento `bot.turn`: lo que costó que fuera útil y seguro]]
+- [[notas/2026-09-11-dashboard-actividad-bot|2026-09-11 — Actividad del bot en el panel: criterios de agregación]]
 
 ## Análisis
 - [[analisis/2026-09-11-chatbot-analisis-tecnico|2026-09-11 — Análisis técnico del asistente de WhatsApp]] — premisas, bugs (B1-B10), mejoras (M1-M10), seguimiento (S1-S5) y checklist por prioridad

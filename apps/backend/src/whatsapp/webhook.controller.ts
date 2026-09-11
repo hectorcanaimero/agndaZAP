@@ -321,7 +321,7 @@ export class WebhookController {
   private recordTurn(input: {
     clinicId: string;
     chatId: string;
-    timezone?: string;
+    timezone: string;
     outcome: BotTurnOutcome;
     latencyMs?: number;
     reasonCode?: BotTurnReason;
@@ -696,6 +696,7 @@ export class WebhookController {
         // Truncado antes de que el texto entre en Redis, igual que el pie de
         // foto: el body-parser admite 1 MB por request.
         text: body.slice(0, MAX_INBOUND_TEXT_CHARS),
+        timezone: clinic.timezone,
         requestId: this.ctx.get('requestId'),
       };
       try {

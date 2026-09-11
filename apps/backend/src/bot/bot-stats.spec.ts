@@ -95,12 +95,13 @@ describe('bot-stats', () => {
       { pipeline: () => chain } as unknown as Redis,
       logger,
       baseEvent(),
+      'UTC',
     );
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('fallaron'));
   });
 
   it('cuenta el turno y su desenlace', async () => {
-    await recordBotStats(redis as Redis, logger, baseEvent());
+    await recordBotStats(redis as Redis, logger, baseEvent(), 'UTC');
     expect(fields()).toEqual(['turns', 'outcome:ok']);
   });
 
@@ -109,6 +110,7 @@ describe('bot-stats', () => {
       redis as Redis,
       logger,
       baseEvent({ intent: Intent.AGENDAR, source: 'llm', handoff: true }),
+      'UTC',
     );
     expect(fields()).toEqual(
       expect.arrayContaining(['intent:agendar', 'source:llm', 'handoff']),
@@ -116,7 +118,12 @@ describe('bot-stats', () => {
   });
 
   it('handoff falso no suma: si no, la tasa saldría siempre al 100%', async () => {
-    await recordBotStats(redis as Redis, logger, baseEvent({ handoff: false }));
+    await recordBotStats(
+      redis as Redis,
+      logger,
+      baseEvent({ handoff: false }),
+      'UTC',
+    );
     expect(fields()).not.toContain('handoff');
   });
 
@@ -127,6 +134,7 @@ describe('bot-stats', () => {
       baseEvent({
         rag: { candidates: 5, matches: 2, minDist: 0.31, nullAnswer: false },
       }),
+      'UTC',
     );
     expect(fields()).toEqual(expect.arrayContaining(['rag', 'ragMatched']));
     expect(fields()).not.toContain('nullAnswer');
@@ -138,6 +146,7 @@ describe('bot-stats', () => {
       baseEvent({
         rag: { candidates: 5, matches: 0, minDist: null, nullAnswer: true },
       }),
+      'UTC',
     );
     expect(fields()).toEqual(expect.arrayContaining(['rag', 'nullAnswer']));
     expect(fields()).not.toContain('ragMatched');
@@ -152,6 +161,7 @@ describe('bot-stats', () => {
       redis as Redis,
       logger,
       baseEvent({ intent: 'Agendar; FLUSHALL\n:x' as Intent }),
+      'UTC',
     );
     expect(fields()).toContain('intent:agendarflushallx');
   });
@@ -161,6 +171,7 @@ describe('bot-stats', () => {
       redis as Redis,
       logger,
       baseEvent({ intent: 'a'.repeat(200) as Intent }),
+      'UTC',
     );
     const intent = fields().find((f) => f.startsWith('intent:'))!;
     expect(intent.length).toBe('intent:'.length + 40);
@@ -171,12 +182,13 @@ describe('bot-stats', () => {
       redis as Redis,
       logger,
       baseEvent({ intent: ';;;' as Intent }),
+      'UTC',
     );
     expect(fields().some((f) => f.startsWith('intent:'))).toBe(false);
   });
 
   it('la clave caduca sola: son métricas, no datos que guardar', async () => {
-    await recordBotStats(redis as Redis, logger, baseEvent());
+    await recordBotStats(redis as Redis, logger, baseEvent(), 'UTC');
     const expire = ops.find((o) => o[0] === 'expire');
     expect(expire[2]).toBe(BOT_STATS_TTL_S);
     // `NX`: el TTL se fija al crear la clave, no se renueva en cada turno.
@@ -192,7 +204,7 @@ describe('bot-stats', () => {
     } as unknown as Redis;
 
     await expect(
-      recordBotStats(broken, logger, baseEvent()),
+      recordBotStats(broken, logger, baseEvent(), 'UTC'),
     ).resolves.toBeUndefined();
   });
 
@@ -201,6 +213,7 @@ describe('bot-stats', () => {
       redis as Redis,
       logger,
       baseEvent({ intent: Intent.AGENDAR }),
+      'UTC',
     );
     const dump = JSON.stringify(ops);
     expect(dump).not.toContain('584141234567');

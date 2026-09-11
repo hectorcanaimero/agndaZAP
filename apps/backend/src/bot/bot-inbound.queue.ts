@@ -20,6 +20,15 @@ export interface BotInboundJobData {
   lid: string | null;
   contactName: string | null;
   text: string;
+  /**
+   * TZ de la clínica, copiada al encolar.
+   *
+   * Viaja en el job y no se relee en el worker porque los contadores del día
+   * dependen de ella: si el worker tiene que consultarla y la base está caída,
+   * el contador del error —justo el que avisa del problema— se escribiría con
+   * la zona del proceso (UTC) y caería en el día equivocado.
+   */
+  timezone: string;
   /** Para correlacionar el job con la request del webhook en los logs. */
   requestId?: string;
 }
