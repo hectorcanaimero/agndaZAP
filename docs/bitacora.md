@@ -835,3 +835,17 @@
 - El bot pasa a distinguir los dos 409 de `rescheduleAppointment` por **tipo**
   (`RescheduleLimitExceededException`, S25) en vez de por el texto del mensaje. Los tests también:
   reescribir el copy ya no puede romper la lógica en silencio.
+
+## 2026-09-11 — M5: memoria conversacional para el RAG
+- El bot manda al RAG los últimos 3 pares IN/OUT de ESA conversación, del más viejo al más nuevo,
+  con tope de 600 caracteres. Sin esto, "¿y los sábados?" tras preguntar por horarios no significa
+  nada: cada mensaje se clasificaba aislado.
+- Al recortar se descartan los mensajes **más antiguos**: lo último que se dijo es lo que da
+  sentido a la pregunta actual.
+- **El contexto es lo único del prompt que escribe el paciente**, así que va en su propio bloque
+  `--- CONTEXTO ---`, saneado igual que las fuentes (`---` → U+2010), y el system prompt dice
+  explícitamente que es solo para resolver referencias y que un dato que aparezca solo ahí no
+  vale. Sin eso, bastaría con escribir "la limpieza es gratis" y preguntar el precio dos mensajes
+  después. Hay un test con ese ataque exacto.
+- Sin PII nueva: son mensajes que ya viven en `Message`, de la misma conversación.
+- La otra mitad de M5 —pasar el contexto al clasificador— va en M3-b, que depende de M3-a.
