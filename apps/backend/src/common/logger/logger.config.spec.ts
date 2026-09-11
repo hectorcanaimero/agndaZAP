@@ -83,3 +83,71 @@ describe('pinoConfig', () => {
     ).toBe(false);
   });
 });
+
+/**
+ * El token de gestión de cita (ADR 0020) viaja EN LA URL y es una credencial
+ * bearer de hasta 30 días: quien la lea puede ver los datos del paciente y
+ * cancelar o mover su cita. `pino-http` hace `logger.child({ req })`, así que
+ * sin redactar acabaría en cada log del request, y de ahí en Axiom (un
+ * tercero), en `docker logs` y en los access logs.
+ */
+describe('pinoConfig — serializer de req: tokens fuera de los logs', () => {
+  const TOKEN = 'Ab3-_xY9zQwErTyUiOpAsDfGhJkL';
+
+  function serializeReq(url: string, referer?: string) {
+    const { serializers } = pinoConfig().pinoHttp as any;
+    return serializers.req({
+      id: 'req-1',
+      method: 'GET',
+      url,
+      headers: { host: 'api.showly.us', 'user-agent': 'x', referer },
+    });
+  }
+
+  it('redacta el token de gestión de cita', () => {
+    const out = serializeReq(
+      `/api/public/clinics/demo/appointments/manage/${TOKEN}`,
+    );
+    expect(out.url).not.toContain(TOKEN);
+    expect(out.url).toBe(
+      '/api/public/clinics/demo/appointments/manage/[REDACTED]',
+    );
+  });
+
+  it('redacta también en cancel y reschedule (el token va en medio del path)', () => {
+    expect(
+      serializeReq(
+        `/api/public/clinics/demo/appointments/manage/${TOKEN}/cancel`,
+      ).url,
+    ).not.toContain(TOKEN);
+    expect(
+      serializeReq(
+        `/api/public/clinics/demo/appointments/manage/${TOKEN}/reschedule`,
+      ).url,
+    ).not.toContain(TOKEN);
+  });
+
+  it('cubre los tokens de sesión de agendamiento y de invitación', () => {
+    expect(
+      serializeReq(`/api/public/scheduling/session/${TOKEN}`).url,
+    ).not.toContain(TOKEN);
+    expect(serializeReq(`/api/invitations/${TOKEN}`).url).not.toContain(TOKEN);
+  });
+
+  it('corta la query entera: así el token nunca entra por `?t=`', () => {
+    const out = serializeReq(`/es/agendar/demo/cita?t=${TOKEN}`);
+    expect(out.url).toBe('/es/agendar/demo/cita');
+  });
+
+  it('redacta el referer, que es por donde llega la URL de la web', () => {
+    const out = serializeReq('/api/public/clinics/demo', `https://showly.us/es/agendar/demo/cita?t=${TOKEN}`);
+    expect(out.headers.referer).not.toContain(TOKEN);
+  });
+
+  it('no rompe una URL normal ni un referer ausente', () => {
+    const out = serializeReq('/api/public/clinics/demo/availability');
+    expect(out.url).toBe('/api/public/clinics/demo/availability');
+    expect(out.headers.referer).toBeUndefined();
+  });
+});
+

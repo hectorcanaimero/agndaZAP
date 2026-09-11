@@ -6,7 +6,6 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Clinic, Conversation, Prisma, Service } from '@prisma/client';
-import { createHash } from 'node:crypto';
 import Redis from 'ioredis';
 import { DateTime } from 'luxon';
 import { FollowUpsService } from '../follow-ups/follow-ups.service';
@@ -18,9 +17,13 @@ import { AvailabilityService, Slot } from '../scheduling/availability.service';
 import { SchedulingSessionService } from '../scheduling/scheduling-session.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { WahaService } from '../whatsapp/waha.service';
+import { hashChatId, withinBotRateLimit } from './bot-rate-limit';
 import { Intent, IntentService } from './intent.service';
 import {
   asksForSomethingElse,
+  isNoPreferenceChoice,
+  parseSlotPreference,
+  SlotPreference,
   isAmbiguousYes,
   isBareGreeting,
   isCourtesyClosing,
@@ -61,6 +64,19 @@ interface FlowData {
   feedbackAppointmentId?: string;
   /** Sub-FSM de feedback: score ya capturado, esperando comentario opcional. */
   feedbackScore?: number;
+  // ── M4: navegación de horarios ──
+  /** Cuántas ventanas de 7 días avanzó el paciente con "ver más horarios". */
+  slotWindowCount?: number;
+  /** Modo "cualquier profesional": el profesional sale del slot elegido. */
+  anyProfessional?: boolean;
+  /**
+   * `professionalId` de cada slot ofrecido, en paralelo a `offeredSlots`. Solo
+   * se llena en modo "cualquier profesional", donde cada horario puede ser de
+   * uno distinto.
+   */
+  offeredProfessionalIds?: string[];
+  /** Respuestas seguidas que no pudimos interpretar en el paso actual. */
+  invalidCount?: number;
 }
 
 type FlowConfirmAction = ReminderReplyAction | 'NO';
@@ -78,11 +94,6 @@ type FlowConfirmAction = ReminderReplyAction | 'NO';
 @Injectable()
 export class BotService {
   private readonly logger = new Logger(BotService.name);
-
-  /** Rate-limit por conversación (chatId): cap por minuto — ver ADR 0007. */
-  private static readonly PER_CHAT_LIMIT = 15;
-  /** Circuit breaker global por clínica: cap por hora — ver ADR 0007. */
-  private static readonly PER_CLINIC_HOURLY_LIMIT = 500;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -130,16 +141,6 @@ export class BotService {
       process.env.WEB_BASE_URL ?? 'http://localhost:3000'
     ).replace(/\/+$/, '');
     return `${baseUrl}/${clinic.locale}/agendar/${clinic.slug}?t=${token}`;
-  }
-
-  /**
-   * Hash corto del `chatId` para poder loguear sin filtrar PII (el chatId
-   * incluye el número E.164 del paciente). 8 hex chars ≈ 32 bits, suficiente
-   * para correlacionar eventos de la misma conversación en logs sin exponer
-   * el identificador real.
-   */
-  private hashChatId(chatId: string): string {
-    return createHash('sha256').update(chatId).digest('hex').slice(0, 8);
   }
 
   /**
@@ -218,6 +219,17 @@ export class BotService {
       'De nada. Aquí estoy si necesitas algo más. 🙌',
       '¡Un gusto ayudarte! Cualquier cosa, escríbeme. 🙌',
     ],
+    /**
+     * Cierre con acción tras responder una duda (M6). Solo se anexa cuando el
+     * paciente NO tiene cita próxima: si ya tiene una, invitarlo a agendar es
+     * ruido. `{link}` es la página pública SIN token — responder una pregunta
+     * no debe escribir una `SchedulingSession` en DB.
+     */
+    ctaAfterAnswer: [
+      '¿Quieres agendar? Escríbeme *agendar* y lo hacemos aquí, o reserva en línea: {link}',
+      'Si quieres una cita, escríbeme *agendar* o resérvala aquí: {link}',
+      'Cuando quieras agendar, escríbeme *agendar* o usa nuestra página: {link}',
+    ],
     confirmAppointment: [
       '✅ Listo. Tu cita de {service} con {professional} quedó {status} para el {when} en {clinicName}.{address}\n\nTe recordaré antes de la cita. Si necesitas cambiarla, escríbeme *reagendar*.',
       '¡Perfecto! Reservé tu cita de {service} con {professional} para el {when} en {clinicName}.{address}\n\nTe avisaré antes para recordártela. Cualquier cambio, escríbeme *reagendar*.',
@@ -237,6 +249,25 @@ export class BotService {
 
   /** Ventana en la que un "sí" suelto se lee como respuesta a un recordatorio. */
   private static readonly REMINDER_REPLY_WINDOW_H = 48;
+
+  /** Días que abarca cada página de horarios en ASK_SLOT. */
+  private static readonly SLOT_WINDOW_DAYS = 7;
+
+  /**
+   * Tope de "ver más horarios". Cuatro ventanas ≈ un mes: más que eso y la
+   * conversación por WhatsApp deja de tener sentido frente al form web, que
+   * muestra un calendario.
+   */
+  private static readonly MAX_SLOT_WINDOWS = 4;
+
+  /**
+   * Respuestas seguidas sin entender tras las que ofrecemos el form web. No
+   * reseteamos la FSM: el paciente puede seguir por chat si quiere.
+   */
+  private static readonly MAX_INVALID_RETRIES = 2;
+
+  /** `id` sintético de la opción "Cualquier profesional" en ASK_PROFESSIONAL. */
+  private static readonly ANY_PROFESSIONAL = '__any__';
 
   /**
    * Elige una variante al azar de un array. `Math.random` es suficiente:
@@ -280,6 +311,48 @@ export class BotService {
     return key === 'greeting'
       ? `${rendered}\n\n${BotService.AI_DISCLOSURE}`
       : rendered;
+  }
+
+  /**
+   * Cierre con acción (M6): tras responder una duda, invita a agendar.
+   *
+   * No se anexa cuando:
+   *  - el paciente YA tiene una cita próxima — invitarlo a agendar otra es
+   *    ruido, y encima confunde a quien creía estar preguntando por la suya;
+   *  - el mensaje anterior del bot ya llevaba el link. Repetir la misma
+   *    llamada a la acción en cada respuesta es el patrón que delata a un bot,
+   *    y el paciente que hace tres preguntas seguidas la leería tres veces.
+   *
+   * El link es el público SIN token: responder una pregunta no debe escribir
+   * una `SchedulingSession` en DB.
+   */
+  private async withClosingCta(
+    clinic: Clinic,
+    convo: Conversation,
+    answer: string,
+  ): Promise<string> {
+    // Mismo helper que usa el resto del bot para resolver la cita del
+    // paciente, así que hereda el orden de resolución sin duplicarlo.
+    if (convo.phone) {
+      const upcoming = await this.findUpcomingAppointment(
+        clinic.id,
+        convo.phone,
+      );
+      if (upcoming) return answer;
+    }
+
+    const link = this.publicSchedulingUrl(clinic);
+    const lastOut = await this.prisma.message.findFirst({
+      where: { conversationId: convo.id, direction: 'OUT' },
+      orderBy: { createdAt: 'desc' },
+      select: { body: true },
+    });
+    if (lastOut?.body.includes(link)) return answer;
+
+    const cta = this.pickVariant(
+      BotService.DEFAULT_BOT_MESSAGES.ctaAfterAnswer,
+    ).replace(/\{link\}/g, link);
+    return `${answer}\n\n${cta}`;
   }
 
   /**
@@ -366,38 +439,14 @@ export class BotService {
   }): Promise<void> {
     const { clinicId, chatId, phone, lid, contactName, text } = input;
 
-    // ── Rate-limit por conversación + circuit breaker global (ADR 0007) ──
-    // Fixed-window por minuto en `(clinicId, chatId)`. Silencio total al superar:
-    // no respondemos al spammer (evita amplificar el ataque quemando LLM budget).
-    // Fail-open si Redis está caído (loggeamos error) — la protección real la
-    // dan los constraints DB y el resto de rate-limits.
-    try {
-      const now = Date.now();
-      const rlKey = `bot:msg:${clinicId}:${chatId}:${Math.floor(now / 60000)}`;
-      const count = await this.redis.incr(rlKey);
-      if (count === 1) await this.redis.expire(rlKey, 90);
-      if (count > BotService.PER_CHAT_LIMIT) {
-        this.logger.warn(
-          `bot rate-limit clinic=${clinicId} chat=${this.hashChatId(chatId)} count=${count}`,
-        );
-        return;
-      }
-
-      // Circuit breaker por clínica/hora — cap costo LLM ante ataque distribuido.
-      const chKey = `bot:msg:${clinicId}:hour:${Math.floor(now / 3600000)}`;
-      const hourCount = await this.redis.incr(chKey);
-      if (hourCount === 1) await this.redis.expire(chKey, 3900);
-      if (hourCount > BotService.PER_CLINIC_HOURLY_LIMIT) {
-        this.logger.error(
-          `bot hourly cap clinic=${clinicId} count=${hourCount} — circuit OPEN`,
-        );
-        return;
-      }
-    } catch (e) {
-      this.logger.error(
-        `bot rate-limit falló (redis) clinic=${clinicId}: ${(e as Error).message}`,
-      );
-      // fail-open: seguimos procesando.
+    // Rate-limit + circuit breaker del ADR 0007. Mismas claves y presupuesto
+    // que el camino de adjuntos del webhook: ver `bot-rate-limit.ts`.
+    if (!(await withinBotRateLimit(this.redis, this.logger, {
+      clinicId,
+      chatId,
+      scope: 'bot',
+    }))) {
+      return;
     }
 
     const clinic = await this.prisma.clinic.findUniqueOrThrow({
@@ -596,7 +645,7 @@ export class BotService {
             clinic.wahaSession,
             chatId,
             convo.id,
-            result.answer,
+            await this.withClosingCta(clinic, convo, result.answer),
           );
         } else {
           await this.markNeedsHuman(convo.id);
@@ -734,10 +783,10 @@ export class BotService {
   ): Promise<void> {
     const choice = this.resolveChoice(data.choices ?? [], normalized);
     if (!choice) {
-      await this.reply(
-        clinic.wahaSession,
-        convo.chatId,
-        convo.id,
+      await this.replyNotUnderstood(
+        clinic,
+        convo,
+        data,
         `Creo que no te entendí. Elige un servicio de la lista:\n\n${this.choiceList(data)}\n\nResponde con el número o el nombre.`,
       );
       return;
@@ -755,8 +804,17 @@ export class BotService {
       );
       return;
     }
+    // La preferencia mencionada de paso ("el martes por la tarde") viaja con
+    // el flujo: si solo hay un profesional saltamos directo a los horarios y
+    // no habría otro momento para leerla.
     const nextData: FlowData = { serviceId: service.id };
-    await this.advanceToProfessional(clinic, convo, nextData, service);
+    await this.advanceToProfessional(
+      clinic,
+      convo,
+      nextData,
+      service,
+      parseSlotPreference(normalized),
+    );
   }
 
   private async advanceToProfessional(
@@ -764,6 +822,7 @@ export class BotService {
     convo: Conversation,
     data: FlowData,
     service: Service,
+    preference: SlotPreference | null = null,
   ): Promise<void> {
     const professionals = await this.prisma.professional.findMany({
       where: {
@@ -789,12 +848,19 @@ export class BotService {
     if (professionals.length === 1) {
       const only = professionals[0];
       const nextData: FlowData = { ...data, professionalId: only.id };
-      await this.advanceToSlot(clinic, convo, nextData, service.id, only.id, only.name);
+      await this.advanceToSlot(clinic, convo, nextData, service.id, [only.id], {
+        preference,
+      });
       return;
     }
 
-    const choices = professionals.map((p) => ({ id: p.id, label: p.name }));
-    const nextData: FlowData = { ...data, choices };
+    // "Cualquier profesional" va al final: la mayoría no tiene preferencia y
+    // obligarlos a elegir agrega un paso que no aporta. Ver M4.
+    const choices = [
+      ...professionals.map((p) => ({ id: p.id, label: p.name })),
+      { id: BotService.ANY_PROFESSIONAL, label: 'Cualquier profesional' },
+    ];
+    const nextData: FlowData = { ...data, choices, invalidCount: 0 };
     await this.prisma.conversation.update({
       where: { id: convo.id },
       data: { flowStep: 'ASK_PROFESSIONAL', flowData: nextData as object },
@@ -819,16 +885,59 @@ export class BotService {
       await this.startFlow(clinic, convo);
       return;
     }
-    const choice = this.resolveChoice(data.choices ?? [], normalized);
+    const hasAnyOption = (data.choices ?? []).some(
+      (c) => c.id === BotService.ANY_PROFESSIONAL,
+    );
+    // "cualquiera", "el que sea", "me da igual": `resolveChoice` resuelve por
+    // substring del label y no matchea ninguna de esas, que son justo las
+    // palabras que usa la gente.
+    const choice =
+      hasAnyOption && isNoPreferenceChoice(normalized)
+        ? { id: BotService.ANY_PROFESSIONAL, label: 'Cualquier profesional' }
+        : this.resolveChoice(data.choices ?? [], normalized);
     if (!choice) {
-      await this.reply(
-        clinic.wahaSession,
-        convo.chatId,
-        convo.id,
+      await this.replyNotUnderstood(
+        clinic,
+        convo,
+        data,
         `Creo que no te entendí. Elige un profesional de la lista:\n\n${this.choiceList(data)}\n\nResponde con el número o el nombre.`,
       );
       return;
     }
+    const preference = parseSlotPreference(normalized);
+
+    // "Cualquier profesional": ofrecemos los horarios de todos y el dueño de
+    // cada slot se fija recién cuando el paciente elige uno.
+    if (choice.id === BotService.ANY_PROFESSIONAL) {
+      const professionals = await this.prisma.professional.findMany({
+        where: {
+          clinicId: clinic.id,
+          active: true,
+          services: { some: { id: data.serviceId } },
+        },
+        orderBy: { name: 'asc' },
+      });
+      if (professionals.length === 0) {
+        await this.resetFlow(convo.id);
+        await this.reply(
+          clinic.wahaSession,
+          convo.chatId,
+          convo.id,
+          'Ese servicio se quedó sin profesionales disponibles. Escríbeme *agendar* para retomar.',
+        );
+        return;
+      }
+      await this.advanceToSlot(
+        clinic,
+        convo,
+        data,
+        data.serviceId,
+        professionals.map((p) => p.id),
+        { preference },
+      );
+      return;
+    }
+
     const professional = await this.prisma.professional.findFirst({
       where: {
         id: choice.id,
@@ -852,31 +961,125 @@ export class BotService {
       convo,
       { ...data, professionalId: professional.id },
       data.serviceId,
-      professional.id,
-      professional.name,
+      [professional.id],
+      { preference },
     );
   }
 
+  /**
+   * Muestra una página de horarios y deja la FSM en ASK_SLOT.
+   *
+   * `professionalIds` con un solo id es el caso normal; con varios es el modo
+   * "cualquier profesional" (M4), donde cada horario puede ser de uno distinto
+   * y guardamos el dueño de cada slot en `offeredProfessionalIds`.
+   *
+   * `windowCount` es la página: 0 son los próximos 7 días, 1 los 7 siguientes,
+   * etc. `preference` filtra la lista antes de mostrarla ("el martes por la
+   * tarde"); si el filtro deja la lista vacía lo decimos y mostramos todo, que
+   * es mejor que un "no hay nada" que suena a que la agenda está llena.
+   */
   private async advanceToSlot(
     clinic: Clinic,
     convo: Conversation,
     data: FlowData,
     serviceId: string,
-    professionalId: string,
-    _professionalName: string,
+    professionalIds: string[],
+    opts: { windowCount?: number; preference?: SlotPreference | null } = {},
   ): Promise<void> {
+    const windowCount = opts.windowCount ?? 0;
+    const anyProfessional = professionalIds.length > 1;
     const zone = clinic.timezone;
     const now = DateTime.now().setZone(zone);
-    const slots = await this.availability.getSlots({
-      clinicId: clinic.id,
-      serviceId,
-      professionalId,
-      fromISO: now.toISO() ?? now.toString(),
-      days: 7,
-      limit: 6,
+    const from = now.plus({
+      days: windowCount * BotService.SLOT_WINDOW_DAYS,
     });
 
-    if (slots.length === 0) {
+    // Un getSlots por profesional. Con "cualquiera" el primero que ofrece un
+    // horario se lo queda: los profesionales vienen ordenados por nombre, así
+    // que el reparto es estable y no depende del orden de las promesas.
+    const perProfessional = await Promise.all(
+      professionalIds.map(async (professionalId) => {
+        const slots = await this.availability.getSlots({
+          clinicId: clinic.id,
+          serviceId,
+          professionalId,
+          fromISO: from.toISO() ?? from.toString(),
+          days: BotService.SLOT_WINDOW_DAYS,
+          limit: 6,
+        });
+        return slots.map((slot) => ({ slot, professionalId }));
+      }),
+    );
+
+    const byStart = new Map<number, { slot: Slot; professionalId: string }>();
+    for (const entry of perProfessional.flat()) {
+      const key = entry.slot.startAt.getTime();
+      if (!byStart.has(key)) byStart.set(key, entry);
+    }
+    const all = [...byStart.values()].sort(
+      (a, b) => a.slot.startAt.getTime() - b.slot.startAt.getTime(),
+    );
+
+    if (all.length === 0) {
+      await this.noSlotsLeft(clinic, convo, data, windowCount);
+      return;
+    }
+
+    const filtered = opts.preference
+      ? this.filterSlotsByPreference(all, opts.preference, clinic)
+      : all;
+    const preferenceMissed = opts.preference != null && filtered.length === 0;
+    const shown = (preferenceMissed ? all : filtered).slice(0, 6);
+
+    const nextData: FlowData = {
+      ...data,
+      offeredSlots: shown.map((e) => e.slot.startAt.toISOString()),
+      ...(anyProfessional
+        ? {
+            anyProfessional: true,
+            offeredProfessionalIds: shown.map((e) => e.professionalId),
+          }
+        : {}),
+      slotWindowCount: windowCount,
+      invalidCount: 0,
+    };
+    await this.prisma.conversation.update({
+      where: { id: convo.id },
+      data: { flowStep: 'ASK_SLOT', flowData: nextData as object },
+    });
+
+    const labels = shown.map(
+      (e, i) => `${i + 1}. ${this.slotLabel(e.slot, clinic)}`,
+    );
+    const intro = preferenceMissed
+      ? 'No me quedan horarios con esa preferencia, pero sí estos:'
+      : windowCount > 0
+        ? 'Estos son los horarios de la semana siguiente:'
+        : 'Vamos bien. Estos son los próximos horarios disponibles:';
+    const more =
+      windowCount + 1 < BotService.MAX_SLOT_WINDOWS
+        ? '\n0. Ver más horarios'
+        : '';
+    await this.reply(
+      clinic.wahaSession,
+      convo.chatId,
+      convo.id,
+      `${intro}\n\n${labels.join('\n')}${more}\n\nResponde con el número del horario que prefieras.`,
+    );
+  }
+
+  /**
+   * Sin horarios en esta ventana. En la primera reseteamos (la agenda está
+   * realmente vacía); si el paciente ya venía avanzando semanas, mantenemos la
+   * FSM y le damos el form web, que le deja ver el calendario entero.
+   */
+  private async noSlotsLeft(
+    clinic: Clinic,
+    convo: Conversation,
+    data: FlowData,
+    windowCount: number,
+  ): Promise<void> {
+    if (windowCount === 0) {
       await this.resetFlow(convo.id);
       await this.reply(
         clinic.wahaSession,
@@ -886,20 +1089,35 @@ export class BotService {
       );
       return;
     }
-
-    const offeredSlots = slots.map((s) => s.startAt.toISOString());
-    const labels = slots.map((s, i) => `${i + 1}. ${this.slotLabel(s, clinic)}`);
-    const nextData: FlowData = { ...data, offeredSlots };
-    await this.prisma.conversation.update({
-      where: { id: convo.id },
-      data: { flowStep: 'ASK_SLOT', flowData: nextData as object },
-    });
+    const link = await this.buildSchedulingLink(convo, clinic);
     await this.reply(
       clinic.wahaSession,
       convo.chatId,
       convo.id,
-      `Vamos bien. Estos son los próximos horarios disponibles:\n\n${labels.join('\n')}\n\nResponde con el número del horario que prefieras.`,
+      `Hasta ahí llega mi agenda por aquí. Puedes ver el calendario completo y elegir con calma en este enlace, que vence en 30 minutos:\n\n${link}`,
     );
+  }
+
+  /** Filtra por franja horaria y/o día, en la TZ de la clínica. */
+  private filterSlotsByPreference(
+    entries: Array<{ slot: Slot; professionalId: string }>,
+    preference: SlotPreference,
+    clinic: Clinic,
+  ): Array<{ slot: Slot; professionalId: string }> {
+    const zone = clinic.timezone;
+    const today = DateTime.now().setZone(zone).startOf('day');
+    return entries.filter(({ slot }) => {
+      const dt = DateTime.fromJSDate(slot.startAt).setZone(zone);
+      if (preference.period === 'manana' && dt.hour >= 12) return false;
+      if (preference.period === 'tarde' && dt.hour < 12) return false;
+      if (preference.weekday && dt.weekday !== preference.weekday) return false;
+      if (preference.relativeDay) {
+        const target =
+          preference.relativeDay === 'hoy' ? today : today.plus({ days: 1 });
+        if (!dt.startOf('day').equals(target)) return false;
+      }
+      return true;
+    });
   }
 
   private async handleAskSlot(
@@ -909,29 +1127,95 @@ export class BotService {
     normalized: string,
   ): Promise<void> {
     const offered = data.offeredSlots ?? [];
+    const windowCount = data.slotWindowCount ?? 0;
+    const professionalIds = data.anyProfessional
+      ? (data.offeredProfessionalIds ?? [])
+      : [];
+
+    // "0" o "más horarios" → siguiente ventana de 7 días (M4).
+    const wantsMore =
+      /^0\b/.test(normalized) ||
+      startsWithAny(normalized, ['mas', 'otros', 'otras', 'siguiente']) ||
+      /\bmas (horarios|opciones|fechas)\b/.test(normalized);
+    if (wantsMore && data.serviceId) {
+      if (windowCount + 1 >= BotService.MAX_SLOT_WINDOWS) {
+        const link = await this.buildSchedulingLink(convo, clinic);
+        await this.reply(
+          clinic.wahaSession,
+          convo.chatId,
+          convo.id,
+          `Por aquí ya te mostré las próximas semanas. Para ver el calendario completo y elegir con calma, entra en este enlace, que vence en 30 minutos:\n\n${link}\n\nO responde con el número de alguno de los horarios que te pasé.`,
+        );
+        return;
+      }
+      const ids = data.anyProfessional
+        ? [...new Set(professionalIds)]
+        : data.professionalId
+          ? [data.professionalId]
+          : [];
+      if (ids.length > 0) {
+        await this.advanceToSlot(clinic, convo, data, data.serviceId, ids, {
+          windowCount: windowCount + 1,
+          preference: parseSlotPreference(normalized),
+        });
+        return;
+      }
+    }
+
     // Parseamos SOLO por índice para slots (evitar ambigüedades de fecha en texto libre).
     // El paciente puede escribir "1", "2.", "opción 3", etc.
     const match = normalized.match(/\d+/);
     if (!match) {
-      await this.reply(
-        clinic.wahaSession,
-        convo.chatId,
-        convo.id,
+      // Sin número, pero con una preferencia clara ("mejor por la tarde"):
+      // volvemos a listar filtrando, en vez de contestar "no te entendí".
+      const preference = parseSlotPreference(normalized);
+      if (preference && data.serviceId) {
+        const ids = data.anyProfessional
+          ? [...new Set(professionalIds)]
+          : data.professionalId
+            ? [data.professionalId]
+            : [];
+        if (ids.length > 0) {
+          await this.advanceToSlot(clinic, convo, data, data.serviceId, ids, {
+            windowCount,
+            preference,
+          });
+          return;
+        }
+      }
+      await this.replyNotUnderstood(
+        clinic,
+        convo,
+        data,
         `Creo que no te entendí. Elige un horario respondiendo con su número:\n\n${this.offeredSlotList(offered, clinic)}`,
       );
       return;
     }
     const idx = Number.parseInt(match[0], 10) - 1;
     if (idx < 0 || idx >= offered.length) {
-      await this.reply(
-        clinic.wahaSession,
-        convo.chatId,
-        convo.id,
+      await this.replyNotUnderstood(
+        clinic,
+        convo,
+        data,
         `Ese número no está en la lista. Elige uno entre 1 y ${offered.length}:\n\n${this.offeredSlotList(offered, clinic)}`,
       );
       return;
     }
     const startAtISO = offered[idx];
+    // En modo "cualquier profesional" el dueño del slot se fija acá.
+    const resolvedProfessionalId = data.anyProfessional
+      ? professionalIds[idx]
+      : data.professionalId;
+    if (!resolvedProfessionalId) {
+      await this.resetFlow(convo.id);
+      await this.reply(
+        clinic.wahaSession,
+        convo.chatId,
+        convo.id,
+        'Algo cambió en la agenda. Escríbeme *agendar* para volver a intentar.',
+      );
+      return;
+    }
 
     // Cargamos servicio y profesional para armar el mensaje de confirmación.
     const [service, professional] = await Promise.all([
@@ -939,7 +1223,7 @@ export class BotService {
         where: { id: data.serviceId!, clinicId: clinic.id },
       }),
       this.prisma.professional.findFirst({
-        where: { id: data.professionalId!, clinicId: clinic.id },
+        where: { id: resolvedProfessionalId, clinicId: clinic.id },
       }),
     ]);
     if (!service || !professional) {
@@ -953,7 +1237,12 @@ export class BotService {
       return;
     }
 
-    const nextData: FlowData = { ...data, startAtISO };
+    const nextData: FlowData = {
+      ...data,
+      startAtISO,
+      professionalId: resolvedProfessionalId,
+      invalidCount: 0,
+    };
 
     // Si ya tenemos el nombre del paciente registrado en DB, saltamos ASK_NAME.
     // Nunca pisamos un nombre existente (respetamos la privacidad + evitamos typos).
@@ -993,6 +1282,38 @@ export class BotService {
       convo.chatId,
       convo.id,
       'Ya casi terminamos. ¿A nombre de quién agendo la cita?',
+    );
+  }
+
+  /**
+   * Responde un "no te entendí" y cuenta cuántos van seguidos en este paso.
+   * A partir del segundo ofrecemos el form web como salida — sin resetear la
+   * FSM: el paciente puede seguir por chat si prefiere, y quien se atascó
+   * tiene una puerta en vez de repetir la lista una tercera vez (M4).
+   */
+  private async replyNotUnderstood(
+    clinic: Clinic,
+    convo: Conversation,
+    data: FlowData,
+    message: string,
+  ): Promise<void> {
+    const invalidCount = (data.invalidCount ?? 0) + 1;
+    await this.prisma.conversation.update({
+      where: { id: convo.id },
+      data: { flowData: { ...data, invalidCount } as object },
+    });
+
+    if (invalidCount < BotService.MAX_INVALID_RETRIES) {
+      await this.reply(clinic.wahaSession, convo.chatId, convo.id, message);
+      return;
+    }
+
+    const link = await this.buildSchedulingLink(convo, clinic);
+    await this.reply(
+      clinic.wahaSession,
+      convo.chatId,
+      convo.id,
+      `${message}\n\nSi te resulta más cómodo, también puedes elegir todo desde aquí (el enlace vence en 30 minutos):\n\n${link}`,
     );
   }
 
@@ -1128,7 +1449,7 @@ export class BotService {
     }
 
     try {
-      const appt = await this.scheduling.createAppointment({
+      const { appointment: appt } = await this.scheduling.createAppointment({
         clinicId: clinic.id,
         // Solo pasamos `name` si lo recolectamos en ASK_NAME. Si el paciente ya
         // existía con nombre, no lo mandamos → el upsert respeta el valor previo.
