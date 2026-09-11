@@ -589,3 +589,14 @@
   cubre P2003/P2025 además de P2002. Pendientes anotados: FK compuesta
   `Feedback → Appointment(clinicId, id)` con migración y ADR propio, y el `include` de
   `feedback.controller.ts`, que sigue el `appointmentId` hasta `patient.name` sin revalidar tenant.
+
+## 2026-09-11 — El comentario del feedback también se escribe con `clinicId`
+- `handleAwaitingNpsComment` hacía `prisma.feedback.update({ where: { appointmentId } })` sin
+  `clinicId`: si `flowData.feedbackAppointmentId` quedaba con una cita de otra clínica, el bot
+  pisaba el comentario de esa fila. Ahora usa `FollowUpsService.recordComment(clinicId, …)`, que
+  filtra por las dos columnas (lo dejó listo S4, PR #50).
+- Alcance real: `flowData` lo escribe el processor de follow-ups para esa conversación, no el
+  paciente, así que no era explotable desde WhatsApp. Es defensa en profundidad, misma clase que
+  S4 — pero el `update` por id suelto es exactamente el patrón que la convención del repo prohíbe.
+- Con 0 filas afectadas el bot cierra igual y agradece: el paciente no debe enterarse de un
+  problema de datos nuestro. Queda el `logger.warn` de `recordComment` para verlo en observabilidad.

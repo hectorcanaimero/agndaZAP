@@ -1608,12 +1608,12 @@ export class BotService {
     );
 
     if (apptId && !skip) {
-      // Actualizamos el comment del feedback existente (la row se creó en el
-      // paso previo). NO usamos followUps.recordFeedback porque ya existe.
-      await this.prisma.feedback.update({
-        where: { appointmentId: apptId },
-        data: { comment: originalText.trim().slice(0, 1000) },
-      });
+      // La fila de Feedback ya existe (la creó el paso del score), así que
+      // solo actualizamos el comentario. Vía `FollowUpsService.recordComment`,
+      // que filtra por `clinicId` además de por `appointmentId`: un
+      // `feedback.update` por `appointmentId` suelto escribiría sobre la fila
+      // de otra clínica si `flowData` quedara con un id ajeno. Ver S4.
+      await this.followUps.recordComment(clinic.id, apptId, originalText);
     }
 
     await this.resetFlow(convo.id);
