@@ -1,28 +1,13 @@
-import { PassThrough } from 'node:stream';
-import pino from 'pino';
-import { PII_REDACT_CENSOR, PII_REDACT_OPTIONS } from './pii-redactor';
+import { PII_REDACT_CENSOR } from './pii-redactor';
+import { createRedactingLogger } from './testing/redaction-harness';
 
-// Helper: crea un logger Pino que escribe a un buffer y devuelve el último
-// JSON escrito. Simula el pipeline real de nuestra config.
-function createTestLogger(): { log: pino.Logger; readLast: () => Record<string, unknown> } {
-  const stream = new PassThrough();
-  const chunks: string[] = [];
-  stream.on('data', (chunk: Buffer) => chunks.push(chunk.toString()));
-
-  const log = pino({ redact: PII_REDACT_OPTIONS, level: 'info' }, stream);
-
-  return {
-    log,
-    readLast: () => {
-      const raw = chunks.join('').trim().split('\n').pop() ?? '{}';
-      return JSON.parse(raw) as Record<string, unknown>;
-    },
-  };
-}
+// El logger de prueba vive en `testing/redaction-harness.ts`, compartido con
+// `redaction-events.spec.ts`, que comprueba que los eventos estructurados
+// sobrevivan enteros a esta misma redacción.
 
 describe('PII redactor', () => {
   it('redacta email en el primer nivel', () => {
-    const { log, readLast } = createTestLogger();
+    const { log, readLast } = createRedactingLogger();
     log.info({ email: 'alice@example.com', userId: 'u-1' }, 'user login');
     const entry = readLast();
     expect(entry.email).toBe(PII_REDACT_CENSOR);
@@ -30,7 +15,7 @@ describe('PII redactor', () => {
   });
 
   it('redacta phone en el primer nivel', () => {
-    const { log, readLast } = createTestLogger();
+    const { log, readLast } = createRedactingLogger();
     log.info({ phone: '+5491122334455', patientId: 'p-1' }, 'sms sent');
     const entry = readLast();
     expect(entry.phone).toBe(PII_REDACT_CENSOR);
@@ -38,7 +23,7 @@ describe('PII redactor', () => {
   });
 
   it('redacta password en req.body.password (path exacto)', () => {
-    const { log, readLast } = createTestLogger();
+    const { log, readLast } = createRedactingLogger();
     log.info(
       { req: { body: { password: 'super-secret', email: 'x@y.com' } } },
       'login attempt',
@@ -49,7 +34,7 @@ describe('PII redactor', () => {
   });
 
   it('redacta authorization en req.headers', () => {
-    const { log, readLast } = createTestLogger();
+    const { log, readLast } = createRedactingLogger();
     log.info(
       { req: { headers: { authorization: 'Bearer abc.def.ghi', host: 'x.com' } } },
       'request',
@@ -61,7 +46,7 @@ describe('PII redactor', () => {
   });
 
   it('redacta token en cualquier campo de primer nivel', () => {
-    const { log, readLast } = createTestLogger();
+    const { log, readLast } = createRedactingLogger();
     log.info({ token: 'jwt-eyxxx', refreshToken: 'refresh-xxx', userId: 'u-1' }, 'auth');
     const entry = readLast();
     expect(entry.token).toBe(PII_REDACT_CENSOR);
@@ -70,7 +55,7 @@ describe('PII redactor', () => {
   });
 
   it('redacta name, firstName, lastName, notes', () => {
-    const { log, readLast } = createTestLogger();
+    const { log, readLast } = createRedactingLogger();
     log.info(
       {
         name: 'Juan Pérez',
@@ -91,7 +76,7 @@ describe('PII redactor', () => {
 
 
   it('redacta PII en req.body sin romper el objeto estructurado', () => {
-    const { log, readLast } = createTestLogger();
+    const { log, readLast } = createRedactingLogger();
     log.info(
       {
         req: {
@@ -114,7 +99,7 @@ describe('PII redactor', () => {
   });
 
   it('redacta PII en arrays comunes conservando IDs para diagnóstico', () => {
-    const { log, readLast } = createTestLogger();
+    const { log, readLast } = createRedactingLogger();
     log.info(
       {
         patients: [
@@ -151,7 +136,7 @@ describe('PII redactor', () => {
   });
 
   it('NO redacta identificadores (patientId, clinicId, userId)', () => {
-    const { log, readLast } = createTestLogger();
+    const { log, readLast } = createRedactingLogger();
     log.info(
       { patientId: 'p-1', clinicId: 'c-1', userId: 'u-1', appointmentId: 'a-1' },
       'ids test',
@@ -164,7 +149,7 @@ describe('PII redactor', () => {
   });
 
   it('redacta payload.body (WhatsApp inbound WAHA)', () => {
-    const { log, readLast } = createTestLogger();
+    const { log, readLast } = createRedactingLogger();
     log.info(
       { payload: { body: 'Hola quiero un turno', from: '5491122334455@c.us' } },
       'waha message',
@@ -177,7 +162,7 @@ describe('PII redactor', () => {
   });
 
   it('redacta apiKey y secret en primer nivel', () => {
-    const { log, readLast } = createTestLogger();
+    const { log, readLast } = createRedactingLogger();
     log.info({ apiKey: 'sk-live-xxx', secret: 'hs-xxx', service: 'openai' }, 'call');
     const entry = readLast();
     expect(entry.apiKey).toBe(PII_REDACT_CENSOR);
@@ -186,45 +171,11 @@ describe('PII redactor', () => {
   });
 
   it('deja pasar el msg y level intactos', () => {
-    const { log, readLast } = createTestLogger();
+    const { log, readLast } = createRedactingLogger();
     log.info({ email: 'x@y.com' }, 'this is the message');
     const entry = readLast();
     expect(entry.msg).toBe('this is the message');
     expect(entry.level).toBe(30); // pino level info = 30
   });
 
-  /**
-   * M9. `nestjs-pino` vuelca el objeto del log en la RAÍZ del entry, así que
-   * cualquier campo del evento `bot.turn` que coincida con un path de
-   * redacción sale como `[REDACTED]` en producción — verde en los tests, que
-   * espían el logger de Nest antes de que pino redacte, y ciego en el destino
-   * real. Ya pasó una vez: el motivo se llamaba `reason`, que está en la lista
-   * por el motivo de consulta del paciente.
-   *
-   * Este test recorre el evento completo para que el próximo campo que alguien
-   * añada lo cace aquí y no en producción.
-   */
-  it('el evento bot.turn sobrevive entero al redactor', () => {
-    const { log, readLast } = createTestLogger();
-    const event = {
-      event: 'bot.turn',
-      clinicId: 'clinic-A',
-      chatHash: 'ab12cd34ef56',
-      outcome: 'error',
-      latencyMs: 1234,
-      requestId: 'req-1',
-      reasonCode: 'bot-error',
-      attempt: 2,
-      intent: 'agendar',
-      source: 'llm',
-      handoff: false,
-      rag: { candidates: 5, matches: 2, minDist: 0.31, nullAnswer: false },
-    };
-    log.info(event, 'bot turn');
-    const entry = readLast();
-
-    for (const [key, value] of Object.entries(event)) {
-      expect([key, entry[key]]).toEqual([key, value]);
-    }
-  });
 });
