@@ -1,5 +1,14 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-11 — M3-a: clasificador de intención v2 (rama `feat/intent-clasificador-v2`)
+- **Prompt con definición y 2 ejemplos por intención**, en es/pt según el locale de la clínica. Es lo que de verdad mueve la precisión con un modelo barato: sin definiciones, el modelo inventa su propio criterio para las clases ambiguas. Los ejemplos son frases reales de WhatsApp, no prosa de manual.
+- **Salida JSON `{ intent, confidence }`** con parseo de igualdad EXACTA contra el enum. El parser viejo usaba `includes`, así que una respuesta como "no es agendar" clasificaba como AGENDAR — y había un test que lo daba por bueno. Confianza < 0.6 → `OTRO`: preferimos "no te entendí" a ejecutar la acción equivocada, porque un CANCELAR mal clasificado le cancela la cita a alguien que solo preguntaba.
+- **Intenciones nuevas**: `AGRADECER` y `CONSULTA_CITA` (pregunta por SU cita, distinta de `PREGUNTA_FAQ`, que pregunta por la clínica).
+- **Contexto opcional** de los últimos 3 mensajes (600 chars, recortando por el principio porque lo reciente desambigua más). **Es texto de un tercero**: va en bloque delimitado, con los `---` neutralizados como en `knowledge.service.ts`, y con instrucción explícita de que solo sirve para resolver referencias. Test de inyección: una orden dentro del historial no decide la clasificación.
+- **Set de 30 frases reales** que fija la frontera entre prefiltro determinista y LLM — 17 se resuelven sin gastar una llamada. Es donde están los errores caros: si el prefiltro se traga una frase que no le toca, el LLM nunca la ve y no hay prompt que lo arregle (B2 y B3 fueron eso).
+- **Hallazgo del set**: `"muchas gracias 🙏"` no lo reconoce el prefiltro porque `normalizeText` no quita emojis. No es grave —el LLM lo clasifica como AGRADECER— pero es una llamada que sobra en una de las frases más comunes de WhatsApp. Arreglarlo toca `message-matching.ts`, compartido con `bot.service.ts`, así que queda como ítem propio.
+- **Tests**: 1283 verdes (el único rojo es el test de temporización flaky de health, ajeno).
+
 ## 2026-09-11 — M8: fallback léxico del RAG y spec de calibración (rama `feat/rag-fallback-lexico`)
 - **El hueco**: `text-embedding-3-small` falla justo con las preguntas cortas y coloquiales de WhatsApp. "Donde están ubicados" daba 0.619 contra el chunk correcto; el umbral está en 0.65, o sea que pasaba por poco, y "dónde queda la clínica" matcheaba el chunk equivocado.
 - **Arreglo**: cuando el vector no devuelve nada y la pregunta tiene ≤ 6 palabras, se busca con `word_similarity` de pg_trgm. Migración que instala la extensión + índice GIN.
@@ -810,6 +819,18 @@
 - Efecto lateral: la regla aplica ahora a **todos** los callers de `createAppointment`, no solo al
   endpoint público.
 
+## 2026-09-11 — P1 · M9-b: actividad del bot en el dashboard
+- Bloque nuevo en `/api/dashboard/metrics` y en el panel: turnos, atendidos, adjuntos, tasa de
+  derivación y de NULL_ANSWER, desglose por intención y citas por origen.
+- **La regla del bloque: un `null` no es un 0.** El revisor cazó que `handoffRate` daba 0% porque
+  nadie escribe ese contador todavía — o sea, el panel habría afirmado "el bot lo resuelve todo
+  solo", justo lo contrario de "no lo medimos". Ahora los contadores no cableados son `null` y el
+  panel lo dice con palabras.
+- Otros dos blockers corregidos: las citas por origen se agrupaban por `startAt` (o sea, "las que ya
+  se celebraron", dejando fuera las que el bot agendó para la semana siguiente) y el estado vacío
+  pintaba la clave i18n cruda por llamar a `t('description')` sin su parámetro — el estado que ve
+  toda clínica sin bot el día del deploy.
+- Criterios de agregación y el umbral de privacidad, en [[notas/2026-09-11-dashboard-actividad-bot]].
 ## 2026-09-11 — S26: el contexto de la FSM se conserva por defecto
 - `carryFlowContext` sustituye a la reconstrucción campo a campo de `flowData` en los dos
   re-ofrecimientos de horarios y en `advanceToSlot`.
@@ -824,6 +845,19 @@
   (`RescheduleLimitExceededException`, S25) en vez de por el texto del mensaje. Los tests también:
   reescribir el copy ya no puede romper la lógica en silencio.
 
+## 2026-09-11 — M5: memoria conversacional para el RAG
+- El bot manda al RAG los últimos 3 pares IN/OUT de ESA conversación, del más viejo al más nuevo,
+  con tope de 600 caracteres. Sin esto, "¿y los sábados?" tras preguntar por horarios no significa
+  nada: cada mensaje se clasificaba aislado.
+- Al recortar se descartan los mensajes **más antiguos**: lo último que se dijo es lo que da
+  sentido a la pregunta actual.
+- **El contexto es lo único del prompt que escribe el paciente**, así que va en su propio bloque
+  `--- CONTEXTO ---`, saneado igual que las fuentes (`---` → U+2010), y el system prompt dice
+  explícitamente que es solo para resolver referencias y que un dato que aparezca solo ahí no
+  vale. Sin eso, bastaría con escribir "la limpieza es gratis" y preguntar el precio dos mensajes
+  después. Hay un test con ese ataque exacto.
+- Sin PII nueva: son mensajes que ya viven en `Message`, de la misma conversación.
+- La otra mitad de M5 —pasar el contexto al clasificador— va en M3-b, que depende de M3-a.
 ## 2026-09-11 — M7: el handoff deja de mentir y ya no es un callejón sin salida
 - **Expectativa real**: "Enseguida te atiende una persona" a las 22:00 de un sábado es mentira, y
   una que el paciente descubre esperando. Fuera del horario de `BusinessHour` el bot dice cuándo

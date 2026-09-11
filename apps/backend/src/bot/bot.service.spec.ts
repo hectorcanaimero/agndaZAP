@@ -133,6 +133,8 @@ describe('BotService — FSM de agendamiento', () => {
         // Último mensaje OUT de la conversación: si pidió "*SÍ*", un "sí"
         // suelto sí es una confirmación (ver hasConfirmationContext).
         findFirst: jest.fn().mockResolvedValue(null),
+        // Historial reciente para el contexto del RAG (M5). Vacío por defecto.
+        findMany: jest.fn().mockResolvedValue([]),
       },
       service: {
         findMany: jest.fn().mockResolvedValue([service1]),
@@ -1041,6 +1043,78 @@ describe('BotService — FSM de agendamiento', () => {
     expect(msg).toMatch(/lunes a viernes/);
     // NO cambia el estado de la conversación (sigue en BOT).
     expect(convoState.state).toBe('BOT');
+  });
+
+  // ── M5: historial reciente al RAG para resolver referencias ──
+  describe('contexto de conversación (M5)', () => {
+    beforeEach(() => {
+      intent.detect.mockResolvedValue(Intent.PREGUNTA_FAQ);
+      knowledge.answer.mockResolvedValue({ answer: 'Sí, los sábados de 9 a 13.', sources: [] });
+    });
+
+    async function ask(text: string) {
+      await bot.handleIncoming({
+        clinicId: 'clinic-A',
+        chatId: convoState.chatId,
+        phone: convoState.phone,
+        text,
+      });
+      return knowledge.answer.mock.calls.at(-1)![0];
+    }
+
+    it('manda los últimos pares IN/OUT, del más viejo al más nuevo', async () => {
+      prisma.message.findMany.mockResolvedValue([
+        { direction: 'IN', body: '¿y los sábados?' },
+        { direction: 'OUT', body: 'Abrimos de lunes a viernes de 9 a 18h.' },
+        { direction: 'IN', body: '¿cuál es el horario de atención?' },
+      ]);
+
+      const call = await ask('¿y los sábados?');
+
+      expect(call.context).toBe(
+        [
+          'Paciente: ¿cuál es el horario de atención?',
+          'Asistente: Abrimos de lunes a viernes de 9 a 18h.',
+          'Paciente: ¿y los sábados?',
+        ].join('\n'),
+      );
+      // Solo de ESTA conversación: no se cruza con otras.
+      expect(prisma.message.findMany.mock.calls.at(-1)![0].where).toEqual({
+        conversationId: 'convo-1',
+      });
+    });
+
+    it('sin historial no manda contexto', async () => {
+      prisma.message.findMany.mockResolvedValue([]);
+
+      const call = await ask('¿cuál es el horario?');
+
+      expect(call.context).toBeNull();
+    });
+
+    it('al pasarse del tope descarta lo MÁS ANTIGUO', async () => {
+      // Lo último que se dijo es lo que da sentido a la pregunta actual.
+      const largo = 'x'.repeat(560);
+      prisma.message.findMany.mockResolvedValue([
+        { direction: 'IN', body: 'lo último y más importante' },
+        { direction: 'OUT', body: largo },
+        { direction: 'IN', body: 'lo más viejo' },
+      ]);
+
+      const call = await ask('¿y eso?');
+
+      expect(call.context).toContain('lo último y más importante');
+      expect(call.context).not.toContain('lo más viejo');
+      expect(call.context!.length).toBeLessThanOrEqual(600);
+    });
+
+    it('mira solo 3 pares hacia atrás', async () => {
+      prisma.message.findMany.mockResolvedValue([]);
+
+      await ask('¿horarios?');
+
+      expect(prisma.message.findMany.mock.calls.at(-1)![0].take).toBe(6);
+    });
   });
 
   // ── M7: handoff con expectativa real y retorno automático ──

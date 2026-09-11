@@ -88,6 +88,37 @@ export interface DashboardMetrics {
     totalAppointments: number[]; // 30 items
     noShowRate: number[]; // 30 items, 0..1
   };
+  botActivity: BotActivity;
+}
+
+/**
+ * Actividad del bot de WhatsApp (M9).
+ *
+ * Los `null` NO son ceros: significan "esto todavía no se puede mostrar", y la
+ * UI tiene que decirlo con palabras. Un 0% de handoff pintado como dato diría
+ * que el bot lo resuelve todo solo, que es lo contrario de no saberlo.
+ */
+export interface BotActivity {
+  windowDays: number;
+  /** `false` = no hay ni un contador en el periodo. */
+  hasData: boolean;
+  /** Alguna lectura falló: los totales están incompletos. */
+  partial: boolean;
+  turns: {
+    /** Incluye descartados y adjuntos: no es "turnos atendidos". */
+    total: number;
+    attended: number;
+    unsupported: number;
+    skipped: number;
+    errors: number;
+  };
+  /** Por qué no hay desglose. Las dos causas necesitan textos distintos. */
+  breakdown: 'ok' | 'not-measured' | 'below-threshold';
+  /** `null` si no se mide aún, o si el periodo no llega al mínimo de turnos. */
+  intents: Array<{ intent: string; count: number }> | null;
+  handoffRate: number | null;
+  nullAnswerRate: number | null;
+  citasPorOrigen: Array<{ source: string; count: number }>;
 }
 
 export interface DeltaValue {

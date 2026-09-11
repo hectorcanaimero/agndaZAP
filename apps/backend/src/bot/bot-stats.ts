@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import type Redis from 'ioredis';
 import { DateTime } from 'luxon';
-import type { BotTurnEvent } from './bot-turn-event';
+import type { BotTurnEvent, BotTurnOutcome } from './bot-turn-event';
 
 /**
  * Contadores agregados del bot, por clínica y día, en Redis.
@@ -40,12 +40,11 @@ export const BOT_STATS_TTL_S = 35 * 86_400;
  */
 export function botStatsKey(
   clinicId: string,
-  timezone?: string,
+  timezone: string,
   now: DateTime = DateTime.now(),
 ): string {
   const safeClinic = clinicId.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
-  const day = (timezone ? now.setZone(timezone) : now).toISODate();
-  return `bot:stats:${safeClinic}:${day}`;
+  return `bot:stats:${safeClinic}:${now.setZone(timezone).toISODate()}`;
 }
 
 /**
@@ -70,7 +69,7 @@ export async function recordBotStats(
   redis: Redis,
   logger: Logger,
   event: BotTurnEvent,
-  timezone?: string,
+  timezone: string,
 ): Promise<void> {
   try {
     const key = botStatsKey(event.clinicId, timezone);
@@ -123,4 +122,112 @@ export async function recordBotStats(
       `contadores del bot fallaron (redis) clinic=${event.clinicId}: ${(e as Error).message}`,
     );
   }
+}
+
+/**
+ * Lo que el dashboard necesita saber de un periodo.
+ *
+ * Los campos que pueden no estar cableados todavía son `number | null`, y el
+ * `null` significa **"no se midió ni una vez en el periodo"**, no cero. Es la
+ * distinción que sostiene todo el bloque del panel: un contador que nadie
+ * escribe leído como 0 se pinta como "0% de derivaciones a una persona", o sea
+ * exactamente la afirmación contraria a la verdad.
+ */
+export interface BotStatsWindow {
+  /** Turnos contados, incluidos descartados y adjuntos. */
+  turns: number;
+  /** Desglose por desenlace: `ok`, `skipped`, `unsupported`, `error`. */
+  outcomes: Partial<Record<BotTurnOutcome, number>>;
+  /** Por intención. Vacío mientras el bot no cablee `recordBotTurn`. */
+  intents: Record<string, number>;
+  /** `null` = el bot todavía no anota derivaciones. */
+  handoff: number | null;
+  /** `null` = no hubo ni una consulta al RAG en el periodo. */
+  rag: number | null;
+  ragMatched: number | null;
+  nullAnswer: number | null;
+  /**
+   * `false` cuando no hay ni un contador en el periodo. Sirve para distinguir
+   * "la clínica no tuvo actividad" de "esto todavía no mide nada", que en un
+   * panel se ven igual (ceros) y significan cosas opuestas.
+   */
+  hasData: boolean;
+  /** Días cuya lectura falló. Si es > 0, los totales están incompletos. */
+  readErrors: number;
+}
+
+/**
+ * Suma los contadores de los últimos `days` días (incluido hoy) en la zona de
+ * la clínica.
+ *
+ * Un `HGETALL` por día en un pipeline: con 30 días son 30 lecturas de hashes
+ * pequeños en una sola ida y vuelta. No hay `KEYS` ni `SCAN` a propósito —
+ * recorrer el espacio de claves de Redis desde una request del panel es la
+ * forma clásica de convertir un dashboard en un incidente.
+ */
+export async function readBotStats(
+  redis: Redis,
+  clinicId: string,
+  timezone: string,
+  days: number,
+  now: DateTime = DateTime.now(),
+): Promise<BotStatsWindow> {
+  const local = now.setZone(timezone);
+  const pipe = redis.pipeline();
+  for (let i = 0; i < days; i++) {
+    pipe.hgetall(botStatsKey(clinicId, timezone, local.minus({ days: i })));
+  }
+  const results = await pipe.exec();
+
+  const acc: BotStatsWindow = {
+    turns: 0,
+    outcomes: {},
+    intents: {},
+    handoff: null,
+    rag: null,
+    ragMatched: null,
+    nullAnswer: null,
+    hasData: false,
+    readErrors: 0,
+  };
+
+  /** Suma en un campo que arranca en `null`: visto una vez, deja de ser null. */
+  const bump = (key: 'handoff' | 'rag' | 'ragMatched' | 'nullAnswer', n: number) => {
+    acc[key] = (acc[key] ?? 0) + n;
+  };
+
+  for (const [err, value] of results ?? []) {
+    // El lado de escritura ya mira los errores por comando; el de lectura
+    // tiene el mismo riesgo, y tragárselos haría que el panel mostrara un
+    // total parcial como si fuera el real.
+    if (err) {
+      acc.readErrors += 1;
+      continue;
+    }
+    if (!value) continue;
+    for (const [field, raw] of Object.entries(value as Record<string, string>)) {
+      const n = Number.parseInt(raw, 10);
+      if (!Number.isFinite(n)) continue;
+      acc.hasData = true;
+      if (field === 'turns') acc.turns += n;
+      else if (field === 'handoff') bump('handoff', n);
+      else if (field === 'rag') bump('rag', n);
+      else if (field === 'ragMatched') bump('ragMatched', n);
+      else if (field === 'nullAnswer') bump('nullAnswer', n);
+      else if (field.startsWith('outcome:')) {
+        const key = field.slice('outcome:'.length) as BotTurnOutcome;
+        acc.outcomes[key] = (acc.outcomes[key] ?? 0) + n;
+      } else if (field.startsWith('intent:')) {
+        const key = field.slice('intent:'.length);
+        acc.intents[key] = (acc.intents[key] ?? 0) + n;
+      }
+      // `source:*` se ignora a propósito: el panel no muestra si respondió una
+      // regla o el LLM, es una métrica nuestra, no de la clínica.
+    }
+  }
+
+  // `nullAnswer` sólo tiene sentido sobre consultas al RAG: si hubo RAG pero
+  // ninguna acabó en "no lo sé", el cero es un dato real, no una ausencia.
+  if (acc.rag !== null && acc.nullAnswer === null) acc.nullAnswer = 0;
+  return acc;
 }

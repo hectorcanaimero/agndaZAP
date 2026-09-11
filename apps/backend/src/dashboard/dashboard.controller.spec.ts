@@ -1,5 +1,6 @@
 import { DateTime } from 'luxon';
 import type { AuthUser } from '../auth/tenant-context.util';
+import type Redis from 'ioredis';
 import { PrismaService } from '../prisma/prisma.service';
 import { DashboardController } from './dashboard.controller';
 
@@ -7,6 +8,12 @@ type Deep<T> = { [K in keyof T]?: any } & Record<string, any>;
 
 describe('DashboardController', () => {
   let prisma: Deep<PrismaService>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let redis: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let botStatsPages: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let sourceGroups: any[];
   let controller: DashboardController;
   let tz: string;
   let now: DateTime;
@@ -147,6 +154,8 @@ describe('DashboardController', () => {
         findUnique: jest.fn().mockResolvedValue({ timezone: tz }),
       },
       appointment: {
+        // M9-b: citas por origen, agrupadas por `createdAt` en la ventana.
+        groupBy: jest.fn(async () => sourceGroups),
         // Se llama varias veces: seed60 primero, luego appts14, todayList,
         // pendingList y weekAppts. La implementación defaultea a arrays vacíos
         // salvo para el primer fetch (60d).
@@ -171,7 +180,26 @@ describe('DashboardController', () => {
         findMany: jest.fn().mockResolvedValue([]),
       },
     };
-    controller = new DashboardController(prisma as unknown as PrismaService);
+    botStatsPages = [];
+    sourceGroups = [
+      { source: 'BOT', _count: { _all: 7 } },
+      { source: 'PUBLIC', _count: { _all: 11 } },
+    ];
+    // Redis del bloque de actividad del bot (M9). Por defecto, sin datos.
+    redis = {
+      pipeline: jest.fn(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const chain: any = {
+          exec: jest.fn(async () => botStatsPages),
+        };
+        chain.hgetall = jest.fn(() => chain);
+        return chain;
+      }),
+    };
+    controller = new DashboardController(
+      prisma as unknown as PrismaService,
+      redis as unknown as Redis,
+    );
   });
 
   // ─── Legacy contract (mantener) ────────────────────────────────────────
@@ -595,5 +623,197 @@ describe('DashboardController', () => {
     // businessHour
     const callBH = prisma.businessHour.findMany.mock.calls[0][0];
     expect(callBH.where.clinicId).toBe('clinic-A');
+  });
+
+  /**
+   * M9-b: actividad del bot. Los contadores vienen de Redis (los escribe el
+   * propio bot) y las citas por origen de la base.
+   */
+  describe('botActivity', () => {
+    /** Un día de contadores, como los devuelve HGETALL (todo strings). */
+    function day(fields: Record<string, string>) {
+      return [null, fields];
+    }
+
+    it('sin contadores: hasData false y nada inventado', async () => {
+      const m = await controller.metrics(adminA);
+
+      expect(m.botActivity.hasData).toBe(false);
+      expect(m.botActivity.turns.total).toBe(0);
+      // `null`, no 0: un 0% de handoff diría que el bot lo resuelve todo solo.
+      expect(m.botActivity.handoffRate).toBeNull();
+      expect(m.botActivity.nullAnswerRate).toBeNull();
+      expect(m.botActivity.intents).toBeNull();
+    });
+
+    it('suma los días del periodo', async () => {
+      botStatsPages = [
+        day({ turns: '5', 'outcome:ok': '4', 'outcome:error': '1' }),
+        day({ turns: '3', 'outcome:ok': '3' }),
+      ];
+      const m = await controller.metrics(adminA);
+
+      expect(m.botActivity.hasData).toBe(true);
+      expect(m.botActivity.turns.total).toBe(8);
+      expect(m.botActivity.turns.attended).toBe(7);
+      expect(m.botActivity.turns.errors).toBe(1);
+    });
+
+    it('la tasa de handoff se calcula sobre los turnos', async () => {
+      botStatsPages = [day({ turns: '10', handoff: '2' })];
+      const m = await controller.metrics(adminA);
+      expect(m.botActivity.handoffRate).toBeCloseTo(0.2);
+    });
+
+    /**
+     * El contador `handoff` sólo existe cuando el bot lo escribe. Leerlo como
+     * 0 pintaba "Derivados a una persona: 0%", que es justo la afirmación
+     * contraria a "todavía no lo medimos".
+     */
+    it('sin contador de handoff la tasa es null, no 0%', async () => {
+      botStatsPages = [day({ turns: '50', 'outcome:ok': '50' })];
+      const m = await controller.metrics(adminA);
+      expect(m.botActivity.handoffRate).toBeNull();
+    });
+
+    it('un handoff medido y en cero SÍ es 0%: eso es un dato', async () => {
+      botStatsPages = [day({ turns: '50', handoff: '0' })];
+      const m = await controller.metrics(adminA);
+      expect(m.botActivity.handoffRate).toBe(0);
+    });
+
+    it('por debajo del umbral tampoco se da la tasa de handoff', async () => {
+      // Con un turno, "100% derivados" dice que a ESA persona la atendió un
+      // humano.
+      botStatsPages = [day({ turns: '1', handoff: '1' })];
+      const m = await controller.metrics(adminA);
+      expect(m.botActivity.handoffRate).toBeNull();
+    });
+
+    it('la tasa de NULL_ANSWER se calcula sobre las consultas al RAG, no sobre los turnos', async () => {
+      // Si se dividiera entre turnos, una clínica con mucho agendamiento y
+      // poca consulta parecería tener un RAG buenísimo.
+      botStatsPages = [day({ turns: '100', rag: '20', nullAnswer: '5' })];
+      const m = await controller.metrics(adminA);
+      expect(m.botActivity.nullAnswerRate).toBeCloseTo(0.25);
+    });
+
+    it('su umbral es el del RAG, no el de los turnos', async () => {
+      // 100 turnos pero 4 consultas: la tasa hablaría de esas 4 preguntas.
+      botStatsPages = [day({ turns: '100', rag: '4', nullAnswer: '1' })];
+      const m = await controller.metrics(adminA);
+      expect(m.botActivity.nullAnswerRate).toBeNull();
+    });
+
+    /**
+     * En una clínica con dos mensajes en un mes, el desglose por intención
+     * deja de ser una métrica agregada y pasa a decir qué quería ese paciente.
+     */
+    it('con menos de 10 turnos NO desglosa intenciones', async () => {
+      botStatsPages = [
+        day({ turns: '9', 'outcome:ok': '9', 'intent:agendar': '9' }),
+      ];
+      const m = await controller.metrics(adminA);
+
+      expect(m.botActivity.turns.total).toBe(9);
+      expect(m.botActivity.intents).toBeNull();
+    });
+
+    it('a partir de 10 turnos sí, ordenado de más a menos', async () => {
+      botStatsPages = [
+        day({
+          turns: '10',
+          'intent:agendar': '6',
+          'intent:cancelar': '3',
+          'intent:otro': '1',
+        }),
+      ];
+      const m = await controller.metrics(adminA);
+
+      expect(m.botActivity.intents).toEqual([
+        { intent: 'agendar', count: 6 },
+        { intent: 'cancelar', count: 3 },
+        { intent: 'otro', count: 1 },
+      ]);
+    });
+
+    it('con turnos pero sin intenciones anotadas: null y motivo `not-measured`', async () => {
+      // Decirle "hacen falta 10 mensajes" a una clínica que ya tiene 20 es una
+      // mentira que el propio usuario puede comprobar.
+      botStatsPages = [day({ turns: '20', 'outcome:ok': '20' })];
+      const m = await controller.metrics(adminA);
+
+      expect(m.botActivity.intents).toBeNull();
+      expect(m.botActivity.breakdown).toBe('not-measured');
+    });
+
+    it('con pocas intenciones anotadas el motivo es el umbral', async () => {
+      botStatsPages = [day({ turns: '5', 'intent:agendar': '5' })];
+      const m = await controller.metrics(adminA);
+
+      expect(m.botActivity.intents).toBeNull();
+      expect(m.botActivity.breakdown).toBe('below-threshold');
+    });
+
+    it('las citas por origen se agrupan por createdAt en la ventana, no por startAt', async () => {
+      // La pregunta es "¿cuántas citas me trajo el asistente?". Agrupando por
+      // startAt, una cita agendada hoy para la semana que viene no contaba.
+      const m = await controller.metrics(adminA);
+
+      expect(prisma.appointment.groupBy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          by: ['source'],
+          where: expect.objectContaining({
+            clinicId: 'clinic-A',
+            createdAt: expect.objectContaining({ gte: expect.any(Date) }),
+          }),
+        }),
+      );
+      expect(m.botActivity.citasPorOrigen).toEqual([
+        { source: 'PUBLIC', count: 11 },
+        { source: 'BOT', count: 7 },
+      ]);
+    });
+
+    it('un día ilegible marca el periodo como parcial', async () => {
+      botStatsPages = [[new Error('WRONGTYPE'), null], day({ turns: '3' })];
+      const m = await controller.metrics(adminA);
+      expect(m.botActivity.partial).toBe(true);
+    });
+
+    it('si Redis falla, el resto del panel sigue funcionando', async () => {
+      // El dashboard es lo que la clínica abre por la mañana: no puede caerse
+      // entero porque un contador no esté disponible.
+      redis.pipeline = jest.fn(() => {
+        throw new Error('redis down');
+      });
+      const m = await controller.metrics(adminA);
+
+      expect(m.botActivity.hasData).toBe(false);
+      expect(m.noShowRate).toBeDefined();
+      expect(m.today).toBeDefined();
+    });
+
+    it('lee un HGETALL por día del periodo, sin recorrer el espacio de claves', async () => {
+      await controller.metrics(adminA);
+      const chain = redis.pipeline.mock.results[0].value;
+      expect(chain.hgetall).toHaveBeenCalledTimes(30);
+      expect(chain.hgetall.mock.calls[0][0]).toMatch(
+        /^bot:stats:clinic-A:\d{4}-\d{2}-\d{2}$/,
+      );
+    });
+
+    it('si Redis tarda demasiado, el bloque queda sin datos y el panel sale igual', async () => {
+      // El modo de fallo que duele no es "Redis caído" sino "Redis vivo y
+      // lento": sin tope, se llevaría por delante todo el dashboard.
+      redis.pipeline = jest.fn(() => ({
+        hgetall: jest.fn().mockReturnThis(),
+        exec: () => new Promise(() => {}),
+      }));
+      const m = await controller.metrics(adminA);
+
+      expect(m.botActivity.hasData).toBe(false);
+      expect(m.today).toBeDefined();
+    }, 10_000);
   });
 });

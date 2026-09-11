@@ -339,6 +339,55 @@ export class BotService {
       : rendered;
   }
 
+  /** Tope del bloque de contexto que viaja al LLM. */
+  private static readonly CONTEXT_MAX_CHARS = 600;
+
+  /** Pares IN/OUT que se miran hacia atrás para armar el contexto. */
+  private static readonly CONTEXT_PAIRS = 3;
+
+  /**
+   * Historial reciente de la conversación para que el LLM resuelva referencias
+   * (M5): "¿y los sábados?" después de preguntar por horarios no significa nada
+   * suelto, y hoy cada mensaje se clasifica aislado.
+   *
+   * Los últimos `CONTEXT_PAIRS` pares IN/OUT, del más viejo al más nuevo, con
+   * tope de caracteres. Al recortar se descartan los mensajes MÁS ANTIGUOS: lo
+   * último que se dijo es lo que da sentido a la pregunta actual.
+   *
+   * Sin PII nueva: son mensajes que ya viven en `Message`, de esta misma
+   * conversación. No se cruza nada de otras.
+   */
+  private async buildConversationContext(
+    conversationId: string,
+  ): Promise<string | null> {
+    const rows = await this.prisma.message.findMany({
+      where: { conversationId },
+      orderBy: { createdAt: 'desc' },
+      take: BotService.CONTEXT_PAIRS * 2,
+      select: { direction: true, body: true },
+    });
+    if (rows.length === 0) return null;
+
+    const lines = rows
+      .reverse()
+      .map(
+        (m) =>
+          `${m.direction === 'IN' ? 'Paciente' : 'Asistente'}: ${m.body.replace(/\s+/g, ' ').trim()}`,
+      )
+      .filter((l) => l.length > 10);
+    if (lines.length === 0) return null;
+
+    // Recorte por el principio, quedándonos con lo más reciente.
+    const kept: string[] = [];
+    let total = 0;
+    for (const line of [...lines].reverse()) {
+      if (total + line.length + 1 > BotService.CONTEXT_MAX_CHARS) break;
+      kept.unshift(line);
+      total += line.length + 1;
+    }
+    return kept.length > 0 ? kept.join('\n') : null;
+  }
+
   /**
    * Cierre con acción (M6): tras responder una duda, invita a agendar.
    *
@@ -687,9 +736,13 @@ export class BotService {
         // RAG sobre FaqChunk: si hay match confiable → respondemos con el
         // texto sintetizado por el LLM desde las fuentes. Si no → handoff a
         // humano (política "prefiero handoff que alucinar").
+        // El historial reciente resuelve referencias ("¿y los sábados?"). El
+        // mensaje actual ya se acaba de persistir, así que queda incluido.
+        const context = await this.buildConversationContext(convo.id);
         const result = await this.knowledge.answer({
           clinicId,
           question: effectiveText,
+          context,
           locale: clinic.locale,
           tone: clinic.botTone, // custom per-tenant desde /panel/ajustes
           // Teléfono de la conversación (el que WAHA reporta, no uno
