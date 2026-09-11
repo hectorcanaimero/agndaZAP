@@ -1582,6 +1582,33 @@ export class BotService {
       );
     } catch (e) {
       if (e instanceof ConflictException) {
+        // `rescheduleAppointment` usa el MISMO tipo de excepción para dos cosas
+        // distintas: el slot ocupado y el tope de movimientos del paciente.
+        // Re-ofrecer horarios ante el tope sería un bucle infinito — el
+        // paciente elegiría otro y volvería a fallar igual.
+        //
+        // El discriminante es el mensaje, que no es ideal; si algún día el
+        // service expone un error tipado, hay que cambiarlo por eso.
+        if (/tope de reagendamientos/i.test((e as Error).message)) {
+          await this.resetFlow(convo.id);
+          const link = data.rescheduleOf
+            ? await this.manageLink(clinic, {
+                id: data.rescheduleOf,
+                clinicId: clinic.id,
+                startAt: new Date(data.startAtISO!),
+              })
+            : null;
+          await this.markNeedsHuman(convo.id);
+          await this.reply(
+            clinic.wahaSession,
+            convo.chatId,
+            convo.id,
+            `Ya moviste esta cita varias veces, así que prefiero que lo veas con una persona del equipo para no liarlo más. Te derivo con recepción.${
+              link ? `\n\nMientras tanto, aquí tienes el detalle de tu cita:\n${link}` : ''
+            }`,
+          );
+          return;
+        }
         // El slot se ocupó entre ASK_SLOT y CONFIRM. En vez de resetear la FSM,
         // re-listamos horarios y volvemos a ASK_SLOT — reduce fricción y evita
         // que el paciente tenga que arrancar de cero.
@@ -1658,12 +1685,17 @@ export class BotService {
 
     const offeredSlots = slots.map((s) => s.startAt.toISOString());
     const labels = slots.map((s, i) => `${i + 1}. ${this.slotLabel(s, clinic)}`);
-    // Preservamos serviceId, professionalId y patientName; descartamos el
-    // startAtISO viejo (ese era el que se acababa de ocupar).
+    // Preservamos serviceId, professionalId, patientName y `rescheduleOf`;
+    // descartamos el startAtISO viejo (ese era el que se acababa de ocupar).
+    //
+    // `rescheduleOf` es crítico: sin él, tras un choque de horario la FSM
+    // seguiría como si fuera una cita nueva y el paciente acabaría con DOS
+    // —la vieja sin mover y otra recién creada— en vez de con la suya movida.
     const nextData: FlowData = {
       serviceId: data.serviceId,
       professionalId: data.professionalId,
       ...(data.patientName ? { patientName: data.patientName } : {}),
+      ...(data.rescheduleOf ? { rescheduleOf: data.rescheduleOf } : {}),
       offeredSlots,
     };
     await this.prisma.conversation.update({
@@ -1724,10 +1756,13 @@ export class BotService {
 
     const offeredSlots = slots.map((s) => s.startAt.toISOString());
     const labels = slots.map((s, i) => `${i + 1}. ${this.slotLabel(s, clinic)}`);
+    // `rescheduleOf` viaja con el flujo: si no, tras un slot caducado la FSM
+    // crearía una cita nueva en vez de mover la que el paciente quería mover.
     const nextData: FlowData = {
       serviceId: data.serviceId,
       professionalId: data.professionalId,
       ...(data.patientName ? { patientName: data.patientName } : {}),
+      ...(data.rescheduleOf ? { rescheduleOf: data.rescheduleOf } : {}),
       offeredSlots,
     };
     await this.prisma.conversation.update({
