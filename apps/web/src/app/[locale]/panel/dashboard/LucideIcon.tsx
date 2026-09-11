@@ -1,5 +1,6 @@
 import {
   ArrowDownRight,
+  Bot,
   ArrowUpRight,
   CalendarClock,
   CalendarDays,
@@ -27,6 +28,7 @@ import {
  */
 type IconName =
   | 'ArrowDownRight'
+  | 'Bot'
   | 'ArrowUpRight'
   | 'CalendarClock'
   | 'CalendarDays'
@@ -45,6 +47,7 @@ type IconName =
 
 const MAP: Record<IconName, React.ComponentType<LucideProps>> = {
   ArrowDownRight,
+  Bot,
   ArrowUpRight,
   CalendarClock,
   CalendarDays,

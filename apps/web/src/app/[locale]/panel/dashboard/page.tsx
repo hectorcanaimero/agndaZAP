@@ -10,6 +10,7 @@ import { StatusDonut } from './StatusDonut';
 import { TodayPanel } from './TodayPanel';
 import { TopProfessionalsList } from './TopProfessionalsList';
 import { TopServicesBar } from './TopServicesBar';
+import { BotActivityPanel } from './BotActivityPanel';
 import type { DashboardMetrics, AppointmentStatus } from './types';
 
 /**
@@ -350,6 +351,12 @@ export default async function DashboardPage({
             }}
           />
         </SectionCard>
+      </section>
+
+      {/* Actividad del bot de WhatsApp (M9). Va al final: es contexto del
+          canal, no una métrica de negocio como el no-show. */}
+      <section className="pb-2">
+        <BotActivityPanel data={metrics.botActivity} />
       </section>
 
       {/* Footnote con contexto de la ventana. */}

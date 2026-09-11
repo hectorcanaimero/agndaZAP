@@ -1,6 +1,19 @@
-import { Controller, Get, NotFoundException, UseGuards } from '@nestjs/common';
-import { AppointmentStatus, ReminderStatus } from '@prisma/client';
+import {
+  Controller,
+  Get,
+  Inject,
+  NotFoundException,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  AppointmentSource,
+  AppointmentStatus,
+  ReminderStatus,
+} from '@prisma/client';
+import type Redis from 'ioredis';
 import { DateTime } from 'luxon';
+import { readBotStats } from '../bot/bot-stats';
+import { REDIS_CLIENT } from '../public/rate-limit.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -88,6 +101,47 @@ export interface DashboardMetrics {
     totalAppointments: number[];
     noShowRate: number[];
   };
+  /**
+   * Actividad del bot de WhatsApp en los últimos 30 días (M9).
+   *
+   * Sale de los contadores que escribe el propio bot en Redis, no de la base:
+   * las intenciones y la tasa de NULL_ANSWER no viven en ninguna tabla. Ver
+   * [[notas/2026-09-11-evento-bot-turn]].
+   */
+  botActivity: {
+    windowDays: number;
+    /**
+     * `false` cuando no hay ni un contador en el periodo. El panel lo usa para
+     * decir "todavía no hay datos" en vez de pintar ceros, que significan algo
+     * distinto (que sí hubo actividad y fue nula).
+     */
+    hasData: boolean;
+    /** Alguna lectura del periodo falló: los totales están incompletos. */
+    partial: boolean;
+    turns: {
+      /** Incluye descartados y adjuntos: no es "turnos atendidos". */
+      total: number;
+      attended: number;
+      unsupported: number;
+      skipped: number;
+      errors: number;
+    };
+    /**
+     * Por qué no hay desglose, para que el panel no diga "hacen falta 10
+     * mensajes" a una clínica que ya tiene 20.
+     */
+    breakdown: 'ok' | 'not-measured' | 'below-threshold';
+    /**
+     * `null` hasta que el bot cablee la anotación de intención, o cuando el
+     * periodo no llega al mínimo de turnos. No es lo mismo que una lista vacía.
+     */
+    intents: Array<{ intent: string; count: number }> | null;
+    /** Cuántos turnos acabaron derivando a una persona. `null` si no se mide. */
+    handoffRate: number | null;
+    /** De las consultas al RAG, cuántas acabaron en "no lo sé". `null` si no hay. */
+    nullAnswerRate: number | null;
+    citasPorOrigen: Array<{ source: string; count: number }>;
+  };
 }
 
 // Tipo interno para las appts del rango 60d con `select` expandido.
@@ -101,6 +155,7 @@ interface Appt60d {
   confirmedAt: Date | null;
   canceledByPatient: boolean;
   rescheduleCount: number;
+  source: AppointmentSource;
   patientId: string;
   serviceId: string;
   service: { name: string; priceCents: number | null };
@@ -124,7 +179,29 @@ interface Appt60d {
 @UseGuards(RolesGuard)
 @Roles('CLINIC_ADMIN', 'SUPERADMIN')
 export class DashboardController {
-  constructor(private readonly prisma: PrismaService) {}
+  /**
+   * Mínimo de turnos para mostrar desgloses y tasas.
+   *
+   * En una clínica con dos mensajes en un mes, un desglose deja de ser una
+   * métrica agregada y pasa a decir qué quería ese paciente concreto — y un
+   * "100% derivados a una persona" sobre un turno dice que a ESA persona la
+   * atendió un humano. Por debajo del umbral se muestran sólo los conteos.
+   */
+  private static readonly MIN_TURNS_FOR_BREAKDOWN = 10;
+
+  /** Ventana del bloque de actividad del bot. */
+  private static readonly BOT_WINDOW_DAYS = 30;
+
+  /**
+   * Tope para los contadores. El dashboard es lo que la clínica abre por la
+   * mañana: preferimos el bloque sin datos antes que la página colgada.
+   */
+  private static readonly BOT_STATS_TIMEOUT_MS = 300;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+  ) {}
 
   @Get('metrics')
   async metrics(@CurrentUser() user: AuthUser): Promise<DashboardMetrics> {
@@ -164,6 +241,9 @@ export class DashboardController {
         confirmedAt: true,
         canceledByPatient: true,
         rescheduleCount: true,
+        // Por dónde entró la cita (BOT / PUBLIC / BOT_WEB): es la mitad de la
+        // historia del bloque de actividad del bot.
+        source: true,
         patientId: true,
         serviceId: true,
         service: { select: { name: true, priceCents: true } },
@@ -552,6 +632,98 @@ export class DashboardController {
     for (const a of appts30) activePatientsSet.add(a.patientId);
     const activePatients30d = activePatientsSet.size;
 
+    // ── actividad del bot: 30 días (M9) ──────────────────────────────────
+    // Los contadores vienen de Redis y las citas por origen de la base: son
+    // dos fuentes porque miden cosas distintas. Un fallo de Redis degrada este
+    // bloque a "sin datos", nunca tumba el resto del panel — el dashboard es
+    // lo que la clínica abre por la mañana.
+    const botWindow = DashboardController.BOT_WINDOW_DAYS;
+    // Misma ventana que los contadores: `readBotStats` cuenta hoy más los 29
+    // anteriores, así que las citas por origen se agrupan sobre ese mismo
+    // rango. Si no, el bloque mezclaría dos periodos bajo un título.
+    const botWindowStart = now
+      .minus({ days: botWindow - 1 })
+      .startOf('day')
+      .toJSDate();
+
+    const [botStats, sourceGroups] = await Promise.all([
+      // Con Redis caído el catch alcanza, pero el modo de fallo que duele es
+      // "vivo y lento": el cliente no tiene `commandTimeout`, así que sin la
+      // carrera un Redis colgado se llevaría por delante todo el dashboard.
+      Promise.race([
+        readBotStats(this.redis, scope.clinicId, tz, botWindow, now),
+        new Promise<null>((resolve) =>
+          setTimeout(resolve, DashboardController.BOT_STATS_TIMEOUT_MS, null),
+        ),
+      ]).catch(() => null),
+      // Por `createdAt`, NO por `startAt`. La pregunta que responde este bloque
+      // es "¿cuántas citas me trajo el asistente?", y agrupar por `startAt`
+      // contestaba "las que ya se celebraron" — dejando fuera justo las que el
+      // bot agendó esta semana para la que viene.
+      this.prisma.appointment.groupBy({
+        by: ['source'],
+        where: { ...scope, createdAt: { gte: botWindowStart } },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const turnsTotal = botStats?.turns ?? 0;
+    const ragTotal = botStats?.rag ?? null;
+    // Umbral de privacidad: por debajo, un desglose deja de ser una métrica
+    // agregada y pasa a decir qué quería un paciente concreto. Los conteos
+    // brutos (turnos, adjuntos) sí se muestran: son volumen del propio canal
+    // de la clínica, que ya ve mensaje a mensaje en su WhatsApp; lo que se
+    // guarda es la CLASIFICACIÓN que hicimos nosotros.
+    const enoughTurns = turnsTotal >= DashboardController.MIN_TURNS_FOR_BREAKDOWN;
+    const intentsMeasured = Object.keys(botStats?.intents ?? {}).length > 0;
+
+    const botActivity = {
+      windowDays: botWindow,
+      hasData: botStats?.hasData ?? false,
+      partial: (botStats?.readErrors ?? 0) > 0,
+      turns: {
+        total: turnsTotal,
+        attended: botStats?.outcomes.ok ?? 0,
+        unsupported: botStats?.outcomes.unsupported ?? 0,
+        skipped: botStats?.outcomes.skipped ?? 0,
+        errors: botStats?.outcomes.error ?? 0,
+      },
+      /**
+       * Por qué no hay desglose. El panel necesita distinguirlo: decirle
+       * "hacen falta 10 mensajes" a una clínica que ya tiene 20 es una mentira
+       * verificable por quien la lee.
+       */
+      breakdown: !intentsMeasured
+        ? ('not-measured' as const)
+        : !enoughTurns
+          ? ('below-threshold' as const)
+          : ('ok' as const),
+      intents:
+        intentsMeasured && enoughTurns
+          ? Object.entries(botStats?.intents ?? {})
+              .map(([intent, count]) => ({ intent, count }))
+              .sort((a, b) => b.count - a.count)
+          : null,
+      // `null` cuando el contador no existe (nadie lo escribe todavía) o
+      // cuando el volumen es tan bajo que la tasa hablaría de una persona.
+      // Un 0 aquí diría "el bot no derivó nunca", que es una afirmación.
+      handoffRate:
+        botStats?.handoff !== null && botStats?.handoff !== undefined && enoughTurns
+          ? botStats.handoff / turnsTotal
+          : null,
+      // Su denominador es el RAG, no los turnos: dividir entre turnos haría
+      // que una clínica con mucho agendamiento y poca consulta pareciera tener
+      // un RAG buenísimo.
+      nullAnswerRate:
+        ragTotal !== null &&
+        ragTotal >= DashboardController.MIN_TURNS_FOR_BREAKDOWN
+          ? (botStats?.nullAnswer ?? 0) / ragTotal
+          : null,
+      citasPorOrigen: sourceGroups
+        .map((g) => ({ source: g.source as string, count: g._count._all }))
+        .sort((a, b) => b.count - a.count),
+    };
+
     // ── sparklines: 30 días (oldest first) ────────────────────────────────
     // totalAppointments[day] = # citas del día por startAt en TZ clínica.
     // noShowRate[day] = NO_SHOW / (ATENDIDA + NO_SHOW), 0 si closed==0.
@@ -624,6 +796,7 @@ export class DashboardController {
       occupancyRate,
       activePatients30d,
       sparklines,
+      botActivity,
     };
   }
 }
