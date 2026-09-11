@@ -5,10 +5,8 @@ import { CLINIC_SLUG, SEED, uniquePhone, waitForFreshRateLimitBucket } from './h
  * E2E de la gestión de cita por link (M2-b): crear una cita, sacar el link de
  * gestión de `/gracias`, cambiar el horario y cancelar.
  *
- * **Requiere el backend de M2-a** (`GET/POST …/appointments/manage/:token`).
- * Mientras esos endpoints no estén en `main`, el spec queda desactivado: se
- * enciende con `E2E_MANAGE=1`. Cuando M2-a se mergee, quitar la guarda y
- * dejarlo corriendo siempre.
+ * Cubre los endpoints de M2-a (`GET/POST …/appointments/manage/:token`), ya en
+ * `main` desde el merge de #55.
  *
  * El link lleva un token bearer y por eso NO viaja en la query string: el web
  * lo pasa por `sessionStorage` (`agz.thanks.manageUrl`), igual que el nombre
@@ -16,11 +14,6 @@ import { CLINIC_SLUG, SEED, uniquePhone, waitForFreshRateLimitBucket } from './h
  * queremos cubrir.
  */
 test.describe('Gestión de cita por link', () => {
-  test.skip(
-    !process.env.E2E_MANAGE,
-    'Necesita los endpoints de M2-a; encender con E2E_MANAGE=1',
-  );
-
   test('crea la cita, cambia el horario y la cancela desde el link', async ({
     page,
   }) => {
