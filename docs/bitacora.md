@@ -892,3 +892,14 @@
   exactamente lo que le pedimos y el bot no lo entendiera. Hay un test que fija esa correspondencia.
 - El override por tenant gana sobre el idioma: no traducimos lo que escribió un operador.
 - Detalle en [[notas/2026-09-11-bot-copy-es-pt]].
+
+## 2026-09-11 — M3-b: intenciones nuevas y contexto al clasificador
+- `AGRADECER` cierra con cortesía (mismo pool que el cierre determinista), sin RAG ni handoff.
+- `CONSULTA_CITA` ("¿cuándo es mi cita?") responde **desde la BD**, no desde el RAG: la respuesta
+  está en `Appointment`, y mandarla al RAG era pedirle al LLM que adivinara un dato que tenemos.
+  Incluye el link de gestión, para que no tenga que volver a escribir.
+- El historial de la conversación va ahora **al clasificador además de al RAG**, con una sola
+  lectura de `Message` para los dos. `IntentService` ya lo trata como texto no confiable (M3-a),
+  igual que `knowledge.service.ts`.
+- `buildConversationContext` pasa a devolver `string[]`: es lo que espera el clasificador, y el
+  RAG lo une. Antes devolvía el string ya unido y habría hecho falta partirlo.

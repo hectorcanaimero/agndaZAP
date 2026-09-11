@@ -95,6 +95,10 @@ export interface BotCopy {
   confirmNeedsWord: string;
   handoffOutsideHours(schedule: string): string;
 
+  /** Respuesta a "¿cuándo es mi cita?" (M3-b). */
+  appointmentInfo(service: string, professional: string, when: string, statusLine: string, link: string | null): string;
+  noAppointmentToTell: string;
+
   // ── Processors (recordatorios y follow-up) ──
   reminder(patientName: string, service: string, clinic: string, when: string): string;
   reminderManageLine(url: string): string;
@@ -238,6 +242,13 @@ const es: BotCopy = {
   confirmNeedsWord: 'Para confirmar tu próxima cita, responde *SÍ*.',
   handoffOutsideHours: (schedule) =>
     `Le paso tu mensaje al equipo. Te responden en horario de atención: ${schedule}`,
+
+  appointmentInfo: (service, professional, when, statusLine, link) =>
+    `${statusLine} Es de ${service} con ${professional}, el ${when}.${
+      link ? `\n\nSi necesitas cambiarla o cancelarla:\n${link}` : ''
+    }`,
+  noAppointmentToTell:
+    'No encontré ninguna cita próxima a tu nombre. Si quieres, puedo agendarte una: escríbeme *agendar*.',
 
   reminder: (patientName, service, clinic, when) =>
     `Hola${patientName ? ' ' + patientName : ''}, reservaste una cita de ${service} en ${clinic} para el ${when}. ¿Confirmas que vas?\n\n` +
@@ -385,6 +396,13 @@ const pt: BotCopy = {
   confirmNeedsWord: 'Para confirmar sua próxima consulta, responda *SIM*.',
   handoffOutsideHours: (schedule) =>
     `Vou passar sua mensagem para a equipe. Respondem no horário de atendimento: ${schedule}`,
+
+  appointmentInfo: (service, professional, when, statusLine, link) =>
+    `${statusLine} É de ${service} com ${professional}, em ${when}.${
+      link ? `\n\nSe precisar mudar ou cancelar:\n${link}` : ''
+    }`,
+  noAppointmentToTell:
+    'Não encontrei nenhuma consulta próxima no seu nome. Se quiser, posso marcar uma: escreva *agendar*.',
 
   reminder: (patientName, service, clinic, when) =>
     `Oi${patientName ? ' ' + patientName : ''}, você marcou uma consulta de ${service} na ${clinic} para ${when}. Confirma que vai?\n\n` +
