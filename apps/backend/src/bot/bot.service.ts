@@ -19,6 +19,19 @@ import { SchedulingSessionService } from '../scheduling/scheduling-session.servi
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { WahaService } from '../whatsapp/waha.service';
 import { Intent, IntentService } from './intent.service';
+import {
+  asksForSomethingElse,
+  isAmbiguousYes,
+  isBareGreeting,
+  isCourtesyClosing,
+  isFlowAbort,
+  isHumanEscape,
+  normalizeText,
+  parseReminderReply,
+  ReminderReplyAction,
+  startsWithAny,
+  stripGreeting,
+} from './message-matching';
 
 /** Pasos de la FSM de agendamiento, persistidos en Conversation.flowStep. */
 type FlowStep =
@@ -50,7 +63,6 @@ interface FlowData {
   feedbackScore?: number;
 }
 
-type ReminderReplyAction = 'YES' | 'CANCEL' | 'RESCHEDULE';
 type FlowConfirmAction = ReminderReplyAction | 'NO';
 
 /**
@@ -195,6 +207,17 @@ export class BotService {
       'Enseguida te atiende una persona del equipo. 🙏',
       'Te derivo con alguien del equipo, enseguida te responden. 🙏',
     ],
+    /**
+     * Cierre de cortesía ("ok, gracias"). Sin LLM y sin volver a ofrecer el
+     * menú: el paciente está cerrando la conversación, no pidiendo algo.
+     * Antes esto caía en el parser de recordatorios y respondía
+     * "No encontré una cita próxima…" (ver B2 del análisis del bot).
+     */
+    closing: [
+      '¡Con gusto! Si necesitas algo más, escríbeme. 🙌',
+      'De nada. Aquí estoy si necesitas algo más. 🙌',
+      '¡Un gusto ayudarte! Cualquier cosa, escríbeme. 🙌',
+    ],
     confirmAppointment: [
       '✅ Listo. Tu cita de {service} con {professional} quedó {status} para el {when} en {clinicName}.{address}\n\nTe recordaré antes de la cita. Si necesitas cambiarla, escríbeme *reagendar*.',
       '¡Perfecto! Reservé tu cita de {service} con {professional} para el {when} en {clinicName}.{address}\n\nTe avisaré antes para recordártela. Cualquier cambio, escríbeme *reagendar*.',
@@ -212,9 +235,8 @@ export class BotService {
   static readonly AI_DISCLOSURE =
     'Soy un asistente automático. Si prefieres hablar con una persona, escribe *humano*.';
 
-  /** Regex para detectar saludos → dispara `greeting` en vez de fallback. */
-  private static readonly GREETING_REGEX =
-    /^(hola|holis|holaa+|buenas|buenos d[ií]as|buenas tardes|buenas noches|hey|hi|hello)\b/i;
+  /** Ventana en la que un "sí" suelto se lee como respuesta a un recordatorio. */
+  private static readonly REMINDER_REPLY_WINDOW_H = 48;
 
   /**
    * Elige una variante al azar de un array. `Math.random` es suficiente:
@@ -420,13 +442,14 @@ export class BotService {
     // Si un humano tomó la conversación, el bot no responde.
     if (convo.state === 'HUMAN') return;
 
-    const normalized = this.normalizeMessage(text);
+    const normalized = normalizeText(text);
 
     // Escape universal a humano: desde CUALQUIER paso (con o sin FSM) el paciente
     // puede pedir hablar con una persona y salimos del bot inmediatamente.
-    // Palabras: humano, persona, operador, asesor, representante, attendant, o
-    // la frase "hablar con". Reseteamos FSM y marcamos NEEDS_HUMAN para la bandeja.
-    if (this.isHumanEscape(normalized)) {
+    // Palabras sueltas (humano, operador, asesor…) y frases explícitas; ver
+    // `isHumanEscape`. `persona` a secas NO deriva (B3). Reseteamos FSM y
+    // marcamos NEEDS_HUMAN para la bandeja.
+    if (isHumanEscape(normalized)) {
       await this.markNeedsHuman(convo.id);
       await this.reply(
         clinic.wahaSession,
@@ -444,7 +467,29 @@ export class BotService {
     }
 
     // 1.5) Saludo — solo si NO hay FSM activa. Cortés y barato: no gasta LLM.
-    if (BotService.GREETING_REGEX.test(normalized)) {
+    // El saludo se RECORTA del mensaje en vez de consumirlo entero: si después
+    // del "hola" viene contenido real, seguimos la escalera con el texto
+    // recortado (recordatorio → clasificador → RAG). Ver B1 del análisis.
+    const { matched: greeted, rest } = stripGreeting(text, clinic.name);
+    const effectiveText = greeted && rest ? rest : text;
+    const effectiveNormalized = greeted ? normalizeText(rest) : normalized;
+
+    // 1.6) Cierre de cortesía ("ok, gracias"): respuesta corta, sin LLM y sin
+    // pasar por el parser de recordatorios (que respondía "no encontré cita").
+    if (isCourtesyClosing(effectiveNormalized)) {
+      // Único pool que no pasa por `resolveBotMessage`: no hay columna
+      // `Clinic.botClosing` que overridear ni placeholders que renderizar. Si
+      // aparece la necesidad, se agrega el campo y se mueve al patrón normal.
+      await this.reply(
+        clinic.wahaSession,
+        chatId,
+        convo.id,
+        this.pickVariant(BotService.DEFAULT_BOT_MESSAGES.closing),
+      );
+      return;
+    }
+
+    if (greeted && isBareGreeting(effectiveNormalized)) {
       const contextual = await this.greetingWithAppointment(clinic, phone);
       await this.reply(
         clinic.wahaSession,
@@ -458,14 +503,41 @@ export class BotService {
     // 2) Confirmaciones deterministas (recordatorios) — solo si NO hay FSM.
     // Deben resolverse ANTES de invocar el LLM: el recordatorio pide responder
     // SÍ / REAGENDAR / CANCELAR, y esas palabras no pueden depender del modelo.
-    const reminderAction = this.parseReminderReply(normalized);
+    const reminderAction = parseReminderReply(effectiveNormalized);
     if (reminderAction) {
-      await this.handleReminderReply(clinic, convo, reminderAction, phone);
-      return;
+      // `cancelar` / `reagendar` / `confirmo` son verbos explícitos: pasan
+      // siempre (también sin `phone` — caso @lid — donde el handler deriva a
+      // recepción). `si` / `ok` / `dale` son ambiguos y necesitan contexto.
+      const ambiguous =
+        reminderAction === 'YES' && isAmbiguousYes(effectiveNormalized);
+
+      if (!ambiguous || !phone) {
+        await this.handleReminderReply(clinic, convo, reminderAction, phone);
+        return;
+      }
+
+      // "sí, quiero agendar una cita" no es una confirmación: es un pedido que
+      // arranca con "sí". Si el mensaje nombra otra cosa (agendar, precio,
+      // cancelar…), va al clasificador aunque haya un recordatorio esperando.
+      if (!asksForSomethingElse(effectiveNormalized)) {
+        if (await this.hasConfirmationContext(clinic.id, convo.id, phone)) {
+          await this.handleReminderReply(clinic, convo, reminderAction, phone);
+          return;
+        }
+        // "sí" suelto sin nada que confirmar: respondemos el menú. Ni "no
+        // encontré cita" (suena a error) ni "responde *SÍ*" (sería un bucle).
+        await this.reply(
+          clinic.wahaSession,
+          chatId,
+          convo.id,
+          this.resolveBotMessage(clinic, 'fallback'),
+        );
+        return;
+      }
     }
 
     // 3) Detección de intención con LLM.
-    const intent = await this.intent.detect(text, clinic.locale);
+    const intent = await this.intent.detect(effectiveText, clinic.locale);
     switch (intent) {
       case Intent.HABLAR_HUMANO:
         await this.markNeedsHuman(convo.id);
@@ -509,7 +581,7 @@ export class BotService {
         // humano (política "prefiero handoff que alucinar").
         const result = await this.knowledge.answer({
           clinicId,
-          question: text,
+          question: effectiveText,
           locale: clinic.locale,
           tone: clinic.botTone, // custom per-tenant desde /panel/ajustes
         });
@@ -605,7 +677,7 @@ export class BotService {
       step !== 'CONFIRM' &&
       step !== 'AWAITING_NPS_SCORE' &&
       step !== 'AWAITING_NPS_COMMENT' &&
-      this.isFlowAbort(normalized)
+      isFlowAbort(normalized)
     ) {
       await this.resetFlow(convo.id);
       await this.reply(
@@ -1259,65 +1331,71 @@ export class BotService {
 
   // ─────────────────────────── Helpers ───────────────────────────
 
-  private normalizeMessage(text: string): string {
-    return text
-      .trim()
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/\p{Diacritic}/gu, '')
-      .replace(/[¡!¿?.,;:]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
+  /**
+   * Filtro de "cita abierta y futura" de un teléfono dentro de la clínica.
+   * Compartido por `findUpcomingAppointment` y por el gate de confirmación
+   * para que no se desincronicen si mañana cambia la lista de estados.
+   */
+  private static readonly upcomingAppointmentStatuses = [
+    'PENDIENTE',
+    'EN_RIESGO',
+    'CONFIRMADA',
+  ] as const;
 
-  private parseReminderReply(normalized: string): ReminderReplyAction | null {
-    if (
-      this.startsWithAny(normalized, [
-        'si',
-        'confirmo',
-        'confirmar',
-        'ok',
-        'dale',
-      ])
-    ) {
-      return 'YES';
-    }
-    if (
-      this.startsWithAny(normalized, [
-        'cancelar',
-        'cancela',
-        'cancelo',
-        'anular',
-      ])
-    ) {
-      return 'CANCEL';
-    }
-    if (this.startsWithAny(normalized, ['reagendar', 'reprogramar'])) {
-      return 'RESCHEDULE';
-    }
-    return null;
+  /**
+   * ¿Tiene sentido leer un "sí" suelto como confirmación? Solo si le
+   * preguntamos algo primero. Dos fuentes, en orden de costo:
+   *
+   *  1. El último mensaje que mandamos pide confirmar con `*SÍ*` — cubre el
+   *     saludo con cita próxima (`greetingWithAppointment`) y la rama
+   *     `Intent.CONFIRMAR`, que piden "responde *SÍ*" SIN crear ningún
+   *     `Reminder`. Sin esto el bot castigaba la respuesta que él mismo pidió.
+   *  2. Hay un `Reminder` con `status = SENT` en las últimas 48 h para una cita
+   *     próxima de este teléfono en ESTA clínica — el caso del recordatorio
+   *     anti no-show, que puede llegar días después del último mensaje.
+   *
+   * `Reminder` no tiene tenant propio: el filtro multi-tenant va sobre la cita
+   * (`appointment.clinicId`) y sobre el paciente (`patient.clinicId`).
+   */
+  private async hasConfirmationContext(
+    clinicId: string,
+    conversationId: string,
+    phone: string,
+  ): Promise<boolean> {
+    const lastOut = await this.prisma.message.findFirst({
+      where: { conversationId, direction: 'OUT' },
+      orderBy: { createdAt: 'desc' },
+      select: { body: true },
+    });
+    if (lastOut && /\*s[ií]\*/i.test(lastOut.body)) return true;
+
+    // `minus({ hours })` sobre instantes: el resultado no depende de la zona,
+    // así que acá no hace falta la TZ de la clínica (a diferencia de todo lo
+    // que se le muestra al paciente, que sí va en su zona).
+    const now = DateTime.now();
+    const reminder = await this.prisma.reminder.findFirst({
+      where: {
+        status: 'SENT',
+        sentAt: {
+          gte: now
+            .minus({ hours: BotService.REMINDER_REPLY_WINDOW_H })
+            .toJSDate(),
+        },
+        appointment: {
+          clinicId,
+          status: { in: [...BotService.upcomingAppointmentStatuses] },
+          startAt: { gte: now.toJSDate() },
+          patient: { clinicId, phone },
+        },
+      },
+      select: { id: true },
+    });
+    return reminder !== null;
   }
 
   private parseFlowConfirmReply(normalized: string): FlowConfirmAction | null {
-    if (this.startsWithAny(normalized, ['no'])) return 'NO';
-    return this.parseReminderReply(normalized);
-  }
-
-  private isFlowAbort(normalized: string): boolean {
-    return this.startsWithAny(normalized, [
-      'cancelar',
-      'cancela',
-      'cancelo',
-      'abortar',
-      'salir',
-    ]);
-  }
-
-  private startsWithAny(normalized: string, keywords: string[]): boolean {
-    return keywords.some((keyword) => {
-      const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      return new RegExp(`^${escaped}(?:\\b|$)`, 'u').test(normalized);
-    });
+    if (startsWithAny(normalized, ['no'])) return 'NO';
+    return parseReminderReply(normalized);
   }
 
   private async handleReminderReply(
@@ -1419,26 +1497,6 @@ export class BotService {
       c.label.toLowerCase().includes(normalized),
     );
     return byName ?? null;
-  }
-
-  /**
-   * Detecta si el paciente pide hablar con una persona en cualquier paso del
-   * flujo. Palabras sueltas: humano, persona, operador, asesor, representante,
-   * attendant. Frase parcial: "hablar con".
-   */
-  private isHumanEscape(normalized: string): boolean {
-    if (!normalized) return false;
-    if (normalized.includes('hablar con')) return true;
-    const tokens = normalized.split(/\s+/);
-    const keywords = new Set([
-      'humano',
-      'persona',
-      'operador',
-      'asesor',
-      'representante',
-      'attendant',
-    ]);
-    return tokens.some((t) => keywords.has(t));
   }
 
   private slotLabel(slot: Slot, clinic: Clinic): string {
@@ -1600,7 +1658,7 @@ export class BotService {
       where: {
         clinicId,
         patientId: patient.id,
-        status: { in: ['PENDIENTE', 'EN_RIESGO', 'CONFIRMADA'] },
+        status: { in: [...BotService.upcomingAppointmentStatuses] },
         startAt: { gte: DateTime.now().toJSDate() },
       },
       orderBy: { startAt: 'asc' },

@@ -77,11 +77,21 @@ describe('BotService — FSM de agendamiento', () => {
     // wrapper `reply` con jest.useFakeTimers) — acá el foco es la FSM.
     process.env.BOT_TYPING_ENABLED = 'false';
 
-    // Pool de variantes en `DEFAULT_BOT_MESSAGES`: fijamos `Math.random`
-    // en 0 para que `pickVariant` siempre devuelva la PRIMERA variante.
-    // Así los asserts históricos que buscan tokens ("persona del equipo",
-    // etc.) siguen matcheando sin tener que enumerar todas las variantes.
-    jest.spyOn(Math, 'random').mockReturnValue(0);
+    // Pool de variantes en `DEFAULT_BOT_MESSAGES`: forzamos `pickVariant` a
+    // devolver la PRIMERA variante. Así los asserts históricos que buscan
+    // tokens ("persona del equipo", etc.) siguen matcheando sin tener que
+    // enumerar todas las variantes.
+    //
+    // OJO: NO mockear `Math.random` para esto. `source-map@0.6.1` (ts-jest lo
+    // usa para mapear los stack traces) elige el pivote de su quicksort con
+    // `Math.random()`; con un valor fijo el quicksort degenera a recursión
+    // lineal y el PRIMER test que falla revienta el stack —  jest reporta un
+    // "RangeError: Maximum call stack size exceeded / Test suite failed to
+    // run" opaco en vez del fallo real. Ver
+    // docs/notas/2026-09-11-source-map-stack-overflow.md.
+    jest
+      .spyOn(BotService.prototype as any, 'pickVariant')
+      .mockImplementation((variants: any) => variants[0]);
 
     convoState = {
       id: 'convo-1',
@@ -109,6 +119,9 @@ describe('BotService — FSM de agendamiento', () => {
       },
       message: {
         create: jest.fn().mockResolvedValue({}),
+        // Último mensaje OUT de la conversación: si pidió "*SÍ*", un "sí"
+        // suelto sí es una confirmación (ver hasConfirmationContext).
+        findFirst: jest.fn().mockResolvedValue(null),
       },
       service: {
         findMany: jest.fn().mockResolvedValue([service1]),
@@ -120,6 +133,9 @@ describe('BotService — FSM de agendamiento', () => {
       },
       patient: { findUnique: jest.fn().mockResolvedValue(null) },
       appointment: { findFirst: jest.fn().mockResolvedValue(null) },
+      // Recordatorio SENT reciente: gatea el "sí" suelto (B2). Default null
+      // = no hay nada que confirmar.
+      reminder: { findFirst: jest.fn().mockResolvedValue(null) },
     };
 
     waha = {
@@ -1032,6 +1048,9 @@ describe('BotService — FSM de agendamiento', () => {
       prisma.appointment.update = jest.fn().mockResolvedValue({ ...upcoming, status: 'CANCELADA' });
       reminders.confirmAppointment.mockResolvedValue(undefined);
       reminders.cancelForAppointment.mockResolvedValue(undefined);
+      // Hay un recordatorio ya enviado: el "sí" suelto SÍ es una respuesta a
+      // ese recordatorio (B2). Los tests que prueban lo contrario lo pisan.
+      prisma.reminder.findFirst.mockResolvedValue({ id: 'rem-1' });
     });
 
     async function say(text: string) {
@@ -1155,6 +1174,303 @@ describe('BotService — FSM de agendamiento', () => {
 
       expect(reminders.confirmAppointment).not.toHaveBeenCalled();
       expect(intent.detect).toHaveBeenCalledTimes(1);
+    });
+
+    // ── B2: "sí/ok/dale" solo confirman cuando hay un recordatorio esperando ──
+
+    it('busca el recordatorio SENT dentro del tenant y de la ventana de 48 h', async () => {
+      await say('sí');
+
+      const where = prisma.reminder.findFirst.mock.calls[0][0].where;
+      expect(where.status).toBe('SENT');
+      expect(where.sentAt.gte).toBeInstanceOf(Date);
+      expect(Date.now() - where.sentAt.gte.getTime()).toBeCloseTo(
+        48 * 3600 * 1000,
+        -4,
+      );
+      expect(where.appointment.clinicId).toBe('clinic-A');
+      expect(where.appointment.patient).toEqual({
+        clinicId: 'clinic-A',
+        phone: '+584141234567',
+      });
+    });
+
+    it('"sí" suelto SIN contexto de confirmación: responde el menú, no "no encontré cita"', async () => {
+      prisma.reminder.findFirst.mockResolvedValue(null);
+
+      await say('sí');
+
+      expect(reminders.confirmAppointment).not.toHaveBeenCalled();
+      expect(prisma.appointment.findFirst).not.toHaveBeenCalled();
+      expect(intent.detect).not.toHaveBeenCalled();
+      const msg = waha.sendText.mock.calls.at(-1)![2];
+      expect(msg).not.toMatch(/No encontré una cita/i);
+      expect(msg).toMatch(/\*agendar\*/);
+    });
+
+    it('"sí, quiero agendar una cita" NO confirma: va al clasificador y arranca la FSM', async () => {
+      intent.detect.mockResolvedValue(Intent.AGENDAR);
+
+      await say('sí, quiero agendar una cita');
+
+      expect(reminders.confirmAppointment).not.toHaveBeenCalled();
+      expect(prisma.reminder.findFirst).not.toHaveBeenCalled();
+      expect(intent.detect).toHaveBeenCalledWith(
+        'sí, quiero agendar una cita',
+        'es',
+      );
+      // Con 1 servicio y 1 profesional en el mock, startFlow salta directo a
+      // ASK_SLOT: lo que importa es que la FSM arrancó.
+      expect(convoState.flowStep).toMatch(/^ASK_/);
+    });
+
+    it('"ok gracias" cierra con cortesía: sin LLM, sin recordatorios, sin "no encontré cita"', async () => {
+      await say('ok gracias');
+
+      expect(reminders.confirmAppointment).not.toHaveBeenCalled();
+      expect(prisma.reminder.findFirst).not.toHaveBeenCalled();
+      expect(intent.detect).not.toHaveBeenCalled();
+      const msg = waha.sendText.mock.calls.at(-1)![2];
+      expect(msg).toMatch(/Con gusto/i);
+      expect(msg).not.toMatch(/No encontré una cita/i);
+    });
+
+    it('"gracias, quiero agendar" NO es un cierre: sigue al clasificador', async () => {
+      intent.detect.mockResolvedValue(Intent.AGENDAR);
+
+      await say('gracias, quiero agendar');
+
+      expect(waha.sendText.mock.calls.at(-1)![2]).not.toMatch(/Con gusto/i);
+      expect(intent.detect).toHaveBeenCalledTimes(1);
+    });
+
+    it('"confirmo" es un verbo explícito: confirma aunque no haya recordatorio', async () => {
+      prisma.reminder.findFirst.mockResolvedValue(null);
+
+      await say('confirmo');
+
+      expect(reminders.confirmAppointment).toHaveBeenCalledWith('appt-7');
+      expect(intent.detect).not.toHaveBeenCalled();
+    });
+
+    it('un Reminder SENT de OTRA clínica no habilita el "sí" (aislamiento efectivo)', async () => {
+      // El mock devuelve null para el where con clinicId='clinic-A': simula que
+      // el único recordatorio SENT del sistema es de otro tenant.
+      prisma.reminder.findFirst.mockImplementation(async ({ where }: any) =>
+        where.appointment.clinicId === 'clinic-A' ? null : { id: 'rem-otra' },
+      );
+
+      await say('sí');
+
+      expect(reminders.confirmAppointment).not.toHaveBeenCalled();
+      expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/\*agendar\*/);
+    });
+
+    // ── C1: el bot pide "responde *SÍ*" sin crear ningún Reminder ──
+
+    it('si el último mensaje del bot pidió "*SÍ*", un "sí" suelto confirma sin Reminder', async () => {
+      prisma.reminder.findFirst.mockResolvedValue(null);
+      prisma.message.findFirst.mockResolvedValue({
+        body: 'Veo que tienes una cita mañana. Responde *SÍ* para confirmarla.',
+      });
+
+      await say('sí');
+
+      expect(prisma.message.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { conversationId: 'convo-1', direction: 'OUT' },
+        }),
+      );
+      expect(reminders.confirmAppointment).toHaveBeenCalledWith('appt-7');
+      expect(intent.detect).not.toHaveBeenCalled();
+    });
+
+    it('saludo con cita próxima → "sí" confirma (no cae en el fallback)', async () => {
+      prisma.reminder.findFirst.mockResolvedValue(null);
+      prisma.patient.findUnique.mockResolvedValue(patient);
+      prisma.appointment.findFirst.mockResolvedValue({
+        ...upcoming,
+        service: { name: 'Limpieza dental' },
+        patient: { name: 'Ana' },
+      });
+      // Turno 1: "hola" → el bot ofrece confirmar con *SÍ*.
+      await say('hola');
+      const greeting = waha.sendText.mock.calls.at(-1)![2];
+      expect(greeting).toMatch(/\*SÍ\*/);
+      // El mock de message.create no persiste: simulamos ese OUT.
+      prisma.message.findFirst.mockResolvedValue({ body: greeting });
+
+      // Turno 2: el paciente responde lo que el bot le pidió.
+      await say('sí');
+
+      expect(reminders.confirmAppointment).toHaveBeenCalledWith('appt-7');
+    });
+
+    // ── O1: confirmaciones de más de 2 palabras ──
+
+    it.each(['sí por favor', 'sí, ahí estaré', 'sí, confirmo mi cita'])(
+      '"%s" con recordatorio SENT confirma sin pasar por el LLM',
+      async (text) => {
+        await say(text);
+
+        expect(reminders.confirmAppointment).toHaveBeenCalledWith('appt-7');
+        expect(intent.detect).not.toHaveBeenCalled();
+      },
+    );
+
+    it('"sí, cuánto cuesta la limpieza?" no confirma: nombra otra cosa', async () => {
+      intent.detect.mockResolvedValue(Intent.PREGUNTA_FAQ);
+      knowledge.answer.mockResolvedValue({ answer: 'Cuesta 30 USD.' });
+
+      await say('sí, cuánto cuesta la limpieza?');
+
+      expect(reminders.confirmAppointment).not.toHaveBeenCalled();
+      expect(intent.detect).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ── B1: el saludo se recorta, no se come el resto del mensaje ──
+  describe('saludo con contenido (B1)', () => {
+    async function say(text: string) {
+      await bot.handleIncoming({
+        clinicId: 'clinic-A',
+        chatId: convoState.chatId,
+        phone: convoState.phone,
+        text,
+      });
+    }
+
+    it('"hola que tal" es solo saludo: responde el greeting y no toca el LLM', async () => {
+      await say('hola que tal');
+
+      expect(intent.detect).not.toHaveBeenCalled();
+      expect(waha.sendText.mock.calls.at(-1)![2]).toContain(
+        'asistente automático',
+      );
+    });
+
+    it('"hola, quiero agendar una cita" arranca la FSM sin saludar antes', async () => {
+      intent.detect.mockResolvedValue(Intent.AGENDAR);
+
+      await say('hola, quiero agendar una cita');
+
+      // El saludo se recorta: al clasificador va solo el pedido real.
+      expect(intent.detect).toHaveBeenCalledWith('quiero agendar una cita', 'es');
+      // Con 1 servicio y 1 profesional en el mock, startFlow salta directo a
+      // ASK_SLOT: lo que importa es que la FSM arrancó.
+      expect(convoState.flowStep).toMatch(/^ASK_/);
+      const sent = waha.sendText.mock.calls.map((c: any[]) => c[2]).join('\n');
+      expect(sent).not.toContain('asistente automático');
+    });
+
+    it('"buenas, cuánto cuesta la limpieza?" va al RAG con la pregunta recortada', async () => {
+      intent.detect.mockResolvedValue(Intent.PREGUNTA_FAQ);
+      knowledge.answer.mockResolvedValue({ answer: 'La limpieza cuesta 30 USD.' });
+
+      await say('buenas, cuánto cuesta la limpieza?');
+
+      expect(knowledge.answer).toHaveBeenCalledWith(
+        expect.objectContaining({ question: 'cuánto cuesta la limpieza?' }),
+      );
+      expect(waha.sendText.mock.calls.at(-1)![2]).toContain('30 USD');
+    });
+
+    it('también recorta "buenos días" y el nombre de la clínica', async () => {
+      intent.detect.mockResolvedValue(Intent.PREGUNTA_FAQ);
+      knowledge.answer.mockResolvedValue({ answer: 'Estamos en Av. Siempre Viva 123.' });
+
+      await say('Buenos días Clínica A, dónde quedan ustedes?');
+
+      expect(knowledge.answer).toHaveBeenCalledWith(
+        expect.objectContaining({ question: 'dónde quedan ustedes?' }),
+      );
+    });
+
+    it.each([
+      'hola quiero agendar',
+      'hola necesito cita',
+      'buenas, horarios',
+      'hola atienden hoy',
+    ])('"%s" (fraseo corto) NO se responde como saludo', async (text) => {
+      intent.detect.mockResolvedValue(Intent.PREGUNTA_FAQ);
+      knowledge.answer.mockResolvedValue({ answer: 'Sí, atendemos.' });
+
+      await say(text);
+
+      expect(intent.detect).toHaveBeenCalledTimes(1);
+      const sent = waha.sendText.mock.calls.map((c: any[]) => c[2]).join('\n');
+      expect(sent).not.toContain('asistente automático');
+    });
+
+    it('con la FSM activa el saludo no se recorta: "hola" es la respuesta al paso', async () => {
+      convoState.flowStep = 'ASK_NAME';
+      convoState.flowData = {
+        serviceId: 'svc-1',
+        professionalId: 'prof-1',
+        startAtISO: tomorrow10.toISO(),
+      };
+
+      await say('hola');
+
+      expect(intent.detect).not.toHaveBeenCalled();
+      // Siguió dentro de la FSM (no respondió el greeting con el aviso de IA).
+      expect(waha.sendText.mock.calls.at(-1)![2]).not.toContain(
+        'asistente automático',
+      );
+    });
+
+    it('mensaje sin saludo no se toca', async () => {
+      intent.detect.mockResolvedValue(Intent.PREGUNTA_FAQ);
+      knowledge.answer.mockResolvedValue({ answer: 'Sí.' });
+
+      await say('¿atienden los sábados?');
+
+      expect(intent.detect).toHaveBeenCalledWith('¿atienden los sábados?', 'es');
+    });
+  });
+
+  // ── B3: "persona" suelta no es un pedido de humano ──
+  describe('escape a humano (B3)', () => {
+    async function say(text: string) {
+      await bot.handleIncoming({
+        clinicId: 'clinic-A',
+        chatId: convoState.chatId,
+        phone: convoState.phone,
+        text,
+      });
+    }
+
+    it('"es para otra persona" NO deriva: sigue al clasificador', async () => {
+      intent.detect.mockResolvedValue(Intent.AGENDAR);
+
+      await say('es para otra persona');
+
+      expect(convoState.state).toBe('BOT');
+      expect(intent.detect).toHaveBeenCalledTimes(1);
+      expect(waha.sendText.mock.calls.at(-1)![2]).not.toMatch(
+        /persona del equipo/i,
+      );
+    });
+
+    it('"quiero hablar con una persona" sí deriva', async () => {
+      await say('quiero hablar con una persona');
+
+      expect(convoState.state).toBe('NEEDS_HUMAN');
+      expect(intent.detect).not.toHaveBeenCalled();
+      expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/persona del equipo/i);
+    });
+
+    it('"humano" sí deriva', async () => {
+      await say('humano');
+
+      expect(convoState.state).toBe('NEEDS_HUMAN');
+      expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/persona del equipo/i);
+    });
+
+    it('"necesito que me atienda una persona" sí deriva', async () => {
+      await say('necesito que me atienda una persona');
+
+      expect(convoState.state).toBe('NEEDS_HUMAN');
     });
   });
 
