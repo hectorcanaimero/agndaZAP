@@ -69,7 +69,23 @@ La inversa la hace el webhook: `normalizeE164(chatId.replace(/@(c\.us|lid|…)$/
 Para un `@lid` devuelve `null` a propósito — un LID no es un teléfono y no debe ensuciar
 la columna `phone`. Ver [[notas/2026-09-09-formato-phone-e164-y-dedup-webhook]].
 
+## Conversaciones en `state = HUMAN`
+
+Al arreglar B9 salió también el criterio para las conversaciones que un operador tomó, y
+como se aplica en dos sitios a la vez lo desarrolla [[notas/2026-09-11-waha-mensajes-sin-texto]].
+Resumido: **con `HUMAN` no sale nada automático hacia el paciente, y en la bandeja se
+registra exactamente lo que ocurrió de verdad**.
+
+De ahí que los dos casos se comporten distinto sin contradecirse: en el webhook (B4) el
+paciente mandó algo y ese `Message IN` se registra aunque el bot no conteste, porque si no
+el operador ve un hueco sin explicación; en el follow-up (B9) lo que se suprime es un
+mensaje **saliente** que el sistema iba a generar solo, así que no se escribe nada —
+guardar un `OUT` que nunca se envió sería peor, el operador vería en el hilo un mensaje que
+el paciente jamás recibió. Queda una línea de log para poder explicar después por qué esa
+cita no tiene feedback.
+
 ## Relacionado
 [[flujo-bot]] · [[adr/0012-feedback-post-atencion]] ·
 [[notas/2026-09-09-formato-phone-e164-y-dedup-webhook]] ·
+[[notas/2026-09-11-waha-mensajes-sin-texto]] ·
 [[analisis/2026-09-11-chatbot-analisis-tecnico]]
