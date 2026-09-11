@@ -12,6 +12,19 @@ import { AppointmentStatus } from '@prisma/client';
  *
  * Cualquier otra transición → 422 UnprocessableEntity.
  *
+ * **Alcance**: esta tabla son las transiciones que un HUMANO puede pedir por
+ * `PATCH /appointments/:id/status`. No cubre los cambios de estado que hace el
+ * sistema por su cuenta, que tienen sus propias reglas y sus propios efectos:
+ *  - `check-risk` pasa PENDIENTE → EN_RIESGO sola.
+ *  - Reagendar (S6) devuelve la cita a PENDIENTE y limpia `confirmedAt`,
+ *    porque una confirmación vale para un horario concreto.
+ *
+ * La vuelta a PENDIENTE deliberadamente NO se añade acá: hacerlo dejaría que el
+ * panel "desconfirmara" una cita a mano por una ruta que no limpia
+ * `confirmedAt` ni reprograma nada, y quedaría un estado incoherente que el
+ * dashboard cuenta a la vez como pendiente (por `status`) y como confirmada
+ * (por `confirmedAt`).
+ *
  * Estados terminales (`ATENDIDA`, `CANCELADA`, `NO_SHOW`) no permiten
  * salir: cualquier transición desde ellos también es 422.
  */
@@ -43,9 +56,12 @@ export function assertTransition(
 }
 
 /**
- * Estados vivos que aceptan reagendamiento (mover startAt/endAt sin cambiar
- * el status). Estados terminales (ATENDIDA/CANCELADA/NO_SHOW) NO se reagendan
- * — la política es crear una cita nueva y dejar la histórica intacta.
+ * Estados vivos que aceptan reagendamiento. Estados terminales
+ * (ATENDIDA/CANCELADA/NO_SHOW) NO se reagendan — la política es crear una cita
+ * nueva y dejar la histórica intacta.
+ *
+ * Desde S6 reagendar SÍ cambia el status: la cita vuelve a `PENDIENTE` y se
+ * limpia `confirmedAt` (ver `ALLOWED_TRANSITIONS` arriba).
  */
 export const RESCHEDULABLE_STATUSES: ReadonlyArray<AppointmentStatus> = [
   'PENDIENTE',

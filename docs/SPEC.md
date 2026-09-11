@@ -89,6 +89,7 @@ Rate-limit 10/min. Token inválido, expirado, de otra clínica o cita inexistent
   canCancel, canReschedule }`. Del paciente solo sale el nombre: nunca el teléfono.
 - `POST /api/public/clinics/:slug/appointments/manage/:token/cancel` → `{ status: 'CANCELADA' }`.
   Cancela los recordatorios. Idempotente. 409 si el estado ya no lo permite.
+  Marca `Appointment.canceledByPatient` y **avisa a recepción** (ver abajo).
 - `POST /api/public/clinics/:slug/appointments/manage/:token/reschedule` body `{ startAtISO }`
   → `{ appointment: {…}, manageUrl }`. **Mueve la cita in-place (mismo `id`)**: crear una
   nueva y cancelar la vieja dejaría una fila `CANCELADA` por reagendamiento y el no-show rate
@@ -193,6 +194,79 @@ CONFIRMADA  → ATENDIDA | CANCELADA | NO_SHOW
 EN_RIESGO   → CONFIRMADA | CANCELADA | NO_SHOW | ATENDIDA
 ```
 Cualquier otra transición se rechaza con 422.
+
+Esa tabla son las transiciones que un **humano** puede pedir por `PATCH /:id/status`. No cubre
+los cambios que hace el sistema por su cuenta, que tienen sus propias reglas y efectos:
+`check-risk` pasa `PENDIENTE → EN_RIESGO`, y reagendar devuelve la cita a `PENDIENTE`. La
+vuelta a `PENDIENTE` **no** se añade a la tabla a propósito: por `PATCH /status` dejaría que el
+panel "desconfirmara" una cita por una ruta que no limpia `confirmedAt` ni reprograma nada, y
+el dashboard la contaría a la vez como pendiente (por `status`) y como confirmada (por
+`confirmedAt`).
+
+**Reagendar reinicia el ciclo de confirmación** (S6). Mover una cita —desde el panel o desde el
+link— la devuelve a `PENDIENTE` y reprograma recordatorios y `check-risk`: una confirmación vale
+para un horario concreto, y mantener el estado haría que la clínica contara como confirmada una
+cita que el paciente no ha vuelto a mirar.
+
+`confirmedAt` **no se borra**, y la distinción es deliberada: `status` responde "¿está
+confirmada ahora?" y `confirmedAt` responde "¿llegó a confirmar alguna vez?". Lo segundo es un
+hecho histórico que alimenta la tasa de confirmación del dashboard, que mide si los
+recordatorios funcionan. Borrarlo reescribía métricas de días ya cerrados —el numerador perdía
+la confirmación mientras el denominador (recordatorios `SENT`) se quedaba— y un dashboard
+histórico que cambia hacia atrás es un problema de confianza con la clínica. Una reconfirmación
+posterior sobreescribe `confirmedAt` con la fecha nueva.
+
+**Excepción**: si el horario nuevo está tan cerca que no cabe ningún recordatorio ni el
+`check-risk`, el estado se conserva. Degradar ahí dejaría la cita desconfirmada **para siempre
+y en silencio**, y el caso típico es recepción moviendo una cita de hoy un par de horas —
+justo cuando el paciente acaba de confirmar por teléfono. Igual si la reprogramación falla.
+
+Reagendar saca la cita de `EN_RIESGO`, lo cual es deliberado: la señal del paciente que cambia
+de horario una y otra vez **no va por el estado** —se perdería en cada movimiento— sino por
+`Appointment.rescheduleCount`, que solo sube. La API lo expone en la lista de citas del panel
+junto a `lastRescheduledAt`; el aviso en la UI queda pendiente (S11).
+
+**Dos contadores, a propósito**: `rescheduleCount` cuenta todos los movimientos (es la señal de
+riesgo) y `patientRescheduleCount` solo los que inició el paciente desde el link (es el que
+gasta su cupo). Así los reagendamientos que hace recepción no le dejan al paciente un
+`canReschedule: false` sin haber tocado nunca el link.
+
+El paciente puede mover la misma cita **3 veces** desde el link; a la cuarta recibe un 409 que
+lo deriva a la clínica. El tope se comprueba dentro del `UPDATE` condicional, no en un `if`
+previo: con el check fuera, una ráfaga con el mismo token pasaría varias veces. **No aplica al
+staff** desde el panel y **no afecta a cancelar**: cancelar es justo lo que queremos que sea más
+fácil que no aparecer, así que `canCancel` sigue `true` con el tope alcanzado.
+
+**Deuda conocida**: mover una cita puede reenviar un recordatorio de un offset que ya se había
+mandado (el nuevo cae en el futuro), así que un paciente que reagenda tres veces puede recibir
+varias tandas. Pendiente de suprimir offsets ya enviados recientemente.
+
+### Aviso a recepción cuando el paciente gestiona su cita (S11)
+
+Una cancelación por link que nadie ve es media feature: el hueco solo se recupera si alguien en
+la clínica se entera. Cancelar o mover la cita desde el link deja un mensaje `OUT` en la
+conversación de WhatsApp del paciente, que es donde el operador mira (la bandeja del panel). No
+sale nada hacia el paciente.
+
+La conversación se resuelve con el criterio único del sistema: por `patientId` si está ligado,
+si no por `phone`, `orderBy updatedAt desc`. Si el paciente agendó por la web y nunca escribió,
+no hay hilo donde dejarlo y queda solo el log.
+
+`state = NEEDS_HUMAN` se reserva para lo que de verdad necesita que alguien llame, porque si se
+marcara todo la bandeja se llenaría de hilos que nadie tiene que atender y el aviso dejaría de
+significar nada. Se marca cuando:
+- **la cancelación es a menos de 24 h** — el hueco es difícil de rellenar solo y conviene
+  reaccionar hoy, no cuando alguien mire la bandeja;
+- **el paciente lleva 2 cambios de horario o más** — deja de ser un imprevisto y empieza a ser
+  señal de riesgo de no-show. Es la razón de que `rescheduleCount` exista.
+
+El aviso es fail-open en los endpoints (la cancelación ya está persistida y no se deshace) y
+**fail-closed en el worker de recordatorios**, donde el error sube para que BullMQ reintente:
+perder la alerta de una cita en riesgo es peor que repetir el check.
+
+`GET /api/dashboard/metrics` gana `selfService: { canceled30d, rescheduled30d, canceledShare }`
+— cuánto resuelve el paciente solo. `canceledShare` es qué parte de las cancelaciones pidió el
+paciente y no la clínica.
 
 ### Recordatorios
 - Se programa un job por cada offset futuro. Los offsets en el pasado se omiten.

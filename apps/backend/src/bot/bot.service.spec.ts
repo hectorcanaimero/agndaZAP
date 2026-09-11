@@ -1057,6 +1057,8 @@ describe('BotService — FSM de agendamiento', () => {
       expect(msg).toMatch(/persona del equipo/i);
       expect(msg).not.toContain('/agendar/');
     });
+  });
+
   it('Intent.PREGUNTA_FAQ desde un chat @lid: pasa phone=null al RAG, sin romper', async () => {
     convoState.phone = null;
     intent.detect.mockResolvedValue(Intent.PREGUNTA_FAQ);

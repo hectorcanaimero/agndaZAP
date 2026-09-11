@@ -29,7 +29,11 @@ test.describe('Página pública de agendamiento', () => {
     const slotTime = (await firstSlot.innerText()).trim();
     expect(slotTime).toMatch(/^\d{2}:\d{2}$/);
     await firstSlot.click();
-    await expect(firstSlot).toHaveAttribute('aria-pressed', 'true');
+    // `aria-checked`, no `aria-pressed`: el picker es un `role="radiogroup"`
+    // con `role="radio"` por slot (ScheduleForm.tsx:694-724). Dejó de ser un
+    // toggle en d308b21 y el assert se quedó con el atributo viejo — de ahí el
+    // E2E rojo desde el 2026-09-09.
+    await expect(firstSlot).toHaveAttribute('aria-checked', 'true');
 
     // 4) Datos del paciente + consentimiento.
     await page.locator('#name').fill('Paciente E2E');

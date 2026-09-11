@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { DateTime } from 'luxon';
@@ -103,7 +104,11 @@ describe('SchedulingService.createAppointment', () => {
       ]),
     };
     reminders = {
-      scheduleForAppointment: jest.fn().mockResolvedValue(undefined),
+      // Devuelve cuántos avisos quedaron armados: `rescheduleAppointment` lo
+      // usa para decidir si puede degradar el estado a PENDIENTE.
+      scheduleForAppointment: jest
+        .fn()
+        .mockResolvedValue({ remindersScheduled: 2, riskScheduled: true }),
     };
 
     service = new SchedulingService(
@@ -418,9 +423,21 @@ describe('SchedulingService.rescheduleAppointment', () => {
           service: makeService(),
           clinic: makeClinic(),
         }),
-        update: jest.fn().mockImplementation(({ where, data }: any) =>
-          Promise.resolve({ id: where.id, ...data, status: 'PENDIENTE' }),
-        ),
+        // Como Prisma: devuelve la fila con los campos nuevos aplicados
+        // encima de la base. Si el mock forzara un status, los tests del
+        // reset de confirmación pasarían por construcción.
+        update: jest.fn().mockImplementation(async ({ where, data }: any) => {
+          const base = await prisma.appointment.findFirst();
+          return { ...base, id: where.id, ...data };
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findFirstOrThrow: jest.fn().mockResolvedValue({
+          id: 'appt-1',
+          clinicId: 'clinic-A',
+          status: 'PENDIENTE',
+          startAt: newStart.toJSDate(),
+          patientRescheduleCount: 1,
+        }),
       },
     };
     availability = {
@@ -432,7 +449,11 @@ describe('SchedulingService.rescheduleAppointment', () => {
       ]),
     };
     reminders = {
-      scheduleForAppointment: jest.fn().mockResolvedValue(undefined),
+      // Devuelve cuántos avisos quedaron armados: `rescheduleAppointment` lo
+      // usa para decidir si puede degradar el estado a PENDIENTE.
+      scheduleForAppointment: jest
+        .fn()
+        .mockResolvedValue({ remindersScheduled: 2, riskScheduled: true }),
     };
     service = new SchedulingService(
       prisma as unknown as PrismaService,
@@ -448,15 +469,237 @@ describe('SchedulingService.rescheduleAppointment', () => {
       startAtISO: newStartISO,
     });
 
-    expect(prisma.appointment.update).toHaveBeenCalledWith({
-      where: { id: 'appt-1' },
-      data: {
-        startAt: newStart.toJSDate(),
-        endAt: newStart.plus({ minutes: 30 }).toJSDate(),
-      },
-    });
+    const data = prisma.appointment.update.mock.calls[0][0].data;
+    expect(data.startAt).toEqual(newStart.toJSDate());
+    expect(data.endAt).toEqual(newStart.plus({ minutes: 30 }).toJSDate());
+    // `scheduleForAppointment` reprograma recordatorios Y check-risk.
     expect(reminders.scheduleForAppointment).toHaveBeenCalledWith('appt-1');
     expect(updated.startAt).toEqual(newStart.toJSDate());
+  });
+
+  // ── S6: traza de reagendamientos y reinicio del ciclo de confirmación ──
+  it('vuelve a PENDIENTE cuando queda vía de recuperación', async () => {
+    // Caso real: cita CONFIRMADA por teléfono que se mueve a otro día. El
+    // recordatorio del horario nuevo permite reconfirmar, así que degradar el
+    // estado es correcto.
+    prisma.appointment.findFirst.mockResolvedValue({
+      id: 'appt-1',
+      clinicId: 'clinic-A',
+      status: 'CONFIRMADA',
+      confirmedAt: new Date('2030-05-30T10:00:00.000Z'),
+      startAt: new Date('2030-06-01T14:00:00.000Z'),
+      serviceId: 'svc-1',
+      professionalId: 'prof-1',
+      service: { durationMin: 30 },
+      clinic: { timezone: 'America/Caracas' },
+    });
+    reminders.scheduleForAppointment.mockResolvedValue({
+      remindersScheduled: 2,
+      riskScheduled: true,
+    });
+
+    await service.rescheduleAppointment({
+      clinicId: 'clinic-A',
+      appointmentId: 'appt-1',
+      startAtISO: newStartISO,
+    });
+
+    const reset = prisma.appointment.update.mock.calls.at(-1)[0].data;
+    expect(reset.status).toBe('PENDIENTE');
+  });
+
+  it('NO borra confirmedAt: es un hecho histórico que alimenta el dashboard', async () => {
+    // Borrarlo reescribía métricas de días ya cerrados — el numerador perdía la
+    // confirmación y el denominador (recordatorios SENT) se quedaba, así que la
+    // tasa de confirmación bajaba sola. `status` dice si está confirmada AHORA;
+    // `confirmedAt`, si llegó a confirmarse alguna vez.
+    prisma.appointment.findFirst.mockResolvedValue({
+      id: 'appt-1',
+      clinicId: 'clinic-A',
+      status: 'CONFIRMADA',
+      confirmedAt: new Date('2030-05-30T10:00:00.000Z'),
+      startAt: new Date('2030-06-01T14:00:00.000Z'),
+      serviceId: 'svc-1',
+      professionalId: 'prof-1',
+      service: { durationMin: 30 },
+      clinic: { timezone: 'America/Caracas' },
+    });
+
+    await service.rescheduleAppointment({
+      clinicId: 'clinic-A',
+      appointmentId: 'appt-1',
+      startAtISO: newStartISO,
+    });
+
+    for (const [{ data }] of prisma.appointment.update.mock.calls) {
+      expect(data).not.toHaveProperty('confirmedAt');
+    }
+  });
+
+  it('SIN vía de recuperación conserva el estado: no desconfirma en silencio', async () => {
+    // Caso real y frecuente: recepción mueve una cita de HOY un par de horas.
+    // Con offsets [24,3] no cabe ningún recordatorio ni el check-risk, así que
+    // degradar a PENDIENTE dejaría la cita desconfirmada para siempre, el
+    // dashboard perdería la confirmación y el iCal pasaría a TENTATIVE — todo
+    // sin que nadie se entere, porque el panel dice "reagendado OK".
+    prisma.appointment.findFirst.mockResolvedValue({
+      id: 'appt-1',
+      clinicId: 'clinic-A',
+      status: 'CONFIRMADA',
+      confirmedAt: new Date('2030-05-30T10:00:00.000Z'),
+      startAt: new Date('2030-06-01T14:00:00.000Z'),
+      serviceId: 'svc-1',
+      professionalId: 'prof-1',
+      service: { durationMin: 30 },
+      clinic: { timezone: 'America/Caracas' },
+    });
+    reminders.scheduleForAppointment.mockResolvedValue({
+      remindersScheduled: 0,
+      riskScheduled: false,
+    });
+
+    const updated = await service.rescheduleAppointment({
+      clinicId: 'clinic-A',
+      appointmentId: 'appt-1',
+      startAtISO: newStartISO,
+    });
+
+    // Solo el update del movimiento; ningún segundo update de estado.
+    expect(prisma.appointment.update).toHaveBeenCalledTimes(1);
+    expect(updated.status).toBe('CONFIRMADA');
+  });
+
+  it('si la reprogramación falla tampoco desconfirma', async () => {
+    reminders.scheduleForAppointment.mockRejectedValue(new Error('redis down'));
+
+    await service.rescheduleAppointment({
+      clinicId: 'clinic-A',
+      appointmentId: 'appt-1',
+      startAtISO: newStartISO,
+    });
+
+    expect(prisma.appointment.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('un 409 por slot ocupado NO incrementa el contador', async () => {
+    availability.getSlots.mockResolvedValue([]);
+
+    await expect(
+      service.rescheduleAppointment({
+        clinicId: 'clinic-A',
+        appointmentId: 'appt-1',
+        startAtISO: newStartISO,
+      }),
+    ).rejects.toThrow(ConflictException);
+    expect(prisma.appointment.update).not.toHaveBeenCalled();
+    expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('los movimientos del staff NO gastan el cupo del paciente', async () => {
+    await service.rescheduleAppointment({
+      clinicId: 'clinic-A',
+      appointmentId: 'appt-1',
+      startAtISO: newStartISO,
+    });
+
+    const data = prisma.appointment.update.mock.calls[0][0].data;
+    expect(data.rescheduleCount).toEqual({ increment: 1 });
+    expect(data).not.toHaveProperty('patientRescheduleCount');
+  });
+
+  it('el tope del paciente va en el WHERE del update, no en un if previo', async () => {
+    prisma.appointment.updateMany.mockResolvedValue({ count: 1 });
+
+    await service.rescheduleAppointment({
+      clinicId: 'clinic-A',
+      appointmentId: 'appt-1',
+      startAtISO: newStartISO,
+      byPatient: true,
+      maxPatientReschedules: 3,
+    });
+
+    const where = prisma.appointment.updateMany.mock.calls[0][0].where;
+    expect(where.patientRescheduleCount).toEqual({ lt: 3 });
+    expect(where.clinicId).toBe('clinic-A');
+  });
+
+  it('tope alcanzado → 409 sin escribir nada (lo decide el WHERE)', async () => {
+    prisma.appointment.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(
+      service.rescheduleAppointment({
+        clinicId: 'clinic-A',
+        appointmentId: 'appt-1',
+        startAtISO: newStartISO,
+        byPatient: true,
+        maxPatientReschedules: 3,
+      }),
+    ).rejects.toThrow(/tope de reagendamientos/);
+  });
+
+  it.each(['ATENDIDA', 'CANCELADA', 'NO_SHOW'])(
+    'estado terminal %s → 422 dentro del servicio, no solo en el caller',
+    async (status) => {
+      // Desde S6 reagendar muta el estado, así que el servicio ya no puede
+      // confiar en que el caller validó: resucitaría una cita terminal.
+      prisma.appointment.findFirst.mockResolvedValue({
+        id: 'appt-1',
+        clinicId: 'clinic-A',
+        status,
+        startAt: new Date('2030-06-01T14:00:00.000Z'),
+        serviceId: 'svc-1',
+        professionalId: 'prof-1',
+        service: { durationMin: 30 },
+        clinic: { timezone: 'America/Caracas' },
+      });
+
+      await expect(
+        service.rescheduleAppointment({
+          clinicId: 'clinic-A',
+          appointmentId: 'appt-1',
+          startAtISO: newStartISO,
+        }),
+      ).rejects.toThrow(UnprocessableEntityException);
+    },
+  );
+
+  it('incrementa rescheduleCount y sella lastRescheduledAt', async () => {
+    // El contador es la señal del "reagendador reincidente": el estado no
+    // sirve para eso porque cada movimiento lo devuelve a PENDIENTE.
+    await service.rescheduleAppointment({
+      clinicId: 'clinic-A',
+      appointmentId: 'appt-1',
+      startAtISO: newStartISO,
+    });
+
+    const data = prisma.appointment.update.mock.calls[0][0].data;
+    expect(data.rescheduleCount).toEqual({ increment: 1 });
+    expect(data.lastRescheduledAt).toBeInstanceOf(Date);
+  });
+
+  it('el no-op (mismo instante) NO cuenta como reagendamiento', async () => {
+    // Un "guardar" sin cambios reales no debe gastar el cupo del paciente ni
+    // ensuciar la señal de riesgo.
+    const sameInstantISO = '2030-06-01T14:00:00.000Z';
+    prisma.appointment.findFirst.mockResolvedValue({
+      id: 'appt-1',
+      clinicId: 'clinic-A',
+      status: 'PENDIENTE',
+      startAt: new Date(sameInstantISO),
+      serviceId: 'svc-1',
+      professionalId: 'prof-1',
+      service: { durationMin: 30 },
+      clinic: { timezone: 'America/Caracas' },
+    });
+
+    await service.rescheduleAppointment({
+      clinicId: 'clinic-A',
+      appointmentId: 'appt-1',
+      startAtISO: sameInstantISO,
+    });
+
+    expect(prisma.appointment.update).not.toHaveBeenCalled();
+    expect(reminders.scheduleForAppointment).not.toHaveBeenCalled();
   });
 
   it('excluye la propia cita del cálculo de disponibilidad', async () => {
@@ -612,7 +855,11 @@ describe('SchedulingService.cancelByPatient', () => {
     });
 
     expect(res.status).toBe('CANCELADA');
-    expect(prisma.appointment.updateMany.mock.calls[0][0].data.canceledAt).toBeInstanceOf(Date);
+    const data = prisma.appointment.updateMany.mock.calls[0][0].data;
+    expect(data.canceledAt).toBeInstanceOf(Date);
+    // Marca de origen: el dashboard cuenta aparte las cancelaciones del
+    // paciente, porque son huecos liberados con aviso y no no-shows.
+    expect(data.canceledByPatient).toBe(true);
     // Un recordatorio de una cita cancelada solo puede hacer daño.
     expect(reminders.cancelForAppointment).toHaveBeenCalledWith('appt-1');
   });

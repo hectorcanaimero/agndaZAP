@@ -21,6 +21,7 @@ import {
   SchedulingService,
 } from '../scheduling/scheduling.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { alertReception } from '../conversations/reception-alert';
 import { Public } from '../auth/decorators/public.decorator';
 import { CreatePublicAppointmentDto } from './dto/create-public-appointment.dto';
 import { RescheduleByTokenDto } from './dto/reschedule-by-token.dto';
@@ -50,6 +51,14 @@ import { normalizeE164 } from '../common/phone.util';
 @Controller('public/clinics')
 export class PublicController {
   private readonly logger = new Logger('PublicController');
+
+  /**
+   * Cuántas veces puede el paciente mover la MISMA cita desde el link antes de
+   * que lo derivemos a la clínica. Tres es suficiente para un cambio de planes
+   * legítimo; a partir de ahí suele ser señal de que hace falta hablar, y de
+   * hecho a partir de dos reagendamientos el panel ya avisa a recepción.
+   */
+  private static readonly MAX_PATIENT_RESCHEDULES = 3;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -440,7 +449,9 @@ export class PublicController {
       include: {
         service: { select: { id: true, name: true, durationMin: true } },
         professional: { select: { id: true, name: true } },
-        patient: { select: { name: true } },
+        // `phone` y `patientId` son para encontrar la conversación al avisar a
+        // recepción; NUNCA salen en la respuesta (ver el GET).
+        patient: { select: { name: true, phone: true } },
         clinic: {
           select: { name: true, address: true, timezone: true, locale: true },
         },
@@ -453,6 +464,116 @@ export class PublicController {
     }
 
     return { session, appointment };
+  }
+
+  /**
+   * Deja el aviso para recepción de un movimiento hecho por el paciente.
+   *
+   * Sin esto, una cancelación por link solo aparece si alguien refresca el
+   * panel: la recepción no se entera de que se liberó un hueco, que es
+   * justamente lo que el producto promete convertir en valor.
+   *
+   * `needsHuman` saca la conversación del bot y la marca para atención, y se
+   * reserva para lo que de verdad necesita que alguien llame. Si marcáramos
+   * todo, la bandeja se llenaría de hilos que nadie tiene que atender y el
+   * aviso dejaría de significar nada.
+   */
+  private async alertReceptionOfPatientChange(
+    appt: {
+      id: string;
+      clinicId: string;
+      patientId: string;
+      startAt: Date;
+      patient: { name: string | null; phone: string };
+      service: { name: string };
+      professional: { name: string };
+      clinic: { timezone: string; locale: string };
+    },
+    kind: 'cancel' | 'reschedule',
+    ctx: { newStartAt?: Date; rescheduleCount?: number },
+  ): Promise<void> {
+    const fmt = (d: Date) =>
+      DateTime.fromJSDate(d)
+        .setZone(appt.clinic.timezone)
+        .setLocale(appt.clinic.locale)
+        .toFormat("cccc d 'de' LLLL, HH:mm");
+
+    const patientName = appt.patient.name ?? appt.patient.phone;
+    const hoursUntil =
+      (appt.startAt.getTime() - Date.now()) / (1000 * 60 * 60);
+
+    let body: string;
+    let needsHuman: boolean;
+
+    if (kind === 'cancel') {
+      // Menos de 24 h: el hueco es difícil de rellenar solo y a la clínica le
+      // interesa reaccionar hoy, no cuando alguien mire la bandeja.
+      needsHuman = hoursUntil < 24;
+      body =
+        `🔴 El paciente canceló su cita desde el link.
+` +
+        `Paciente: ${patientName}
+` +
+        `Servicio: ${appt.service.name}
+` +
+        `Profesional: ${appt.professional.name}
+` +
+        `Era: ${fmt(appt.startAt)}` +
+        (needsHuman
+          ? `
+
+⚠️ Faltaban menos de 24 h: conviene intentar rellenar el hueco.`
+          : '');
+    } else {
+      const count = ctx.rescheduleCount ?? 0;
+      // Dos cambios o más dejan de ser un imprevisto y empiezan a ser señal de
+      // riesgo de no-show. Es la razón de que `rescheduleCount` exista.
+      needsHuman = count >= 2;
+      body =
+        `🔄 El paciente cambió el horario desde el link.
+` +
+        `Paciente: ${patientName}
+` +
+        `Servicio: ${appt.service.name}
+` +
+        `Profesional: ${appt.professional.name}
+` +
+        `Antes: ${fmt(appt.startAt)}
+` +
+        `Ahora: ${ctx.newStartAt ? fmt(ctx.newStartAt) : '—'}` +
+        (needsHuman
+          ? `
+
+⚠️ Ya van ${count} cambios de horario: conviene llamar.`
+          : '');
+    }
+
+    // Fail-open: lo que motivó el aviso (la cancelación, el cambio de horario)
+    // ya está persistido y no se puede deshacer. Perder el aviso es malo, pero
+    // devolverle un 500 al paciente por una cita que SÍ se canceló es peor.
+    let written = false;
+    try {
+      written = await alertReception(this.prisma, {
+        clinicId: appt.clinicId,
+        patientId: appt.patientId,
+        phone: appt.patient.phone,
+        body,
+        needsHuman,
+      });
+    } catch (e) {
+      this.logger.error(
+        `no se pudo avisar a recepción apptId=${appt.id} kind=${kind}: ${(e as Error).message}`,
+      );
+      return;
+    }
+
+    if (!written) {
+      // Paciente que agendó por la web y nunca escribió por WhatsApp: no hay
+      // hilo donde dejar el aviso. Queda el log para poder detectarlo.
+      this.logger.warn(
+        `sin conversación para avisar a recepción slug=${appt.clinicId} apptId=${appt.id} kind=${kind}`,
+      );
+    }
   }
 
   /**
@@ -478,6 +599,9 @@ export class PublicController {
   ) {
     const { appointment } = await this.resolveManageOr404(slug, token);
     const mutable = SchedulingService.isPatientMutable(appointment);
+    const underRescheduleCap =
+      appointment.patientRescheduleCount <
+      PublicController.MAX_PATIENT_RESCHEDULES;
 
     return {
       appointment: {
@@ -489,6 +613,12 @@ export class PublicController {
         startAtISO: appointment.startAt.toISOString(),
         durationMin: appointment.service.durationMin,
         status: appointment.status,
+        /**
+         * Cuántas veces movió la cita EL PACIENTE desde el link. Es el que
+         * cuenta para su tope; los movimientos del staff no se lo gastan.
+         * La web puede avisar antes de que gaste el último.
+         */
+        rescheduleCount: appointment.patientRescheduleCount,
       },
       clinic: {
         name: appointment.clinic.name,
@@ -498,7 +628,10 @@ export class PublicController {
       },
       patient: { name: appointment.patient.name },
       canCancel: mutable,
-      canReschedule: mutable,
+      // Cancelar siempre se puede; mover tiene tope. Que el paciente pueda
+      // cancelar aunque no pueda mover es deliberado: cancelar es justo lo que
+      // queremos que sea más fácil que no aparecer.
+      canReschedule: mutable && underRescheduleCap,
     };
   }
 
@@ -526,6 +659,8 @@ export class PublicController {
 
     // La cita ya no es gestionable: el token no tiene nada más que ofrecer.
     await this.sessions.invalidateManage(token);
+
+    await this.alertReceptionOfPatientChange(appointment, 'cancel', {});
 
     this.logger.log(
       `appointment canceled via link slug=${slug} apptId=${appointment.id}`,
@@ -570,9 +705,22 @@ export class PublicController {
         clinicId: session.clinicId,
         appointmentId: appointment.id,
         startAtISO: dto.startAtISO,
+        // El tope se comprueba dentro del update condicional del servicio: con
+        // el check acá afuera, una ráfaga con el mismo token pasaría varias
+        // veces entre la lectura y la escritura.
+        byPatient: true,
+        maxPatientReschedules: PublicController.MAX_PATIENT_RESCHEDULES,
       });
     } catch (e) {
       if (e instanceof ConflictException) {
+        // El servicio usa 409 para dos cosas distintas y el paciente necesita
+        // mensajes distintos: el tope lo deriva a la clínica, el slot ocupado
+        // le pide otro horario.
+        if (e.message.includes('tope de reagendamientos')) {
+          throw new ConflictException(
+            'Ya cambiaste el horario de esta cita varias veces. Escríbele a la clínica y lo resolvemos contigo.',
+          );
+        }
         throw new ConflictException(
           'Ese horario ya no está disponible. Elige otro.',
         );
@@ -598,6 +746,11 @@ export class PublicController {
       );
     }
 
+    await this.alertReceptionOfPatientChange(appointment, 'reschedule', {
+      newStartAt: updated.startAt,
+      rescheduleCount: updated.rescheduleCount,
+    });
+
     this.logger.log(
       `appointment rescheduled via link slug=${slug} apptId=${updated.id}`,
     );
@@ -611,7 +764,13 @@ export class PublicController {
         startAtISO: updated.startAt.toISOString(),
         durationMin: appointment.service.durationMin,
         status: updated.status,
+        // Para que la web sepa si acabó de gastar el último movimiento sin
+        // tener que re-pedir el GET con el token nuevo.
+        rescheduleCount: updated.patientRescheduleCount,
       },
+      canReschedule:
+        updated.patientRescheduleCount <
+        PublicController.MAX_PATIENT_RESCHEDULES,
       ...(manageUrl ? { manageUrl } : {}),
     };
   }

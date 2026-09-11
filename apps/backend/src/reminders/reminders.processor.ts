@@ -6,6 +6,7 @@ import { Worker, Job } from 'bullmq';
 import { DateTime } from 'luxon';
 import { requestContext } from '../common/logger/request-context';
 import { isSentryEnabled } from '../common/sentry/sentry.config';
+import { alertReception as sendReceptionAlert } from '../conversations/reception-alert';
 import { PrismaService } from '../prisma/prisma.service';
 import { WahaService } from '../whatsapp/waha.service';
 import { REMINDERS_QUEUE } from './reminders.service';
@@ -149,6 +150,23 @@ export function createRemindersWorker(
       });
       if (!appt) return;
 
+      // Job rancio: la cita se movió después de programarlo. Puede pasar si el
+      // `remove()` del job viejo falló (estaba activo, o Redis tuvo un hipo) y
+      // el `add` posterior no lo reemplazó por reusar el mismo jobId. Antes era
+      // inofensivo porque una cita reagendada conservaba su CONFIRMADA; desde
+      // S6 vuelve a PENDIENTE, así que el job rancio la marcaría EN_RIESGO y
+      // alertaría a recepción a destiempo.
+      const scheduledForMs = (job.data as { startAtMs?: number }).startAtMs;
+      if (
+        typeof scheduledForMs === 'number' &&
+        scheduledForMs !== appt.startAt.getTime()
+      ) {
+        logger.log(
+          `check-risk obsoleto para ${appointmentId} (la cita se movió) — se descarta`,
+        );
+        return;
+      }
+
       const updated = await prisma.appointment.updateMany({
         where: { id: appointmentId, status: 'PENDIENTE' },
         data: { status: 'EN_RIESGO' },
@@ -164,22 +182,6 @@ export function createRemindersWorker(
   }
 
   async function alertReception(appt: RiskAppointment): Promise<void> {
-    const conversation = await prisma.conversation.findFirst({
-      where: {
-        clinicId: appt.clinicId,
-        OR: [{ patientId: appt.patientId }, { phone: appt.patient.phone }],
-      },
-      orderBy: { updatedAt: 'desc' },
-      select: { id: true },
-    });
-
-    if (!conversation) {
-      logger.warn(
-        `Cita ${appt.id} EN_RIESGO sin conversación asociada para alertar recepción.`,
-      );
-      return;
-    }
-
     const when = DateTime.fromJSDate(appt.startAt)
       .setZone(appt.clinic.timezone)
       .setLocale(appt.clinic.locale)
@@ -192,18 +194,22 @@ export function createRemindersWorker(
       `Profesional: ${appt.professional.name}\n` +
       `Horario: ${when}`;
 
-    await prisma.conversation.update({
-      where: { id: conversation.id },
-      data: {
-        state: 'NEEDS_HUMAN',
-        flowStep: null,
-        messages: {
-          create: {
-            direction: 'OUT',
-            body,
-          },
-        },
-      },
+    // Sin try/catch a propósito: si la escritura falla, el error sube y BullMQ
+    // reintenta el job. Perder la alerta de una cita en riesgo es peor que
+    // repetir el check.
+    const written = await sendReceptionAlert(prisma, {
+      clinicId: appt.clinicId,
+      patientId: appt.patientId,
+      phone: appt.patient.phone,
+      body,
+      // Una cita en riesgo necesita que alguien llame: sí saca del bot.
+      needsHuman: true,
     });
+
+    if (!written) {
+      logger.warn(
+        `Cita ${appt.id} EN_RIESGO sin conversación asociada para alertar recepción.`,
+      );
+    }
   }
 }

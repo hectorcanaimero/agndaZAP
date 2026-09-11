@@ -12,6 +12,10 @@ import {
   Prisma,
 } from '@prisma/client';
 import { DateTime } from 'luxon';
+import {
+  assertReschedulable,
+  RESCHEDULABLE_STATUSES,
+} from '../appointments/appointment-status.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { RemindersService } from '../reminders/reminders.service';
 import { AvailabilityService } from './availability.service';
@@ -61,14 +65,16 @@ export class SchedulingService {
 
   /**
    * Estados desde los que el paciente puede cancelar o mover su cita.
-   * `ATENDIDA`, `CANCELADA` y `NO_SHOW` son terminales: ya pasó algo con esa
-   * cita y cambiarla falsearía el histórico.
+   *
+   * Es la MISMA lista que usa el panel (`RESCHEDULABLE_STATUSES`), reusada y no
+   * copiada: dos fuentes de verdad para la misma regla significan que renombrar
+   * un estado en el schema rompe una en compilación y deja la otra en silencio,
+   * con el resultado de que nadie podría cancelar y nada fallaría.
+   *
+   * Lo que el paciente tiene DE MÁS respecto al panel es el corte temporal
+   * (`startAt > now`), que vive en `isPatientMutable`.
    */
-  static readonly PATIENT_MUTABLE_STATUSES: ReadonlyArray<AppointmentStatus> = [
-    'PENDIENTE',
-    'CONFIRMADA',
-    'EN_RIESGO',
-  ];
+  static readonly PATIENT_MUTABLE_STATUSES = RESCHEDULABLE_STATUSES;
 
   /**
    * ¿El paciente puede todavía cancelar/mover esta cita? Regla única para que
@@ -337,7 +343,13 @@ export class SchedulingService {
         status: { in: [...SchedulingService.PATIENT_MUTABLE_STATUSES] },
         startAt: { gt: new Date() },
       },
-      data: { status: 'CANCELADA', canceledAt: new Date() },
+      data: {
+        status: 'CANCELADA',
+        canceledAt: DateTime.now().toJSDate(),
+        // Marca de origen: el dashboard cuenta aparte las cancelaciones que
+        // pidió el paciente, porque son huecos liberados con aviso.
+        canceledByPatient: true,
+      },
     });
 
     if (count === 0) {
@@ -401,8 +413,27 @@ export class SchedulingService {
     clinicId: string;
     appointmentId: string;
     startAtISO: string;
+    /**
+     * `true` cuando el movimiento lo inicia el paciente desde el link de
+     * gestión. Solo esos cuentan para su tope: los que hace recepción desde el
+     * panel no deben gastarle el cupo al paciente.
+     */
+    byPatient?: boolean;
+    /**
+     * Tope de movimientos del paciente. Se comprueba DENTRO del update
+     * condicional, no antes: leer el contador y escribir después deja una
+     * ventana por la que una ráfaga con el mismo token pasa el check varias
+     * veces.
+     */
+    maxPatientReschedules?: number;
   }): Promise<Appointment> {
-    const { clinicId, appointmentId, startAtISO } = input;
+    const {
+      clinicId,
+      appointmentId,
+      startAtISO,
+      byPatient = false,
+      maxPatientReschedules,
+    } = input;
 
     // 1) Cargar cita + service + clinic (todo cross-checked por clinicId).
     const appt = await this.prisma.appointment.findFirst({
@@ -410,6 +441,11 @@ export class SchedulingService {
       include: { service: true, clinic: true },
     });
     if (!appt) throw new NotFoundException('cita no encontrada');
+
+    // Desde S6 reagendar MUTA el estado (vuelve a PENDIENTE), así que el
+    // servicio ya no puede confiar en que el caller validó: un caller nuevo
+    // resucitaría una cita ATENDIDA o NO_SHOW y falsearía el histórico.
+    assertReschedulable(appt.status);
 
     const zone = appt.clinic.timezone;
     const newStartDT = DateTime.fromISO(startAtISO, { zone });
@@ -450,15 +486,53 @@ export class SchedulingService {
 
     // 4) Update de la cita. El @@unique([professionalId, startAt]) es la última
     // línea de defensa contra doble reserva concurrente → traducimos a 409.
+    //
+    // La cita vuelve SIEMPRE a PENDIENTE y se limpia `confirmedAt`: una
+    // confirmación es para un horario concreto, y dejarla puesta significaría
+    // que la clínica cuenta como confirmada una cita que el paciente no ha
+    // vuelto a mirar. La confirmación se vuelve a ganar con el recordatorio del
+    // horario nuevo, que se reprograma abajo junto al check-risk.
+    //
+    // Esto hace que reagendar saque la cita de EN_RIESGO, y es deliberado: la
+    // señal del "reagendador reincidente" no va por estado —lo perderíamos en
+    // cada movimiento— sino por `rescheduleCount`, que solo sube.
     let updated: Appointment;
     try {
-      updated = await this.prisma.appointment.update({
-        where: { id: appointmentId },
-        data: {
-          startAt: newStartDT.toJSDate(),
-          endAt: newEndDT.toJSDate(),
-        },
-      });
+      // El tope del paciente va en el `where` del update, no en un `if` previo:
+      // con el check fuera, dos requests concurrentes con el mismo token pasan
+      // ambas. `updateMany` + `count` es la forma de hacerlo atómico.
+      if (byPatient && typeof maxPatientReschedules === 'number') {
+        const { count } = await this.prisma.appointment.updateMany({
+          where: {
+            id: appointmentId,
+            clinicId,
+            patientRescheduleCount: { lt: maxPatientReschedules },
+          },
+          data: {
+            startAt: newStartDT.toJSDate(),
+            endAt: newEndDT.toJSDate(),
+            rescheduleCount: { increment: 1 },
+            patientRescheduleCount: { increment: 1 },
+            lastRescheduledAt: DateTime.now().toJSDate(),
+          },
+        });
+        if (count === 0) {
+          throw new ConflictException('tope de reagendamientos alcanzado');
+        }
+        updated = await this.prisma.appointment.findFirstOrThrow({
+          where: { id: appointmentId, clinicId },
+        });
+      } else {
+        updated = await this.prisma.appointment.update({
+          where: { id: appointmentId },
+          data: {
+            startAt: newStartDT.toJSDate(),
+            endAt: newEndDT.toJSDate(),
+            rescheduleCount: { increment: 1 },
+            lastRescheduledAt: DateTime.now().toJSDate(),
+          },
+        });
+      }
     } catch (e) {
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&
@@ -469,12 +543,51 @@ export class SchedulingService {
       throw e;
     }
 
-    // 5) Reprogramar reminders. `scheduleForAppointment` es idempotente (cancela
-    // los previos primero). Fail-open: si falla, la cita queda reagendada y
-    // logueamos — preferimos cita sin recordatorios a rollback silencioso.
+    // 5) Reprogramar reminders + check-risk. `scheduleForAppointment` es
+    // idempotente (cancela los previos primero). Fail-open: si falla, la cita
+    // queda reagendada y logueamos — preferimos cita sin recordatorios a
+    // rollback silencioso.
+    //
+    // 6) Reinicio del ciclo de confirmación, SOLO si quedó alguna vía de
+    // recuperarla. Una confirmación vale para un horario concreto, así que al
+    // mover la cita deja de valer… pero si el horario nuevo está tan cerca que
+    // no cabe ningún recordatorio ni el check-risk, degradar a PENDIENTE dejaría
+    // la cita desconfirmada PARA SIEMPRE y en silencio: el caso típico es
+    // recepción moviendo una cita de hoy a dos horas más tarde, que es
+    // justamente cuando el paciente acaba de confirmar por teléfono.
+    //
+    // Con vía de recuperación → PENDIENTE y el paciente reconfirma con el
+    // recordatorio nuevo. Sin ella → se conserva el estado, que es la
+    // información más fiel: nadie ha dejado de confirmar nada.
+    //
+    // `confirmedAt` NO se borra, y la distinción es deliberada:
+    //   - `status` responde "¿está confirmada AHORA?" → PENDIENTE hasta que
+    //     el paciente responda al recordatorio del horario nuevo.
+    //   - `confirmedAt` responde "¿llegó a confirmar alguna vez?" → es un hecho
+    //     histórico y alimenta la tasa de confirmación del dashboard, que mide
+    //     si los recordatorios funcionan.
+    // Borrarlo reescribía métricas de días ya cerrados: el numerador perdía la
+    // confirmación mientras el denominador (recordatorios SENT) se quedaba,
+    // así que la tasa bajaba sola y el trend de 14 días cambiaba hacia atrás.
+    // Una reconfirmación posterior lo sobreescribe con la fecha nueva.
     try {
-      await this.reminders.scheduleForAppointment(appointmentId);
+      const { remindersScheduled, riskScheduled } =
+        await this.reminders.scheduleForAppointment(appointmentId);
+
+      const hasRecoveryPath = remindersScheduled > 0 || riskScheduled;
+      if (hasRecoveryPath && updated.status !== 'PENDIENTE') {
+        updated = await this.prisma.appointment.update({
+          where: { id: appointmentId },
+          data: { status: 'PENDIENTE' },
+        });
+      } else if (!hasRecoveryPath) {
+        this.logger.log(
+          `reschedule ${appointmentId}: sin recordatorios posibles en el horario nuevo — se conserva status=${updated.status}`,
+        );
+      }
     } catch (e) {
+      // Si la reprogramación falló tampoco tocamos el estado: desconfirmar sin
+      // haber podido armar un recordatorio es el peor de los dos mundos.
       this.logger.error(
         `No se pudieron reprogramar recordatorios para ${appointmentId}: ${e}`,
       );
