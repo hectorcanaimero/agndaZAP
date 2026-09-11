@@ -248,9 +248,16 @@ export interface ManagedAppointmentData {
   canReschedule: boolean;
 }
 
+/**
+ * Código de error estable del backend. El `message` se reescribe a menudo (por
+ * tono o por traducción), así que distinguir casos por el texto es frágil.
+ * Opcional: un backend anterior a #73 no lo manda.
+ */
+export type ManageErrorCode = 'RESCHEDULE_LIMIT' | 'SLOT_TAKEN';
+
 export type ManageActionResponse<T> =
   | { ok: true; data: T }
-  | { ok: false; status: number; message: string };
+  | { ok: false; status: number; message: string; code?: ManageErrorCode };
 
 function manageUrlFor(slug: string, token: string, suffix = ''): string {
   return `${API_URL}/api/public/clinics/${encodeURIComponent(
@@ -296,9 +303,14 @@ async function postManage<T>(
   }
 
   if (res.ok) return { ok: true, data: parsed as T };
-  const message =
-    (parsed as { message?: string } | null)?.message ?? `HTTP ${res.status}`;
-  return { ok: false, status: res.status, message };
+  const err = parsed as { message?: string; code?: ManageErrorCode } | null;
+  const message = err?.message ?? `HTTP ${res.status}`;
+  return {
+    ok: false,
+    status: res.status,
+    message,
+    ...(err?.code ? { code: err.code } : {}),
+  };
 }
 
 export async function cancelManagedAppointment(
