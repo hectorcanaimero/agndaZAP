@@ -1,4 +1,3 @@
-import { Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -17,8 +16,13 @@ import { PrismaService } from '../prisma/prisma.service';
  *
  * @returns `true` si el aviso quedó escrito; `false` si el paciente no tiene
  * conversación (agendó por la web y nunca escribió) — el caller decide si eso
- * merece un log o no. Nunca lanza: un aviso que falla no puede tumbar la
- * operación que lo motivó, que ya está persistida.
+ * merece un log o no.
+ *
+ * **Los errores de escritura SÍ se propagan**, y cada caller decide qué hacer:
+ * el worker de recordatorios los deja subir para que BullMQ reintente el job,
+ * mientras que los endpoints de gestión los capturan, porque ahí la operación
+ * que motivó el aviso (una cancelación) ya está persistida y no se puede
+ * deshacer. Tragárselos aquí le quitaría esa decisión a quien llama.
  */
 export async function alertReception(
   prisma: PrismaService,
@@ -36,35 +40,26 @@ export async function alertReception(
      */
     needsHuman: boolean;
   },
-  logger: Logger = new Logger('ReceptionAlert'),
 ): Promise<boolean> {
   const { clinicId, patientId, phone, body, needsHuman } = input;
 
-  try {
-    // Mismo criterio que el resto del sistema: por `patientId` si está ligado,
-    // si no por teléfono, y `updatedAt desc` para desempatar cuando hay dos
-    // filas del mismo paciente (una `@lid` y una `@c.us`).
-    const conversation = await prisma.conversation.findFirst({
-      where: { clinicId, OR: [{ patientId }, { phone }] },
-      orderBy: { updatedAt: 'desc' },
-      select: { id: true },
-    });
+  // Mismo criterio que el resto del sistema: por `patientId` si está ligado,
+  // si no por teléfono, y `updatedAt desc` para desempatar cuando hay dos
+  // filas del mismo paciente (una `@lid` y una `@c.us`).
+  const conversation = await prisma.conversation.findFirst({
+    where: { clinicId, OR: [{ patientId }, { phone }] },
+    orderBy: { updatedAt: 'desc' },
+    select: { id: true },
+  });
 
-    if (!conversation) return false;
+  if (!conversation) return false;
 
-    await prisma.conversation.update({
-      where: { id: conversation.id },
-      data: {
-        ...(needsHuman ? { state: 'NEEDS_HUMAN', flowStep: null } : {}),
-        messages: { create: { direction: 'OUT', body } },
-      },
-    });
-    return true;
-  } catch (e) {
-    // Sin PII en el log: el `body` lleva nombre del paciente y horario.
-    logger.error(
-      `no se pudo avisar a recepción clinicId=${clinicId}: ${(e as Error).message}`,
-    );
-    return false;
-  }
+  await prisma.conversation.update({
+    where: { id: conversation.id },
+    data: {
+      ...(needsHuman ? { state: 'NEEDS_HUMAN', flowStep: null } : {}),
+      messages: { create: { direction: 'OUT', body } },
+    },
+  });
+  return true;
 }

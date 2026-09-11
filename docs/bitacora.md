@@ -1,5 +1,13 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-11 — S11: avisar a recepción cuando el paciente gestiona su cita (rama `feat/aviso-recepcion-cancelacion`)
+- **El hueco que cerraba**: una cancelación por link solo aparecía si alguien refrescaba el panel. Para un producto anti no-show eso es media feature — el valor está en que la clínica pueda rellenar el hueco.
+- **`alertReception` extraído** de `reminders.processor.ts` a `conversations/reception-alert.ts` y compartido. Es función suelta y no `@Injectable` porque el worker de recordatorios se construye a mano en `main.ts`, fuera del contenedor de Nest.
+- **Los errores de escritura se propagan desde el helper**, y cada caller decide: el worker los deja subir para que BullMQ reintente, los endpoints los capturan porque la cancelación ya está persistida. La primera versión del refactor se los tragaba y rompió un test que existía justo para fijar esa propagación — buen recordatorio de que un `try/catch` movido de sitio cambia semántica.
+- **`NEEDS_HUMAN` se reserva**: cancelación a menos de 24 h, o 2 cambios de horario o más. Marcarlo todo habría llenado la bandeja de hilos que nadie tiene que atender, y el aviso dejaría de significar nada.
+- **`Appointment.canceledByPatient`** + `selfService` en el dashboard: cuánto resuelve el paciente solo. Una cancelación con aviso es un hueco recuperable, lo contrario de un no-show.
+- **Apilado sobre #62** porque el disparo por `rescheduleCount >= 2` lo necesita.
+
 ## 2026-09-11 — S10: los scripts de `prisma/` no los typecheckeaba nadie (rama `chore/typecheck-scripts-prisma`)
 - **Causa raíz del CI rojo de #42**: `apps/backend/tsconfig.json` tiene `include: ["src/**/*"]`, así que `prisma/seed.ts` y `prisma/reindex-faq.ts` quedaban fuera. `pnpm tsc --noEmit` pasaba en verde con el seed roto y el error solo aparecía cuando el job E2E ejecutaba `ts-node prisma/seed.ts` — tarde, en un job caro y sin señalar al PR culpable.
 - **Arreglo**: `tsconfig.scripts.json` aparte (con `noEmit`), script `typecheck:scripts` y paso propio en el job Backend de CI. **No** se amplía el `include` del tsconfig base: `tsconfig.build.json` lo extiende y con dos raíces TypeScript inferiría `rootDir: apps/backend`, la salida pasaría a `dist/src/main.js` y el `node dist/main.js` del Dockerfile dejaría de arrancar en prod.

@@ -855,7 +855,11 @@ describe('SchedulingService.cancelByPatient', () => {
     });
 
     expect(res.status).toBe('CANCELADA');
-    expect(prisma.appointment.updateMany.mock.calls[0][0].data.canceledAt).toBeInstanceOf(Date);
+    const data = prisma.appointment.updateMany.mock.calls[0][0].data;
+    expect(data.canceledAt).toBeInstanceOf(Date);
+    // Marca de origen: el dashboard cuenta aparte las cancelaciones del
+    // paciente, porque son huecos liberados con aviso y no no-shows.
+    expect(data.canceledByPatient).toBe(true);
     // Un recordatorio de una cita cancelada solo puede hacer daño.
     expect(reminders.cancelForAppointment).toHaveBeenCalledWith('appt-1');
   });

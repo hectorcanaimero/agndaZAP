@@ -880,7 +880,8 @@ describe('PublicController — gestión de cita por link', () => {
       patientRescheduleCount: 0,
       service: { id: 'svc-1', name: 'Consulta', durationMin: 30 },
       professional: { id: 'prof-1', name: 'Dra. Ríos' },
-      patient: { name: 'Ana Pérez' },
+      patientId: 'pat-1',
+      patient: { name: 'Ana Pérez', phone: '+584141234567' },
       clinic: {
         name: 'Clínica A',
         address: 'Av. X',
@@ -900,6 +901,11 @@ describe('PublicController — gestión de cita por link', () => {
         findUnique: jest
           .fn()
           .mockResolvedValue({ patient: { phone: '+584141234567' } }),
+      },
+      // El aviso a recepción escribe en la conversación del paciente.
+      conversation: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'convo-1' }),
+        update: jest.fn().mockResolvedValue({}),
       },
     };
     availability = { getSlots: jest.fn() };
@@ -1072,6 +1078,54 @@ describe('PublicController — gestión de cita por link', () => {
       expect(sessions.invalidateManage).toHaveBeenCalledWith(TOKEN);
     });
 
+    it('avisa a recepción: sin esto la cancelación solo se ve si alguien refresca el panel', async () => {
+      await controller.cancelManagedAppointment('clinica-a', TOKEN);
+
+      const { data } = prisma.conversation.update.mock.calls[0][0];
+      expect(data.messages.create.body).toContain('canceló su cita desde el link');
+      expect(data.messages.create.body).toContain('Ana Pérez');
+      expect(data.messages.create.direction).toBe('OUT');
+    });
+
+    it('cancelación a más de 24 h: avisa pero NO saca del bot', async () => {
+      await controller.cancelManagedAppointment('clinica-a', TOKEN);
+
+      const { data } = prisma.conversation.update.mock.calls[0][0];
+      expect(data).not.toHaveProperty('state');
+    });
+
+    it('cancelación a menos de 24 h: marca NEEDS_HUMAN para intentar rellenar el hueco', async () => {
+      prisma.appointment.findFirst.mockResolvedValue(
+        makeAppt({ startAt: new Date(Date.now() + 3 * 60 * 60 * 1000) }),
+      );
+
+      await controller.cancelManagedAppointment('clinica-a', TOKEN);
+
+      const { data } = prisma.conversation.update.mock.calls[0][0];
+      expect(data.state).toBe('NEEDS_HUMAN');
+      expect(data.messages.create.body).toContain('menos de 24 h');
+    });
+
+    it('si el aviso falla, la cancelación NO se revierte', async () => {
+      // Fail-open: la cita ya está cancelada y no se puede deshacer. Devolverle
+      // un 500 al paciente por una cita que sí se canceló es peor que perder
+      // el aviso.
+      prisma.conversation.update.mockRejectedValue(new Error('db down'));
+
+      const res = await controller.cancelManagedAppointment('clinica-a', TOKEN);
+
+      expect(res).toEqual({ status: 'CANCELADA' });
+    });
+
+    it('paciente sin conversación: no rompe, solo queda el log', async () => {
+      prisma.conversation.findFirst.mockResolvedValue(null);
+
+      const res = await controller.cancelManagedAppointment('clinica-a', TOKEN);
+
+      expect(res).toEqual({ status: 'CANCELADA' });
+      expect(prisma.conversation.update).not.toHaveBeenCalled();
+    });
+
     it('token inválido → 404 sin llegar a tocar la cita', async () => {
       sessions.resolveManage.mockResolvedValue(null);
 
@@ -1141,6 +1195,54 @@ describe('PublicController — gestión de cita por link', () => {
 
       expect(err).toBeInstanceOf(ConflictException);
       expect(err.message).toContain('Escríbele a la clínica');
+    });
+
+    it('avisa a recepción del cambio, con el horario viejo y el nuevo', async () => {
+      await controller.rescheduleManagedAppointment('clinica-a', TOKEN, body as any);
+
+      const { data } = prisma.conversation.update.mock.calls[0][0];
+      expect(data.messages.create.body).toContain('cambió el horario desde el link');
+      expect(data.messages.create.body).toContain('Antes:');
+      expect(data.messages.create.body).toContain('Ahora:');
+    });
+
+    it('primer cambio: avisa pero NO saca del bot', async () => {
+      scheduling.rescheduleAppointment.mockResolvedValue({
+        id: 'appt-1',
+        clinicId: 'clinic-A',
+        serviceId: 'svc-1',
+        professionalId: 'prof-1',
+        status: 'PENDIENTE',
+        startAt: new Date('2030-06-02T14:00:00Z'),
+        patientRescheduleCount: 1,
+        rescheduleCount: 1,
+      });
+
+      await controller.rescheduleManagedAppointment('clinica-a', TOKEN, body as any);
+
+      const { data } = prisma.conversation.update.mock.calls[0][0];
+      expect(data).not.toHaveProperty('state');
+    });
+
+    it('a partir del segundo cambio marca NEEDS_HUMAN: deja de ser imprevisto', async () => {
+      // Es la razón de que rescheduleCount exista: el estado no sirve como
+      // señal porque cada reagendamiento devuelve la cita a PENDIENTE.
+      scheduling.rescheduleAppointment.mockResolvedValue({
+        id: 'appt-1',
+        clinicId: 'clinic-A',
+        serviceId: 'svc-1',
+        professionalId: 'prof-1',
+        status: 'PENDIENTE',
+        startAt: new Date('2030-06-02T14:00:00Z'),
+        patientRescheduleCount: 2,
+        rescheduleCount: 2,
+      });
+
+      await controller.rescheduleManagedAppointment('clinica-a', TOKEN, body as any);
+
+      const { data } = prisma.conversation.update.mock.calls[0][0];
+      expect(data.state).toBe('NEEDS_HUMAN');
+      expect(data.messages.create.body).toContain('2 cambios');
     });
 
     it('invalida el token viejo: no quedan dos links vivos para la misma cita', async () => {

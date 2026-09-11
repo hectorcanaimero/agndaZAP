@@ -194,18 +194,17 @@ export function createRemindersWorker(
       `Profesional: ${appt.professional.name}\n` +
       `Horario: ${when}`;
 
-    const written = await sendReceptionAlert(
-      prisma,
-      {
-        clinicId: appt.clinicId,
-        patientId: appt.patientId,
-        phone: appt.patient.phone,
-        body,
-        // Una cita en riesgo necesita que alguien llame: sí saca del bot.
-        needsHuman: true,
-      },
-      logger,
-    );
+    // Sin try/catch a propósito: si la escritura falla, el error sube y BullMQ
+    // reintenta el job. Perder la alerta de una cita en riesgo es peor que
+    // repetir el check.
+    const written = await sendReceptionAlert(prisma, {
+      clinicId: appt.clinicId,
+      patientId: appt.patientId,
+      phone: appt.patient.phone,
+      body,
+      // Una cita en riesgo necesita que alguien llame: sí saca del bot.
+      needsHuman: true,
+    });
 
     if (!written) {
       logger.warn(
