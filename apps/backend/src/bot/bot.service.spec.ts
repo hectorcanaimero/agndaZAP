@@ -731,6 +731,95 @@ describe('BotService — FSM de agendamiento', () => {
     expect(convoState.state).toBe('BOT');
   });
 
+  // ── M6: cierre con acción tras responder una duda ──
+  describe('cierre con acción tras el RAG (M6)', () => {
+    beforeEach(() => {
+      intent.detect.mockResolvedValue(Intent.PREGUNTA_FAQ);
+      knowledge.answer.mockResolvedValue({
+        answer: 'Abrimos de lunes a viernes de 9 a 18h.',
+        sources: ['faq-1'],
+      });
+    });
+
+    async function ask() {
+      await bot.handleIncoming({
+        clinicId: 'clinic-A',
+        chatId: convoState.chatId,
+        phone: convoState.phone,
+        text: '¿cuál es el horario?',
+      });
+      return waha.sendText.mock.calls.at(-1)![2] as string;
+    }
+
+    it('sin cita próxima: anexa la invitación a agendar con el link sin token', async () => {
+      prisma.patient.findUnique.mockResolvedValue(null);
+
+      const msg = await ask();
+
+      expect(msg).toContain('Abrimos de lunes a viernes');
+      expect(msg).toMatch(/\*agendar\*/);
+      expect(msg).toContain('/es/agendar/clinica-a');
+      expect(msg).not.toContain('?t='); // link público, no tokenizado
+    });
+
+    it('con cita próxima: responde la duda y NO invita a agendar otra', async () => {
+      prisma.patient.findUnique.mockResolvedValue({
+        id: 'pat-1',
+        clinicId: 'clinic-A',
+        phone: convoState.phone,
+        name: 'Ana',
+      });
+      prisma.appointment.findFirst.mockResolvedValue({
+        id: 'appt-7',
+        clinicId: 'clinic-A',
+        patientId: 'pat-1',
+        status: 'PENDIENTE',
+        startAt: tomorrow10.toJSDate(),
+      });
+
+      const msg = await ask();
+
+      expect(msg).toBe('Abrimos de lunes a viernes de 9 a 18h.');
+      expect(msg).not.toContain('/agendar/');
+    });
+
+    it('no repite el link si el mensaje anterior del bot ya lo llevaba', async () => {
+      prisma.patient.findUnique.mockResolvedValue(null);
+      prisma.message.findFirst.mockResolvedValue({
+        body: 'Reserva en línea: http://localhost:3000/es/agendar/clinica-a',
+      });
+
+      const msg = await ask();
+
+      expect(msg).toBe('Abrimos de lunes a viernes de 9 a 18h.');
+    });
+
+    it('chat @lid sin teléfono: invita igual (no puede tener cita resoluble por phone)', async () => {
+      convoState.phone = null;
+
+      await bot.handleIncoming({
+        clinicId: 'clinic-A',
+        chatId: 'abc123@lid',
+        phone: null,
+        lid: 'abc123',
+        text: '¿cuál es el horario?',
+      });
+
+      expect(prisma.appointment.findFirst).not.toHaveBeenCalled();
+      expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/\*agendar\*/);
+    });
+
+    it('el handoff (answer=null) no lleva cierre con acción', async () => {
+      knowledge.answer.mockResolvedValue(null);
+      prisma.patient.findUnique.mockResolvedValue(null);
+
+      const msg = await ask();
+
+      expect(msg).toMatch(/persona del equipo/i);
+      expect(msg).not.toContain('/agendar/');
+    });
+  });
+
   it('Intent.PREGUNTA_FAQ con answer=null: handoff a NEEDS_HUMAN', async () => {
     intent.detect.mockResolvedValue(Intent.PREGUNTA_FAQ);
     knowledge.answer.mockResolvedValue(null);

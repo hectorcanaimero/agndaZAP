@@ -563,3 +563,13 @@
 - Detalle: [[notas/2026-09-11-bot-matching-saludo-si-persona]]. Fuente: §4 de
   [[analisis/2026-09-11-chatbot-analisis-tecnico]]; reparto en [[plans/2026-09-11-p0-bot-reparto]]
   (ambos llegan por el PR #45).
+
+## 2026-09-11 — M6: cierre con acción tras responder una duda
+- Cuando el RAG responde una pregunta y el paciente NO tiene cita próxima, el bot anexa una línea
+  corta invitando a agendar, con el link público SIN token (responder una duda no debe escribir
+  una `SchedulingSession`).
+- No se anexa en dos casos: si ya tiene cita próxima (invitarlo a agendar otra confunde), y si el
+  mensaje anterior del bot ya llevaba el link. Lo segundo no estaba en el pedido: repetir la misma
+  llamada a la acción en cada respuesta es justo el patrón que delata a un bot, y quien hace tres
+  preguntas seguidas la leería tres veces. Se resuelve con el último `Message OUT`, sin estado nuevo.
+- El pool `ctaAfterAnswer` rota tres variantes, igual que el resto de mensajes default.
