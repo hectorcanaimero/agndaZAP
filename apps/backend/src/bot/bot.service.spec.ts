@@ -47,7 +47,7 @@ describe('BotService — FSM de agendamiento', () => {
    * >15 veces en el mismo minuto quedan bajo el cap y no ven diferencia.
    */
   let redisCounters: Map<string, number>;
-  let redis: { incr: jest.Mock; expire: jest.Mock };
+  let redis: { incr: jest.Mock; expire: jest.Mock; set: jest.Mock };
   let handoffQueue: { add: jest.Mock };
   let bot: BotService;
 
@@ -227,6 +227,9 @@ describe('BotService — FSM de agendamiento', () => {
         return next;
       }),
       expire: jest.fn().mockResolvedValue(1),
+      // S29: throttle del aviso de espera (`SET NX`). Por defecto la clave no
+      // existía → toca avisar.
+      set: jest.fn().mockResolvedValue('OK'),
     };
 
     bot = new BotService(
@@ -1436,6 +1439,115 @@ describe('BotService — FSM de agendamiento', () => {
       await say('ehh');
 
       expect(intent.detect.mock.calls.at(-1)![2]).toEqual([]);
+    });
+  });
+
+  // ── S29: esperando a una persona, el bot se calla ──
+  describe('NEEDS_HUMAN silencia al bot (S29)', () => {
+    beforeEach(() => {
+      convoState.state = 'NEEDS_HUMAN';
+    });
+
+    async function say(text: string) {
+      await bot.handleIncoming({
+        clinicId: 'clinic-A',
+        chatId: convoState.chatId,
+        phone: convoState.phone,
+        text,
+      });
+      return waha.sendText.mock.calls.at(-1)?.[2] as string | undefined;
+    }
+
+    it('no clasifica ni responde con el bot: avisa una vez y registra el mensaje', async () => {
+      const msg = await say('¿me pueden confirmar el precio?');
+
+      expect(intent.detect).not.toHaveBeenCalled();
+      expect(knowledge.answer).not.toHaveBeenCalled();
+      expect(msg).toMatch(/avis|equipo/i);
+      // El mensaje entrante sí queda en la bandeja: es lo que verá la persona.
+      expect(prisma.message.create).toHaveBeenCalledWith({
+        data: {
+          conversationId: 'convo-1',
+          direction: 'IN',
+          body: '¿me pueden confirmar el precio?',
+        },
+      });
+    });
+
+    it('el segundo mensaje dentro de la ventana es silencio', async () => {
+      // `SET NX` devuelve null cuando la clave ya existe.
+      redis.set.mockResolvedValue(null);
+
+      await say('¿hola?');
+
+      expect(waha.sendText).not.toHaveBeenCalled();
+      expect(intent.detect).not.toHaveBeenCalled();
+    });
+
+    it('el throttle es por conversación y dura 4 h', async () => {
+      await say('sigo esperando');
+
+      expect(redis.set).toHaveBeenCalledWith(
+        'bot:waiting-notice:clinic-A:5804141234567@c.us',
+        '1',
+        'EX',
+        4 * 60 * 60,
+        'NX',
+      );
+    });
+
+    it('si Redis falla, no avisa: mejor callar que repetir en cada mensaje', async () => {
+      redis.set.mockRejectedValue(new Error('redis down'));
+
+      await say('¿hay alguien?');
+
+      expect(waha.sendText).not.toHaveBeenCalled();
+    });
+
+    it('CANCELAR explícito sí se atiende: no puede esperar a una persona', async () => {
+      prisma.patient.findUnique.mockResolvedValue({
+        id: 'pat-1',
+        clinicId: 'clinic-A',
+        phone: convoState.phone,
+        name: 'Ana',
+      });
+      prisma.appointment.findFirst.mockResolvedValue({
+        id: 'appt-7',
+        clinicId: 'clinic-A',
+        patientId: 'pat-1',
+        status: 'PENDIENTE',
+        startAt: tomorrow10.toJSDate(),
+      });
+      prisma.appointment.update = jest.fn().mockResolvedValue({});
+
+      const msg = await say('cancelar');
+
+      // Liberar el turno es lo único que este producto existe para conseguir:
+      // hacerle esperar a una persona para eso va en contra del objetivo.
+      expect(prisma.appointment.update).toHaveBeenCalledWith({
+        where: { id: 'appt-7' },
+        data: expect.objectContaining({ status: 'CANCELADA' }),
+      });
+      expect(msg).toMatch(/cancelada/i);
+    });
+
+    it('la FSM no avanza mientras espera', async () => {
+      convoState.flowStep = 'ASK_SLOT';
+      convoState.flowData = { serviceId: 'svc-1', offeredSlots: ['x'] };
+
+      await say('1');
+
+      expect(convoState.flowStep).toBe('ASK_SLOT');
+      expect(scheduling.createAppointment).not.toHaveBeenCalled();
+    });
+
+    it('con state=HUMAN sigue el silencio total, sin aviso', async () => {
+      convoState.state = 'HUMAN';
+
+      await say('hola?');
+
+      expect(waha.sendText).not.toHaveBeenCalled();
+      expect(redis.set).not.toHaveBeenCalled();
     });
   });
 

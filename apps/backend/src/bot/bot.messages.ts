@@ -95,6 +95,8 @@ export interface BotCopy {
   confirmNeedsWord: string;
   handoffOutsideHours(schedule: string): string;
 
+  /** Aviso mientras la conversación espera a una persona (S29). */
+  waitingForHuman: string;
   /** Respuesta a "¿cuándo es mi cita?" (M3-b). */
   appointmentInfo(service: string, professional: string, when: string, statusLine: string, link: string | null): string;
   noAppointmentToTell: string;
@@ -243,6 +245,8 @@ const es: BotCopy = {
   handoffOutsideHours: (schedule) =>
     `Le paso tu mensaje al equipo. Te responden en horario de atención: ${schedule}`,
 
+  waitingForHuman:
+    'Ya le avisé al equipo, te responden en cuanto puedan. Mientras tanto puedo cancelar tu cita si escribes *CANCELAR*.',
   appointmentInfo: (service, professional, when, statusLine, link) =>
     `${statusLine} Es de ${service} con ${professional}, el ${when}.${
       link ? `\n\nSi necesitas cambiarla o cancelarla:\n${link}` : ''
@@ -397,6 +401,8 @@ const pt: BotCopy = {
   handoffOutsideHours: (schedule) =>
     `Vou passar sua mensagem para a equipe. Respondem no horário de atendimento: ${schedule}`,
 
+  waitingForHuman:
+    'Já avisei a equipe, respondem assim que puderem. Enquanto isso posso cancelar sua consulta se você escrever *CANCELAR*.',
   appointmentInfo: (service, professional, when, statusLine, link) =>
     `${statusLine} É de ${service} com ${professional}, em ${when}.${
       link ? `\n\nSe precisar mudar ou cancelar:\n${link}` : ''
