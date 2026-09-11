@@ -57,6 +57,13 @@ export interface ManageSessionData {
 
 const SESSION_KEY_PREFIX = 'sched:sess:';
 const MANAGE_KEY_PREFIX = 'sched:manage:';
+/**
+ * Índice `appointmentId → tokens vivos`. Sin él solo se puede quemar el token
+ * que el paciente acaba de usar, y como se emiten varios por cita (respuesta
+ * del POST, recordatorios, mensajes del bot) los demás sobreviven apuntando a
+ * una cita que ya no existe como tal.
+ */
+const MANAGE_INDEX_PREFIX = 'sched:manage:appt:';
 const DEFAULT_TTL_SECONDS = 30 * 60; // 30 min — suficiente para completar el flujo.
 /**
  * El token de gestión vive hasta el inicio de la cita: después ya no se puede
@@ -198,6 +205,25 @@ export class SchedulingSessionService {
       'EX',
       ttlSeconds,
     );
+
+    // Índice para poder quemarlos TODOS cuando la cita deja de ser gestionable.
+    // Best-effort: si esto falla, el token sigue siendo válido y funcional —
+    // solo perdemos la capacidad de revocarlo antes de su TTL, que es peor que
+    // nada pero mucho mejor que no emitir el link.
+    //
+    // El TTL del índice es el techo (30 días) y no el del token: si un token
+    // posterior tuviera un TTL más corto y el índice heredara ese, el índice
+    // moriría antes que un token más antiguo y lo dejaría huérfano justo en el
+    // caso que esto viene a evitar.
+    try {
+      const indexKey = MANAGE_INDEX_PREFIX + input.appointmentId;
+      await this.redis.sadd(indexKey, token);
+      await this.redis.expire(indexKey, MANAGE_MAX_TTL_SECONDS);
+    } catch (e) {
+      this.logger.warn(
+        `no se pudo indexar el manage token slug=${input.clinicSlug}: ${(e as Error).message}`,
+      );
+    }
     // Sin PII y sin appointmentId crudo: slug + prefijo del token bastan para
     // seguir el rastro en logs.
     this.logger.log(
@@ -262,6 +288,45 @@ export class SchedulingSessionService {
       this.logger.warn(
         `no se pudo invalidar el manage token=${token.slice(0, 6)}…: ${(e as Error).message}`,
       );
+    }
+  }
+
+  /**
+   * Quema TODOS los tokens vivos de una cita.
+   *
+   * Se llama cuando la cita deja de ser gestionable —la cancela la clínica
+   * desde el panel, o pasa a un estado terminal— porque a partir de ahí un
+   * token solo sirve para leer datos del paciente: nombre, servicio,
+   * profesional y horario. No permite mutar nada (`isPatientMutable` corta),
+   * pero exponerlos sin motivo durante los hasta 30 días que vive el link es
+   * justo lo que este índice viene a cerrar.
+   *
+   * Best-effort y sin lanzar: la cancelación que lo motivó ya está persistida y
+   * no se deshace por no poder limpiar Redis. Los tokens caducan solos.
+   *
+   * @returns cuántos tokens se quemaron (0 si no había índice).
+   */
+  async invalidateAllForAppointment(appointmentId: string): Promise<number> {
+    const indexKey = MANAGE_INDEX_PREFIX + appointmentId;
+    try {
+      const tokens = await this.redis.smembers(indexKey);
+      if (tokens.length === 0) {
+        await this.redis.del(indexKey);
+        return 0;
+      }
+      await this.redis.del(
+        ...tokens.map((t) => MANAGE_KEY_PREFIX + t),
+        indexKey,
+      );
+      this.logger.log(
+        `manage tokens invalidados apptId=${appointmentId} n=${tokens.length}`,
+      );
+      return tokens.length;
+    } catch (e) {
+      this.logger.warn(
+        `no se pudieron invalidar los manage tokens apptId=${appointmentId}: ${(e as Error).message}`,
+      );
+      return 0;
     }
   }
 }

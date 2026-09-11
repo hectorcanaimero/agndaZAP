@@ -1059,6 +1059,9 @@ describe('PublicController — gestión de cita por link', () => {
     sessions = {
       resolveManage: jest.fn().mockResolvedValue(SESSION),
       invalidateManage: jest.fn().mockResolvedValue(undefined),
+      // Al cancelar se queman TODOS los links vivos de la cita, no solo el
+      // que se acaba de usar (S13).
+      invalidateAllForAppointment: jest.fn().mockResolvedValue(2),
       createManage: jest
         .fn()
         .mockResolvedValue({ token: 'mtok-new', expiresInSeconds: 3600 }),
@@ -1205,7 +1208,9 @@ describe('PublicController — gestión de cita por link', () => {
         clinicId: 'clinic-A',
         appointmentId: 'appt-1',
       });
-      expect(sessions.invalidateManage).toHaveBeenCalledWith(TOKEN);
+      expect(sessions.invalidateAllForAppointment).toHaveBeenCalledWith(
+        'appt-1',
+      );
     });
 
     it('avisa a recepción: sin esto la cancelación solo se ve si alguien refresca el panel', async () => {
