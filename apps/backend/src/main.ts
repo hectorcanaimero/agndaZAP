@@ -22,6 +22,12 @@ import {
 import { createRemindersWorker } from './reminders/reminders.processor';
 import { parseRedis } from './reminders/reminders.module';
 import { createFollowUpsWorker } from './follow-ups/follow-ups.processor';
+import {
+  createBotInboundWorker,
+  safeErrorLabel,
+} from './bot/bot-inbound.processor';
+import { BOT_INBOUND_QUEUE_TOKEN } from './bot/bot-inbound.queue';
+import { BotService } from './bot/bot.service';
 
 async function bootstrap(): Promise<void> {
   // Sentry ANTES que cualquier NestFactory / Module init. Sin esto, si un
@@ -156,6 +162,31 @@ async function bootstrap(): Promise<void> {
     );
   });
 
+  // Worker de mensajes entrantes de WhatsApp. El webhook encola y responde 200
+  // al instante; el trabajo lento (LLM, FSM, RAG) pasa por aquí. Sin esto, WAHA
+  // reintentaba el webhook por timeout y el mismo mensaje se procesaba dos
+  // veces. Ver [[notas/2026-09-11-cola-bot-inbound]].
+  const botInboundWorker = createBotInboundWorker(
+    parseRedis(),
+    app.get(BotService),
+    prisma,
+  );
+  botInboundWorker.on('ready', () => logger.log('BotInboundWorker listo'));
+  botInboundWorker.on('failed', (job, err) => {
+    // Ni `job.data` ni `err.message` crudos: los dos pueden llevar el texto
+    // del paciente (ver `safeErrorLabel`).
+    //
+    // Sólo los intentos intermedios, y a nivel `warn`: el descarte definitivo
+    // lo loguea el processor con su contexto. Si no, un mensaje perdido deja
+    // cuatro líneas de `error` y la alerta real se ahoga en el ruido.
+    const attempt = (job?.attemptsMade ?? 0) + 1;
+    const isLast = attempt >= (job?.opts?.attempts ?? 1);
+    if (isLast) return;
+    logger.warn(
+      `BotInbound job ${job?.id} falló (intento ${attempt}, reintentando): ${safeErrorLabel(err)}`,
+    );
+  });
+
   // Health-monitor de sesiones WAHA. Repeatable job cada N minutos que corre
   // `WahaHealthMonitor.checkAll()`. El `jobId` fijo hace que BullMQ dedupe el
   // repeatable a través de restarts del backend (idempotente). Si se revierte
@@ -198,6 +229,13 @@ async function bootstrap(): Promise<void> {
       );
     }
     try {
+      await botInboundWorker.close();
+    } catch (e) {
+      logger.error(
+        `Error cerrando bot-inbound worker: ${(e as Error).message}`,
+      );
+    }
+    try {
       await healthWorker.close();
     } catch (e) {
       logger.error(
@@ -213,6 +251,16 @@ async function bootstrap(): Promise<void> {
       await app.close();
     } catch (e) {
       logger.error(`Error cerrando app: ${(e as Error).message}`);
+    }
+    // La cola se cierra DESPUÉS de `app.close()`: mientras el servidor HTTP
+    // siga aceptando webhooks, `add()` tiene que funcionar. Al revés queda una
+    // ventana en la que el webhook responde 500 por una cola ya cerrada.
+    try {
+      await app.get<Queue>(BOT_INBOUND_QUEUE_TOKEN).close();
+    } catch (e) {
+      logger.error(
+        `Error cerrando bot-inbound queue: ${(e as Error).message}`,
+      );
     }
     process.exit(0);
   };

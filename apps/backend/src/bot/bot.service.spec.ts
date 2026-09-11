@@ -1098,56 +1098,10 @@ describe('BotService — FSM de agendamiento', () => {
 
   // ─────────────────── Rate-limit por chatId (ADR 0007) ───────────────────
 
-  it('el 16to mensaje del mismo chat en la ventana se descarta silenciosamente', async () => {
-    intent.detect.mockResolvedValue(Intent.OTRO);
-
-    // Los primeros 15 pasan.
-    for (let i = 0; i < 15; i++) {
-      await bot.handleIncoming({
-        clinicId: 'clinic-A',
-        chatId: convoState.chatId,
-        phone: convoState.phone,
-        text: 'ping',
-      });
-    }
-    expect(intent.detect).toHaveBeenCalledTimes(15);
-    const callsBefore = waha.sendText.mock.calls.length;
-
-    // El 16to debe cortarse ANTES de intent.detect: sin nuevas llamadas al LLM,
-    // sin nuevas respuestas al chat.
-    await bot.handleIncoming({
-      clinicId: 'clinic-A',
-      chatId: convoState.chatId,
-      phone: convoState.phone,
-      text: 'ping-16',
-    });
-    expect(intent.detect).toHaveBeenCalledTimes(15);
-    expect(waha.sendText.mock.calls.length).toBe(callsBefore);
-
-    // El contador Redis reflejó el intento (INCR corre siempre).
-    const rlKeys = [...redisCounters.keys()].filter((k) =>
-      k.startsWith('bot:msg:clinic-A:5804141234567@c.us:'),
-    );
-    expect(rlKeys.length).toBeGreaterThan(0);
-    expect(redisCounters.get(rlKeys[0])).toBe(16);
-  });
-
-  it('si Redis falla, fail-open: el bot sigue procesando', async () => {
-    intent.detect.mockResolvedValue(Intent.OTRO);
-    redis.incr.mockRejectedValueOnce(new Error('redis down'));
-
-    // Texto que NO es saludo — GREETING_REGEX cortaría antes de llegar a
-    // intent.detect y este test verifica que el pipeline LLM se ejecuta.
-    await bot.handleIncoming({
-      clinicId: 'clinic-A',
-      chatId: convoState.chatId,
-      phone: convoState.phone,
-      text: '¿tienen turno mañana?',
-    });
-
-    // Fail-open: intent.detect se llamó igual.
-    expect(intent.detect).toHaveBeenCalledTimes(1);
-  });
+  // El rate-limit del ADR 0007 ya no vive en `handleIncoming`: con la cola
+  // `bot-inbound` en medio pasó al webhook, ANTES de encolar. Su cobertura
+  // está en `webhook.controller.spec.ts` → "rate-limit antes de encolar".
+  // Ver docs/adr/0021-cola-bot-inbound.md.
 
   it('resolveChoice ignora matches por nombre con menos de 3 chars', () => {
     // Accedemos al método privado a propósito: es determinista y no depende de

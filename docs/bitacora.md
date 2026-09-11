@@ -674,3 +674,33 @@
   vacía lo dice y muestra todo.
 - Tras dos respuestas seguidas sin entender, ofrece el form web sin resetear la FSM.
 - Detalle y gotchas en [[notas/2026-09-11-fsm-navegacion-horarios]].
+
+## 2026-09-11 — P1 · B10: cola `bot-inbound` entre el webhook y el bot
+- El webhook encola y responde 200 al instante; un worker BullMQ llama a `handleIncoming`. Antes
+  esperaba al bot (LLM incluido) y WAHA reintentaba por timeout, procesando el mismo mensaje dos
+  veces. Decisión y consecuencias en [[adr/0021-cola-bot-inbound]].
+- **Blocker cazado en revisión, no en los tests**: BullMQ rechaza un `jobId` con `:`, y la clave de
+  dedup tiene cuatro segmentos. Habría lanzado en TODOS los mensajes de texto → 500 → WAHA
+  reintentando contra un fallo determinista → mensaje perdido, con el health en verde. No lo vieron
+  los 86 tests porque la `Queue` está mockeada en todos. Detalle en
+  [[notas/2026-09-11-cola-bot-inbound]].
+- Del `security-auditor`: el rate-limit del ADR 0007 quedaba DETRÁS de la cola (cualquiera con el
+  token del webhook podía llenar Redis), retención de jobs por cantidad y no por edad con datos de
+  salud dentro, `parseRedis` descartando credenciales y TLS del `REDIS_URL`, y la PII colándose por
+  el *mensaje* de los errores de Prisma. Todo corregido.
+- El health check mira la **antigüedad** del mensaje más viejo, no sólo la profundidad: con 5-10
+  mensajes/hora, un worker muerto tardaría días en llegar a 50 pendientes.
+- Pendiente y anotado en el ADR: quitar el rate-limit de `handleIncoming` (mientras esté en los dos
+  sitios, un reintento puede cruzar el cap y perder el mensaje en silencio), encolar sólo un id para
+  sacar los datos del paciente de Redis, y un compare-and-set en la FSM porque un reintento reordena.
+
+## 2026-09-11 — El rate-limit del bot sale de `handleIncoming` (va con la cola `bot-inbound`)
+- Con la cola en medio, tener las dos capas del ADR 0007 dentro de `handleIncoming` además del
+  webhook consumía presupuesto dos veces y dejaba un agujero peor: un reintento de BullMQ que
+  cruzara el cap hacía `return` en silencio, el job se marcaba completado y el mensaje del paciente
+  se perdía sin fallo, sin Sentry y sin bandeja.
+- El bloque se quita de `handleIncoming` y queda solo en el webhook, delante del `inbound.add`.
+  Queda un comentario en su sitio explicando por qué no debe volver: quien llegue desde el ADR 0007
+  y lo vea ausente podría "restaurarlo" de buena fe.
+- La cobertura se muda al spec del webhook, que además gana el fail-open del camino de texto.
+- ADR 0007 actualizado.

@@ -11,6 +11,7 @@ import {
 import { WebhookController } from './webhook.controller';
 import { WhatsappPanelController } from './whatsapp-panel.controller';
 import { BotModule } from '../bot/bot.module';
+import { BotInboundQueueModule } from '../bot/bot-inbound.queue';
 
 /**
  * WhatsappModule: encapsula el cliente WAHA, el webhook entrante y el panel
@@ -41,7 +42,13 @@ import { BotModule } from '../bot/bot.module';
  * `PrismaModule` es global (`@Global()`) — no requiere import explícito.
  */
 @Module({
-  imports: [forwardRef(() => BotModule), PublicModule],
+  imports: [
+    forwardRef(() => BotModule),
+    PublicModule,
+    // Cola de mensajes entrantes: el webhook encola y responde 200 al
+    // instante, el worker de `main.ts` llama al bot.
+    BotInboundQueueModule,
+  ],
   providers: [
     WahaService,
     WahaHealthMonitor,
