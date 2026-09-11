@@ -584,6 +584,12 @@ export class BotService {
           question: effectiveText,
           locale: clinic.locale,
           tone: clinic.botTone, // custom per-tenant desde /panel/ajustes
+          // Teléfono de la conversación (el que WAHA reporta, no uno
+          // declarado): habilita la parte de "tu próxima cita" del bloque de
+          // hechos. `ClinicFactsService` lo filtra por clinicId + phone. Va
+          // `convo.phone` y no el `phone` del mensaje porque el upsert conserva
+          // el número ya conocido si este mensaje llegó por @lid.
+          phone: convo.phone,
         });
         if (result) {
           await this.reply(
