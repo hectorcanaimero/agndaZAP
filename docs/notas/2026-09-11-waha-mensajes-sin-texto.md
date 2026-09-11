@@ -100,12 +100,42 @@ está escrito, así que relanzar sólo consigue que WAHA reintente, que
 el throttle ya consumido deje al paciente sin aviso 6 h. En vez de eso se
 libera la clave del throttle y se loguea: el próximo adjunto vuelve a intentar.
 
+## Handoff tras dos adjuntos seguidos
+
+Decisión del owner (S2), implementada en el PR A3 sobre este mismo archivo.
+El problema: el hilo se quedaba en `BOT`, que no entra en el filtro de triaje
+`NEEDS_HUMAN` del panel, así que un paciente que sólo manda notas de voz
+recibía un aviso cada 6 h y **nadie lo atendía nunca**.
+
+Ahora `bot:media-count:{clinicId}:{chatId}` cuenta adjuntos **seguidos**
+(ventana 24 h). Al segundo sin texto en medio, la conversación pasa a
+`NEEDS_HUMAN`, se limpian `flowStep`/`flowData` y el bot responde
+"Te paso con una persona del equipo para escucharte."
+
+Detalles que no se ven en el código a primera vista:
+
+- **Un mensaje de texto borra el contador**, desde el camino del bot en el
+  propio webhook. Por eso "audio, texto, audio" no dispara handoff.
+- **Tras el handoff se reinicia la racha**, así que el tercer adjunto vuelve a
+  contar como primero y cae en el aviso normal — que su propio throttle de 6 h
+  ya tiene silenciado. Sin ese reset, cada adjunto siguiente repetiría el
+  handoff.
+- **Con la conversación ya en `NEEDS_HUMAN` no se repite el mensaje**: se
+  reinicia la racha y se calla.
+- **`state = HUMAN` corta antes de contar**: silencio total, ni contador.
+- **Fail-open al revés que el throttle**: si Redis se cae, `bumpMediaCount`
+  devuelve 1, o sea tratamos cada adjunto como el primero. Ante la duda, mejor
+  repetir el aviso que derivar a una persona por error.
+
+> Gotcha de los tests: el mock de Redis tiene que modelar `SET ... NX`
+> devolviendo `null` si la clave existe. Con un `mockResolvedValue('OK')` plano,
+> el throttle de 6 h no existe y los tests de racha mienten — el tercer adjunto
+> "responde" cuando en producción calla.
+
 ## Pendiente, decidido no hacer aquí
 
-- **Escalar a `NEEDS_HUMAN`** al segundo adjunto sin texto. Hoy el hilo se queda
-  en `BOT` y no aparece en el filtro de triaje del panel, así que un paciente
-  que sólo manda audios recibe un aviso cada 6 h y nadie lo atiende. Es cambio
-  de política de producto, no de B4: queda para el owner.
+- **Transcripción de audio** (backlog como M10): resolvería el caso de raíz en
+  vez de derivar a una persona.
 - **Hashear el `chatId` en las claves de Redis.** `bot:media-notice:{clinicId}:{chatId}`
   lleva el teléfono en claro, como ya hace `bot:msg:` en `bot.service.ts`. Los
   dos revisores lo dieron por no-bloqueante, pero Redis persiste a disco sin
