@@ -150,11 +150,18 @@ ligue conversaciones con `phone` a su `Patient` por `(clinicId, phone)`).
 Puntos de enlace:
 1. **FSM, `handleConfirm` con éxito** → `conversation.update({ patientId: appt.patientId })`.
 2. **Token BOT_WEB consumido** (`POST /public/:slug/appointments` con `token`): ya ata
-   `appointment.conversationId`; además `conversation.update({ patientId })`. Si
-   `conversation.phone` es `null` (caso `@lid`), rellenar `phone` con el del `Patient` recién
-   creado (es el que el paciente declaró en el form; anotar en la nota que es declarado, no
-   verificado). Si `conversation.phone` existe y **no coincide** con el del form (el campo era
-   readonly, así que solo pasa por manipulación): no ligar, `logger.warn` sin PII, seguir.
+   `appointment.conversationId`. **Nunca se rellena `conversation.phone`** con el del form: el
+   número del form es declarado, y convertirlo en verificado permitiría que un chat `@lid`
+   responda `SÍ`/`CANCELAR` sobre las citas de otro paciente (hallazgo de la sesión A,
+   2026-09-11). Ligar `patientId` **solo si el `Patient` lo creó ese mismo
+   `createAppointment`** (`patientCreated: true` en el resultado; nadie más pudo reclamarlo).
+   Si el upsert encontró un paciente preexistente: no ligar; la cita queda alcanzable desde ese
+   chat solo por `appointment.conversationId`. Si `conversation.phone` existe y no coincide con
+   el del form: no ligar, `logger.warn` sin PII, la cita se crea igual.
+2b. **Resolución acotada por conversación**: `findUpcomingAppointment` busca, en este orden,
+   por `patientId` si está ligado, luego por `appointment.conversationId = convo.id`, luego por
+   `phone` de la conversación. Así un chat `@lid` gestiona **sus propias** citas sin heredar el
+   historial del teléfono.
 3. **Oportunista**: `findUpcomingAppointment` y `greetingWithAppointment` buscan primero por
    `patientId` si existe y, si no, por `phone`; cuando encuentran `Patient` por `phone` y la
    conversación tiene `patientId = null`, lo ligan.
@@ -162,7 +169,8 @@ Puntos de enlace:
 
 Tests (`bot.service.spec.ts`, `public.controller.spec.ts`):
 - Confirmar cita por FSM deja `conversation.patientId` = paciente de la cita.
-- Cita por token con conversación `@lid` (`phone = null`) → liga `patientId` y rellena `phone`.
+- Cita por token con conversación `@lid` y paciente **nuevo** → liga `patientId`; `phone` sigue `null`.
+- Cita por token con conversación `@lid` y paciente **preexistente** → no liga `patientId`; la cita se resuelve por `conversationId` y ese chat puede confirmarla/cancelarla, pero no otras del mismo teléfono.
 - Cita por token con `phone` distinto al de la conversación → no liga, warn, la cita se crea igual.
 - Conversación con `patientId` ligado y `phone = null` responde `SÍ` al recordatorio y confirma.
 - Follow-up: conversación ligada por `patientId` recibe `AWAITING_NPS_SCORE` (coordinar con #44).
