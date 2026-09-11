@@ -564,12 +564,28 @@
   [[analisis/2026-09-11-chatbot-analisis-tecnico]]; reparto en [[plans/2026-09-11-p0-bot-reparto]]
   (ambos llegan por el PR #45).
 
-## 2026-09-11 — S1: el rate-limit del bot, en un solo sitio
-- El bloque del ADR 0007 estaba duplicado palabra por palabra en `bot.service.ts` y en
-  `webhook.controller.ts` (el camino de los adjuntos, que no pasa por el bot). Extraído a
-  `apps/backend/src/bot/bot-rate-limit.ts` con spec propio; los dos callers lo consumen.
-- Claves de Redis, límites y TTLs **sin cambios**: el presupuesto sigue compartido y cada mensaje
-  se cuenta una sola vez. `scope` (`bot` | `media`) solo etiqueta el log.
-- El hash del `chatId` en logs queda unificado en 12 hex: el bot usaba 8 y el webhook 12, así que
-  las dos mitades de una misma conversación no se correlacionaban con un grep.
-- ADR 0007 actualizado con la sección de implementación.
+## 2026-09-11 — P1 · S4: `Feedback` admitía filas cruzadas entre clínicas
+- `FollowUpsService.recordFeedback` escribía `clinicId` y `appointmentId` sin comprobar que fueran
+  juntos. `Feedback` tiene FKs separadas a `Clinic` y `Appointment`, así que la base lo permite, y el
+  `appointmentId` viene de `Conversation.flowData` (JSON durable), no de la request. Doble daño: el
+  panel de una clínica leería el comentario en texto libre de un paciente de otra
+  (`@@index([clinicId, respondedAt])`), y como `appointmentId` es `@unique`, la clínica legítima ya
+  no podría registrar nunca el feedback real de esa cita.
+- Ahora valida con `appointment.findFirst({ id, clinicId })` antes de escribir, y ante un cruce
+  devuelve `created: false` con log de `error` en vez de lanzar (el caller es el webhook: un 500 ahí
+  es un bucle de reintentos de WAHA sobre un `flowData` que no se arregla solo).
+- **Segundo agujero, sin cerrar todavía**: `bot.service.ts` (`handleAwaitingNpsComment`) hace
+  `feedback.update({ where: { appointmentId } })` sin `clinicId`, y ese sí *sobrescribe* texto de un
+  paciente de otra clínica. No se puede arreglar en el sitio porque `update` exige un `where` único.
+  Queda `FollowUpsService.recordComment` (con `updateMany`, que sí acepta `where` compuesto) listo
+  para que la sesión dueña de `bot.service.ts` lo cablee en una línea. Detalle en
+  [[notas/2026-09-11-feedback-cross-tenant]].
+- El `security-auditor` no encontró blockers, pero sí que la justificación de `updateMany` que
+  escribí era **falsa**: con `extendedWhereUnique` (GA desde Prisma 5.0) `update` sí admite el
+  filtro por `clinicId`. El motivo real es que `update` lanza P2025 sin match y eso es un 500 en el
+  webhook. Corregido en el comentario, en el nombre del test y en la nota.
+- También salió del audit: el guard de idempotencia de `scheduleForAppointment` leía sin `clinicId`
+  (una fila envenenada dejaba a la clínica legítima sin prompt), y el catch de `recordFeedback` ahora
+  cubre P2003/P2025 además de P2002. Pendientes anotados: FK compuesta
+  `Feedback → Appointment(clinicId, id)` con migración y ADR propio, y el `include` de
+  `feedback.controller.ts`, que sigue el `appointmentId` hasta `patient.name` sin revalidar tenant.
