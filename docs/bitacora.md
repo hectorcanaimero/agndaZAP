@@ -1018,3 +1018,15 @@
   mirar la convierte en real. Es exactamente lo que pasó con `reason`.
 - Comprobado de paso que ninguno de los `waha.*` colisiona hoy. `name` sí está en la lista, por si
   alguien lo usa como campo de evento.
+## 2026-09-11 — S29: esperando a una persona, el bot se calla
+- Con `Conversation.state = NEEDS_HUMAN` el bot ya no clasifica ni responde. El mensaje entrante
+  **sí** se registra: es lo que verá quien atienda desde la bandeja.
+- Antes seguía respondiendo mientras el paciente esperaba —pidió una persona y le seguía hablando
+  un robot—, y con el retorno automático de M7 encima recibía respuestas del bot **y** un aviso a
+  las 4 h diciendo que nadie le había contestado.
+- Un aviso cada 4 h como mucho (`SET NX` en Redis por conversación): quien espera suele escribir
+  varias veces, y repetir "ya avisé al equipo" en cada mensaje es ruido.
+- **Fail-closed**: si Redis no responde, no se avisa. El coste de callar es un mensaje menos —el
+  paciente ya sabe que está esperando—; el de avisar sería repetirle lo mismo en cada mensaje.
+- **`CANCELAR` explícito se sigue atendiendo.** Hacerle esperar a una persona para liberar un turno
+  va justo en contra de lo único que este producto existe para conseguir.

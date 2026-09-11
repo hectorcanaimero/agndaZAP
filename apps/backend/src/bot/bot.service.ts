@@ -214,6 +214,9 @@ export class BotService {
    */
   static readonly AI_DISCLOSURE = botCopy('es').aiDisclosure;
 
+  /** Horas entre avisos mientras la conversación espera a una persona (S29). */
+  private static readonly WAITING_NOTICE_TTL_SEC = 4 * 60 * 60;
+
   /** Ventana en la que un "sí" suelto se lee como respuesta a un recordatorio. */
   private static readonly REMINDER_REPLY_WINDOW_H = 48;
 
@@ -391,6 +394,36 @@ export class BotService {
   }
 
   /**
+   * Throttle del aviso de espera: `SET NX` por conversación con TTL de 4 h.
+   * `true` = te toca avisar.
+   *
+   * Fail-CLOSED a propósito, igual que el aviso de adjuntos del webhook: si
+   * Redis no está, el coste de no avisar es un mensaje menos —el paciente ya
+   * sabe que está esperando—, y el de avisar es repetirle lo mismo en cada
+   * mensaje. El entrante queda registrado en la bandeja de todas formas.
+   */
+  private async claimWaitingNotice(
+    clinicId: string,
+    chatId: string,
+  ): Promise<boolean> {
+    try {
+      const result = await this.redis.set(
+        `bot:waiting-notice:${clinicId}:${chatId}`,
+        '1',
+        'EX',
+        BotService.WAITING_NOTICE_TTL_SEC,
+        'NX',
+      );
+      return result !== null;
+    } catch (e) {
+      this.logger.warn(
+        `throttle del aviso de espera falló (redis) clinic=${clinicId}: ${(e as Error).message}`,
+      );
+      return false;
+    }
+  }
+
+  /**
    * Link de gestión de una cita concreta (ADR 0020): ver, cambiar horario o
    * cancelar desde la web. Emite un token nuevo por llamada.
    *
@@ -548,6 +581,35 @@ export class BotService {
     if (convo.state === 'HUMAN') return;
 
     const normalized = normalizeText(text);
+
+    // Derivada y esperando a una persona (S29): el bot no clasifica ni
+    // responde. El mensaje ya quedó registrado arriba, que es lo que importa —
+    // la bandeja lo ve y alguien contestará.
+    //
+    // Antes el bot seguía respondiendo mientras el paciente esperaba, que es
+    // desconcertante: pidió una persona y le sigue hablando un robot. Y con el
+    // retorno automático de M7 encima, recibía respuestas del bot Y un aviso a
+    // las 4 h diciendo que nadie le había contestado.
+    if (convo.state === 'NEEDS_HUMAN') {
+      // `CANCELAR` explícito sí se atiende: es una acción ya confirmada por el
+      // paciente y hacerle esperar a una persona para liberar el turno va en
+      // contra de lo único que este producto existe para conseguir.
+      if (parseReminderReply(normalized) === 'CANCEL') {
+        await this.handleReminderReply(clinic, convo, 'CANCEL', phone);
+        return;
+      }
+      // Un aviso cada 4 h como mucho: repetir "ya avisé al equipo" en cada
+      // mensaje es ruido, y quien está esperando suele escribir varias veces.
+      if (await this.claimWaitingNotice(clinicId, chatId)) {
+        await this.reply(
+          clinic.wahaSession,
+          chatId,
+          convo.id,
+          this.copy(clinic).waitingForHuman,
+        );
+      }
+      return;
+    }
 
     // Escape universal a humano: desde CUALQUIER paso (con o sin FSM) el paciente
     // puede pedir hablar con una persona y salimos del bot inmediatamente.
