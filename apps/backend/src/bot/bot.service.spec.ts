@@ -137,7 +137,14 @@ describe('BotService — FSM de agendamiento', () => {
         findMany: jest.fn().mockResolvedValue([professional1]),
         findFirst: jest.fn().mockResolvedValue(professional1),
       },
-      patient: { findUnique: jest.fn().mockResolvedValue(null) },
+      patient: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        // `linkConversationPatient` comprueba que el paciente sea de la clínica
+        // antes de escribir (defensa en profundidad contra un cross-tenant).
+        findFirst: jest.fn().mockImplementation(async ({ where }: any) =>
+          where.clinicId === 'clinic-A' ? { id: where.id } : null,
+        ),
+      },
       appointment: { findFirst: jest.fn().mockResolvedValue(null) },
       // Recordatorio SENT reciente: gatea el "sí" suelto (B2). Default null
       // = no hay nada que confirmar.
@@ -325,7 +332,7 @@ describe('BotService — FSM de agendamiento', () => {
     });
 
     expect(prisma.conversation.updateMany).toHaveBeenCalledWith({
-      where: { id: 'convo-1', clinicId: 'clinic-A', patientId: null },
+      where: { id: 'convo-1', clinicId: 'clinic-A' },
       data: { patientId: 'pat-nuevo' },
     });
     expect(convoState.patientId).toBe('pat-nuevo');
@@ -1495,7 +1502,7 @@ describe('BotService — FSM de agendamiento', () => {
       await say('sí');
 
       expect(prisma.conversation.updateMany).toHaveBeenCalledWith({
-        where: { id: 'convo-1', clinicId: 'clinic-A', patientId: null },
+        where: { id: 'convo-1', clinicId: 'clinic-A' },
         data: { patientId: 'pat-1' },
       });
       expect(convoState.patientId).toBe('pat-1');

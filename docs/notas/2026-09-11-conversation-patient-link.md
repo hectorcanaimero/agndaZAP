@@ -37,19 +37,47 @@ como verificado — `findUpcomingAppointment` resuelve por ese número, así que
 podría responder `SÍ` o `CANCELAR` sobre las citas del paciente dueño del teléfono,
 incluidas las que no creó.
 
-De ahí las tres reglas del enlace desde el token `BOT_WEB`:
+### El intento que NO funcionó, y por qué
 
-- No se escribe `phone`. El único teléfono en el que confiamos es el de WAHA.
-- Se liga `patientId` **solo si el `Patient` nació en ese mismo `createAppointment`**
-  (`patientCreated`): nadie más pudo reclamarlo todavía. Si el paciente ya existía, no
-  se liga — esa cita sigue siendo alcanzable desde el chat por la vía 2.
-- Si la conversación ya tenía teléfono y **no** coincide con el del form, no se liga y
-  queda un `warn` sin PII. La cita se crea igual: el paciente no tiene por qué pagar
-  por una discrepancia nuestra.
+La primera versión sí ligaba desde el borde público, con esta regla: ligar solo si el
+`Patient` nació en ese mismo `createAppointment` (`patientCreated`). El razonamiento
+era "si nadie había reclamado ese teléfono, nadie puede quejarse".
 
-`patientCreated` es exacto incluso con dos peticiones simultáneas del mismo teléfono:
-`SchedulingService.createAppointment` lo resuelve con `create` + captura del P2002, no
-deduciéndolo de un `findUnique` previo.
+**`patientCreated` prueba ausencia de reclamo previo, no propiedad.** Lo destapó el
+`security-auditor`, y el ataque es barato: un chat `@lid` pide el link, rellena el form
+con el teléfono de otra persona que todavía no es paciente de esa clínica, y se queda
+ligado a **su** `Patient`. Como `Patient` es único por `(clinicId, phone)`, a partir de
+ahí la vía 1 le entrega todas las citas futuras de ese número — incluidas las que cree
+después recepción desde el panel o la propia víctima por la web. Puede leerlas (con el
+nombre real en el saludo con contexto) y confirmarlas o cancelarlas. Coste del ataque:
+un WhatsApp y un número.
+
+Peor aún, el vínculo contamina el panel: `patients.controller.ts` resuelve "la
+conversación del paciente" por `patientId` ordenando por `updatedAt`, así que la ficha
+de la víctima mostraría el hilo del atacante y las alertas a recepción irían allí.
+
+**Conclusión: no se liga desde el borde público.** Los tres objetivos de S5 para *esa*
+cita (recordatorio-respuesta, follow-up, saludo con contexto) ya los cubre la vía 2 por
+`conversationId`. Lo único que se pierde es el enganche con *otras* citas futuras del
+mismo paciente, que es exactamente la parte que no se puede autorizar con un teléfono
+declarado.
+
+### Lo que sí se controla en el borde público
+
+Queda un filtro sobre qué citas se atan al chat (`conversationId`), que es lo que
+después habilita la vía 2. Solo se ata cuando:
+
+- la conversación tiene teléfono verificado por WAHA y **coincide** con el del
+  formulario, o
+- la conversación no tiene teléfono (`@lid`) y ese número **todavía no es paciente** de
+  la clínica, así que la cita nace de ese chat y el nombre lo pone quien la crea.
+
+Sin la segunda condición, un `@lid` que escribiera el teléfono de un paciente existente
+se quedaría con su cita por la vía 2 — el mismo secuestro por otra puerta, y además un
+oráculo de enumeración: probar números y ver si el bot devuelve un nombre.
+
+Cuando no se ata, **la cita se crea igual** y queda un `warn` sin PII. El paciente no
+tiene por qué pagar por una discrepancia nuestra.
 
 ## Efecto colateral necesario: el "sí" sin teléfono
 
@@ -62,10 +90,33 @@ Lo mismo con `hasConfirmationContext`: busca el `Reminder` SENT por `appointment
 la cita ya resuelta, en vez de re-derivar el paciente desde el teléfono. Más simple y
 funciona sin número.
 
+## Dónde sí se liga
+
+Solo desde fuentes verificadas, las dos en `BotService`:
+
+- al **confirmar una cita por la FSM**, donde el teléfono es el de WAHA por
+  construcción (la FSM no arranca sin él);
+- al resolver por la **vía 3**, cuando el teléfono verificado de la conversación lleva a
+  un `Patient`.
+
+La vía 3 además **corrige** un enlace que haya quedado apuntando a otro paciente: el
+número verificado manda. Y la vía 1 exige que, si la conversación tiene teléfono, el
+paciente ligado sea el de ese número — así un enlace viejo no puede ganarle al
+teléfono verificado.
+
 ## Multi-tenant
 
 Todas las escrituras van por `updateMany` con `clinicId` en el `where` — nunca un
 `update` por id suelto. Las tres vías de resolución llevan `clinicId`.
+
+`linkConversationPatient` comprueba además que el `patientId` sea de esa clínica antes
+de escribir. La FK de Prisma no valida clínica, así que una fila
+`Conversation(A) → Patient(B)` quedaría persistida y el panel, que resuelve por
+`patientId`, sí cruzaría. Hoy ningún caller puede provocarlo; es defensa en profundidad.
+
+Cada enlace deja una traza con `convoId`, `patientId` y `clinicId`, sin teléfono ni
+nombre: en un incidente, saber qué chat quedó ligado a qué paciente es justo el dato que
+hace falta.
 
 Sin migración ni backfill: solo hacia adelante. Un script idempotente que ligue
 conversaciones existentes con `phone` a su `Patient` queda como ítem opcional.

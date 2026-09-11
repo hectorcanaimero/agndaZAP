@@ -2013,7 +2013,15 @@ export class BotService {
 
     if (convo.patientId) {
       const byPatient = await this.prisma.appointment.findFirst({
-        where: { ...openAndFuture, patientId: convo.patientId },
+        where: {
+          ...openAndFuture,
+          patientId: convo.patientId,
+          // Si la conversación tiene teléfono verificado por WAHA, el paciente
+          // ligado tiene que ser el de ese número. Un enlace viejo que ya no
+          // corresponde no puede ganarle al teléfono verificado: caeríamos en
+          // la vía (c), que además lo corrige.
+          ...(convo.phone ? { patient: { phone: convo.phone } } : {}),
+        },
         ...pick,
       });
       if (byPatient) return byPatient;
@@ -2032,8 +2040,9 @@ export class BotService {
     if (!patient) return null;
 
     // Oportunista: el teléfono es el verificado por WAHA, así que ligar es
-    // seguro y evita repetir esta búsqueda en cada mensaje.
-    if (!convo.patientId) {
+    // seguro y evita repetir esta búsqueda en cada mensaje. También corrige un
+    // enlace anterior que apunte a otro paciente — el número verificado manda.
+    if (convo.patientId !== patient.id) {
       await this.linkConversationPatient(convo.id, clinicId, patient.id);
     }
 
@@ -2056,10 +2065,33 @@ export class BotService {
     clinicId: string,
     patientId: string,
   ): Promise<void> {
-    await this.prisma.conversation.updateMany({
-      where: { id: conversationId, clinicId, patientId: null },
+    // El `updateMany` acota la CONVERSACIÓN al tenant, pero el `patientId` lo
+    // pone el caller. La FK no comprueba clínica, así que una fila
+    // `Conversation(clínica A) → Patient(clínica B)` quedaría persistida y el
+    // panel, que resuelve por `patientId`, sí cruzaría. Hoy los tres callers
+    // pasan un paciente ya acotado; esto es defensa en profundidad.
+    const patient = await this.prisma.patient.findFirst({
+      where: { id: patientId, clinicId },
+      select: { id: true },
+    });
+    if (!patient) {
+      this.logger.error(
+        `link conversation/patient rechazado: el paciente no es de esta clínica convoId=${conversationId} clinicId=${clinicId}`,
+      );
+      return;
+    }
+
+    const { count } = await this.prisma.conversation.updateMany({
+      where: { id: conversationId, clinicId },
       data: { patientId },
     });
+    if (count > 0) {
+      // Traza sin PII: en un incidente, saber qué chat quedó ligado a qué
+      // paciente es justo lo que hace falta. Ni teléfono ni nombre.
+      this.logger.log(
+        `conversation ligada a paciente convoId=${conversationId} patientId=${patientId} clinicId=${clinicId}`,
+      );
+    }
   }
 
   /**

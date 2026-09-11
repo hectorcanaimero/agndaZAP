@@ -135,9 +135,17 @@ export function createFollowUpsWorker(
             data: {
               flowStep: 'AWAITING_NPS_SCORE',
               flowData,
-              // Ligamos el hilo al paciente si nadie lo había hecho (este
-              // processor es hoy el único sitio que escribe `patientId`).
+              // Ligamos el hilo al paciente si nadie lo había hecho. Desde S5
+              // ya no es el único sitio que escribe `patientId`: también lo
+              // hacen `BotService` al confirmar por la FSM y al resolver por el
+              // teléfono verificado (ver
+              // docs/notas/2026-09-11-conversation-patient-link.md).
               // Nunca pisamos uno existente.
+              //
+              // La conversación viene de resolver por `patientId` O por `phone`
+              // de la cita (arriba, :98), o sea de datos que ya están en la
+              // cita — no de nada que el paciente haya declarado en un
+              // formulario. Por eso acá ligar es seguro.
               ...(knownConvo.patientId ? {} : { patientId: appt.patientId }),
             },
           });

@@ -670,9 +670,12 @@
 ## 2026-09-11 — S5: ligar `Conversation.patientId`
 - `findUpcomingAppointment` resuelve por `patientId` → `conversationId` → `phone` de la
   conversación, y liga de paso cuando encuentra al paciente por el teléfono de WAHA.
-- Desde el token `BOT_WEB`: se liga solo si el `Patient` nació en ese `createAppointment`, y
-  **nunca** se escribe `Conversation.phone` con el número del formulario. Ese número es declarado;
-  convertirlo en verificado dejaría a un chat `@lid` gestionar citas ajenas.
+- **Desde el borde público NO se liga.** La primera versión ligaba si el `Patient` nacía en esa
+  misma petición; el `security-auditor` mostró que eso prueba que nadie había reclamado el
+  teléfono, no que quien rellena el form sea su dueño: un chat `@lid` podía pre-reclamar el número
+  de otra persona y quedarse con todas sus citas futuras. Lo que sí se controla ahí es qué citas
+  quedan atadas al chat (`conversationId`).
+- Nunca se escribe `Conversation.phone` con el número del formulario.
 - Efecto colateral necesario: `handleReminderReply` ya no exige teléfono antes de buscar, que era
   lo que impedía confirmar desde un `@lid` ligado — el caso que S5 venía a arreglar.
 - Detalle y razonamiento en [[notas/2026-09-11-conversation-patient-link]].
