@@ -6,6 +6,13 @@
 - **Falla en vez de ignorar el id en silencio**: si se dispara hay datos inconsistentes, y una cita creada a medias —sin el enlace al chat del que depende todo el flujo BOT_WEB— es peor que un error visible.
 - Sin cambios para `PUBLIC`/`BOT`, que siguen descartando el id sin consultar nada.
 - **Tests**: 1083 verdes, con el caso cross-tenant y los de no-regresión de los otros `source`.
+## 2026-09-11 — S8: FK compuesta en Feedback y barrido de tablas que copian `clinicId` (rama `fix/feedback-fk-compuesta`)
+- **El problema**: `Feedback` llevaba dos FKs sueltas (`clinicId` → Clinic y `appointmentId` → Appointment) y nada en la BD impedía que apuntaran a clínicas distintas. El `include` del panel trae nombre de paciente, profesional y servicio **de la cita**, así que una fila cruzada habría servido datos de otra clínica. El chequeo de S4 cierra el camino conocido; esto lo cierra para cualquier caller futuro.
+- **La decisión** (→ [[adr/0022-fk-compuestas-multi-tenant]]): FK compuesta `(clinicId, appointmentId)` → `Appointment(clinicId, id)`, con `@@unique([clinicId, id])` en Appointment. Un par cruzado deja de ser un bug que hay que recordar evitar y pasa a ser un INSERT que Postgres rechaza.
+- **La migración falla ruidosamente** si ya hay filas cruzadas, con la query exacta para revisarlas: si existen son datos mezclados entre tenants y hay que mirarlos a mano, no borrarlos desde una migración.
+- **Barrido**: seis tablas copian `clinicId` junto a una FK a otra entidad con `clinicId`, con 10 pares en total. Casi todas tienen validación en el camino de escritura; el único sin ella que merece mirarse pronto es `Appointment.conversationId`, que hoy no es alcanzable pero tiene exactamente la forma del bug de `Feedback` antes de S4.
+- **`feedback.controller.ts` no tenía spec** pese a servir PII de pacientes con scoping multi-tenant. Ahora sí, y el `where` exige el tenant también sobre la cita, no solo sobre el feedback — defensa que no depende de que la migración se haya aplicado.
+- **Tests**: 1086 verdes.
 
 ## 2026-09-11 — S11: avisar a recepción cuando el paciente gestiona su cita (rama `feat/aviso-recepcion-cancelacion`)
 - **El hueco que cerraba**: una cancelación por link solo aparecía si alguien refrescaba el panel. Para un producto anti no-show eso es media feature — el valor está en que la clínica pueda rellenar el hueco.
@@ -673,3 +680,33 @@
   vacía lo dice y muestra todo.
 - Tras dos respuestas seguidas sin entender, ofrece el form web sin resetear la FSM.
 - Detalle y gotchas en [[notas/2026-09-11-fsm-navegacion-horarios]].
+
+## 2026-09-11 — P1 · B10: cola `bot-inbound` entre el webhook y el bot
+- El webhook encola y responde 200 al instante; un worker BullMQ llama a `handleIncoming`. Antes
+  esperaba al bot (LLM incluido) y WAHA reintentaba por timeout, procesando el mismo mensaje dos
+  veces. Decisión y consecuencias en [[adr/0021-cola-bot-inbound]].
+- **Blocker cazado en revisión, no en los tests**: BullMQ rechaza un `jobId` con `:`, y la clave de
+  dedup tiene cuatro segmentos. Habría lanzado en TODOS los mensajes de texto → 500 → WAHA
+  reintentando contra un fallo determinista → mensaje perdido, con el health en verde. No lo vieron
+  los 86 tests porque la `Queue` está mockeada en todos. Detalle en
+  [[notas/2026-09-11-cola-bot-inbound]].
+- Del `security-auditor`: el rate-limit del ADR 0007 quedaba DETRÁS de la cola (cualquiera con el
+  token del webhook podía llenar Redis), retención de jobs por cantidad y no por edad con datos de
+  salud dentro, `parseRedis` descartando credenciales y TLS del `REDIS_URL`, y la PII colándose por
+  el *mensaje* de los errores de Prisma. Todo corregido.
+- El health check mira la **antigüedad** del mensaje más viejo, no sólo la profundidad: con 5-10
+  mensajes/hora, un worker muerto tardaría días en llegar a 50 pendientes.
+- Pendiente y anotado en el ADR: quitar el rate-limit de `handleIncoming` (mientras esté en los dos
+  sitios, un reintento puede cruzar el cap y perder el mensaje en silencio), encolar sólo un id para
+  sacar los datos del paciente de Redis, y un compare-and-set en la FSM porque un reintento reordena.
+
+## 2026-09-11 — El rate-limit del bot sale de `handleIncoming` (va con la cola `bot-inbound`)
+- Con la cola en medio, tener las dos capas del ADR 0007 dentro de `handleIncoming` además del
+  webhook consumía presupuesto dos veces y dejaba un agujero peor: un reintento de BullMQ que
+  cruzara el cap hacía `return` en silencio, el job se marcaba completado y el mensaje del paciente
+  se perdía sin fallo, sin Sentry y sin bandeja.
+- El bloque se quita de `handleIncoming` y queda solo en el webhook, delante del `inbound.add`.
+  Queda un comentario en su sitio explicando por qué no debe volver: quien llegue desde el ADR 0007
+  y lo vea ausente podría "restaurarlo" de buena fe.
+- La cobertura se muda al spec del webhook, que además gana el fail-open del camino de texto.
+- ADR 0007 actualizado.
