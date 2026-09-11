@@ -536,15 +536,24 @@
 - Palabra de escape unificada: `escribe *humano*`.
 - RAG: umbral de distancia 0.5 → 0.65 tras calibrar con preguntas reales (la pregunta de ubicación hacía handoff). Ver [[notas/2026-09-10-rag-umbral-distancia]].
 
-## 2026-09-11 — PR B1 (P0 bot, item B8): tuteo neutro también en el prompt RAG
-- La migración a tuteo del 2026-09-10 (PR #40) cubrió `bot.service.ts`, `public.controller.ts` y `es.json`, pero se quedó afuera `knowledge.service.ts`: el system prompt de `answer()` seguía en voseo rioplatense ("Sos", "Respondés", "Usá") y el tono "cercano" de `TONE_INSTRUCTIONS` mezclaba voseo (Argentina) con "você" (Brasil).
-- PR #41 (`fix/rag-prompt-tuteo`): prompt y los tres tonos reescritos en tuteo neutro; 4 tests de regresión nuevos en `knowledge.service.spec.ts` (prompt base + `it.each` por tono) que fallan si vuelve a colarse voseo. 52 suites / 765 tests verdes.
-- Parte del reparto P0 del análisis del bot ([[analisis/2026-09-11-chatbot-analisis-tecnico]], [[planes/2026-09-11-p0-bot-reparto]]) — sesión B (Sonnet), primer PR del reparto, sin dependencias con la sesión A.
-
-## 2026-09-11 — PR B2 (P0 bot, item M1): ClinicFactsService — hechos de la clínica en el RAG
-- Nuevo `ClinicFactsService.build(clinicId, phone?)`: bloque de texto plano (sin embeddings) con horario agrupado (`BusinessHour`), servicios activos con precio real o "precio a consultar" (nunca inventado), profesionales activos, y si hay `phone` con `Patient` de esa clínica, su próxima cita (sin exponer otros datos del paciente). Ver [[adr/0019-rag-hechos-de-bd]].
-- `KnowledgeService.answer()` acepta `phone?` opcional, antepone `--- FUENTE BD ---` a las fuentes de FAQ, y cambia el umbral: sin FAQ matches pero con hechos de BD, igual llama al LLM (antes cortaba en `null`). `bot.service.ts` NO se toca — el wiring de `phone: convo.phone` queda para la sesión A (ver [[planes/2026-09-11-p0-bot-reparto]]).
-- Cache Redis 60s sólo en la parte sin paciente; la próxima cita nunca se cachea (verificado con test dedicado).
-- **Bug detectado y corregido en el mismo PR** (hallazgo de `code-reviewer` antes de abrir el PR): la agrupación de horario fusionaba días separados por un día cerrado si el rango horario coincidía (ej. "lunes 9-13, martes cerrado, miércoles-viernes 9-13" salía como "Lunes a viernes 9:00 a 13:00", implicando que el martes está abierto). Fix: exigir que el día sea consecutivo al último del grupo (no sólo que el rango coincida), + test de regresión.
-- `security-auditor` corrido antes del PR: sin hallazgos críticos/altos; se aplicó una mejora de consistencia sugerida (saneo anti-`---` también en el bloque BD, igual que en el bloque FAQ).
-- 53 suites / 789 tests verdes, `tsc --noEmit` limpio.
+## 2026-09-11 — P0 del bot · B4: mensajes sin texto no llegan al bot
+- PR A2 del reparto [[planes/2026-09-11-p0-bot-reparto]]. Antes, una nota de voz entraba a
+  `BotService.handleIncoming` con `text: ''` y terminaba en el fallback genérico (o gastando LLM).
+- Ahora `WebhookController` los detecta por `payload.type` / `_data.type` / `hasMedia` / `body` vacío,
+  los registra en la bandeja (`Conversation` + `Message IN` con `[audio]`, `[imagen]`, `[sticker]`,
+  `[ubicación]`, `[archivo]`, `[contacto]`, `[video]`) y responde una vez cada 6 h
+  "Por ahora solo puedo leer mensajes de texto…". Sin LLM.
+- Decisiones no obvias en [[notas/2026-09-11-waha-mensajes-sin-texto]]: throttle fail-closed
+  (al revés que el dedup), el registro se hace aunque la conversación esté en `HUMAN`, y el pie de
+  foto de una imagen se conserva (truncado a 500) detrás de la etiqueta.
+- **Dos blockers salidos de `code-reviewer` + `security-auditor`, corregidos antes del PR**:
+  (1) el camino nuevo se saltaba las dos capas de rate-limit del [[adr/0007-rate-limit-bot]],
+  porque viven dentro de `BotService.handleIncoming` — ahora `withinRateLimit` reusa las mismas
+  claves de Redis para compartir presupuesto; (2) `MEDIA_LABELS[type]` con `type: "constructor"`
+  devolvía algo de `Object.prototype` y provocaba 500 + reintento infinito de WAHA — ahora va con
+  `Object.hasOwn`. También: se ignoran reacciones y eventos de sistema, se cortan grupos y
+  estados (`@g.us`, `status@broadcast`), un `type: chat` con texto va al bot aunque marque
+  `hasMedia`, y el aviso pasó a best-effort (no relanza; libera el throttle).
+- Pendientes anotados en la nota, no hechos aquí: escalar a `NEEDS_HUMAN` tras varios adjuntos
+  (decisión de producto), hashear el `chatId` en las claves de Redis (junto con las de `bot:msg:`)
+  y una columna `kind` en `Message` para no concatenar etiqueta y contenido.
