@@ -94,4 +94,6 @@ test-luxon.js
 # Playwright (apps/web/e2e)
 playwright-report/
 test-results/
+# Salida JSON de `pnpm test:ci`, que consume scripts/assert-test-run.mjs.
+apps/backend/.jest-results.json
 .e2e-logs/
