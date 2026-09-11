@@ -519,6 +519,238 @@ describe('BotService — FSM de agendamiento', () => {
     expect((convoState.flowData as any).serviceId).toBe('svc-2');
   });
 
+  // ── M4: más horarios, cualquier profesional, preferencia y salida al web ──
+  describe('navegación de horarios en la FSM (M4)', () => {
+    const professional2 = {
+      id: 'prof-2',
+      clinicId: 'clinic-A',
+      name: 'Dr. Salas',
+      active: true,
+    };
+    const zone = 'America/Caracas';
+
+    /** Slot a `days` días vista, a la hora indicada en la TZ de la clínica. */
+    function slotAt(days: number, hour: number) {
+      const start = DateTime.now()
+        .setZone(zone)
+        .plus({ days })
+        .set({ hour, minute: 0, second: 0, millisecond: 0 });
+      return { startAt: start.toJSDate(), endAt: start.plus({ minutes: 30 }).toJSDate() };
+    }
+
+    async function say(text: string) {
+      await bot.handleIncoming({
+        clinicId: 'clinic-A',
+        chatId: convoState.chatId,
+        phone: convoState.phone,
+        text,
+      });
+      return waha.sendText.mock.calls.at(-1)![2] as string;
+    }
+
+    /** Deja la conversación en ASK_SLOT con la lista ya mostrada. */
+    async function reachAskSlot() {
+      await say('agendar');
+      expect(convoState.flowStep).toBe('ASK_SLOT');
+    }
+
+    describe('"0. Ver más horarios"', () => {
+      it('ofrece la opción y avanza la ventana 7 días', async () => {
+        availability.getSlots.mockResolvedValue([slotAt(1, 9), slotAt(2, 15)]);
+
+        const first = await say('agendar');
+        expect(first).toContain('0. Ver más horarios');
+
+        availability.getSlots.mockClear();
+        availability.getSlots.mockResolvedValue([slotAt(8, 11)]);
+        const second = await say('0');
+
+        expect(convoState.flowStep).toBe('ASK_SLOT');
+        expect((convoState.flowData as any).slotWindowCount).toBe(1);
+        expect(second).toContain('semana siguiente');
+        // La ventana arranca ~7 días más adelante.
+        const fromISO = availability.getSlots.mock.calls[0][0].fromISO;
+        const diffDays = DateTime.fromISO(fromISO).diff(DateTime.now(), 'days').days;
+        expect(diffDays).toBeGreaterThan(6.5);
+        expect(diffDays).toBeLessThan(7.5);
+      });
+
+      it('también entiende "más horarios" en palabras', async () => {
+        availability.getSlots.mockResolvedValue([slotAt(1, 9)]);
+        await reachAskSlot();
+
+        availability.getSlots.mockClear();
+        availability.getSlots.mockResolvedValue([slotAt(8, 9)]);
+        await say('más horarios');
+
+        expect(availability.getSlots).toHaveBeenCalledTimes(1);
+        expect((convoState.flowData as any).slotWindowCount).toBe(1);
+      });
+
+      it('al llegar al tope de 4 ventanas ofrece el link y no consulta más', async () => {
+        availability.getSlots.mockResolvedValue([slotAt(1, 9)]);
+        await reachAskSlot();
+        convoState.flowData = { ...(convoState.flowData as any), slotWindowCount: 3 };
+
+        availability.getSlots.mockClear();
+        const msg = await say('0');
+
+        expect(availability.getSlots).not.toHaveBeenCalled();
+        expect(msg).toContain('?t=tok-abc');
+        // No reseteamos: los horarios ya mostrados siguen siendo elegibles.
+        expect(convoState.flowStep).toBe('ASK_SLOT');
+      });
+
+      it('sin horarios en una ventana avanzada, ofrece el link sin resetear', async () => {
+        availability.getSlots.mockResolvedValue([slotAt(1, 9)]);
+        await reachAskSlot();
+
+        availability.getSlots.mockResolvedValue([]);
+        const msg = await say('0');
+
+        expect(msg).toContain('?t=tok-abc');
+        expect(convoState.flowStep).toBe('ASK_SLOT');
+      });
+    });
+
+    describe('"Cualquier profesional"', () => {
+      beforeEach(() => {
+        prisma.professional.findMany.mockResolvedValue([professional1, professional2]);
+        prisma.professional.findFirst.mockImplementation(({ where }: any) =>
+          Promise.resolve(
+            where.id === 'prof-2' ? professional2 : where.id === 'prof-1' ? professional1 : null,
+          ),
+        );
+      });
+
+      it('aparece como última opción cuando hay más de un profesional', async () => {
+        const msg = await say('agendar');
+
+        expect(convoState.flowStep).toBe('ASK_PROFESSIONAL');
+        expect(msg).toContain('1. Dra. Ríos');
+        expect(msg).toContain('2. Dr. Salas');
+        expect(msg).toContain('3. Cualquier profesional');
+      });
+
+      it('elegirla mezcla los horarios de todos y fija el profesional al elegir el slot', async () => {
+        availability.getSlots.mockImplementation(({ professionalId }: any) =>
+          Promise.resolve(
+            professionalId === 'prof-1' ? [slotAt(2, 14)] : [slotAt(1, 9)],
+          ),
+        );
+
+        await say('agendar');
+        const list = await say('3'); // Cualquier profesional
+
+        expect(convoState.flowStep).toBe('ASK_SLOT');
+        expect((convoState.flowData as any).anyProfessional).toBe(true);
+        // Ordenados por fecha: primero el de prof-2 (mañana), luego prof-1.
+        expect((convoState.flowData as any).offeredProfessionalIds).toEqual([
+          'prof-2',
+          'prof-1',
+        ]);
+        expect(list).toContain('1.');
+
+        await say('1');
+
+        expect((convoState.flowData as any).professionalId).toBe('prof-2');
+      });
+
+      it('si dos profesionales ofrecen la misma hora, el horario se muestra una vez', async () => {
+        const same = slotAt(1, 9);
+        availability.getSlots.mockResolvedValue([same]);
+
+        await say('agendar');
+        await say('cualquiera');
+
+        expect((convoState.flowData as any).offeredSlots).toHaveLength(1);
+        // Se lo queda el primero por orden de nombre (Dra. Ríos).
+        expect((convoState.flowData as any).offeredProfessionalIds).toEqual(['prof-1']);
+      });
+    });
+
+    describe('preferencia de horario en el mismo mensaje', () => {
+      beforeEach(() => {
+        prisma.professional.findMany.mockResolvedValue([professional1, professional2]);
+        prisma.professional.findFirst.mockResolvedValue(professional1);
+      });
+
+      it('"1, por la tarde" filtra la lista antes de mostrarla', async () => {
+        availability.getSlots.mockResolvedValue([
+          slotAt(1, 9),
+          slotAt(1, 15),
+          slotAt(2, 16),
+        ]);
+
+        await say('agendar');
+        await say('1, por la tarde');
+
+        const offered = (convoState.flowData as any).offeredSlots as string[];
+        expect(offered).toHaveLength(2);
+        for (const iso of offered) {
+          expect(DateTime.fromISO(iso).setZone(zone).hour).toBeGreaterThanOrEqual(12);
+        }
+      });
+
+      it('si la preferencia no deja nada, lo dice y muestra la lista completa', async () => {
+        availability.getSlots.mockResolvedValue([slotAt(1, 9), slotAt(2, 10)]);
+
+        await say('agendar');
+        const msg = await say('1, por la tarde');
+
+        expect(msg).toContain('No me quedan horarios con esa preferencia');
+        expect((convoState.flowData as any).offeredSlots).toHaveLength(2);
+      });
+
+      it('en ASK_SLOT, un mensaje sin número pero con preferencia re-filtra en vez de "no te entendí"', async () => {
+        availability.getSlots.mockResolvedValue([slotAt(1, 9), slotAt(1, 16)]);
+        prisma.professional.findMany.mockResolvedValue([professional1]);
+
+        await reachAskSlot();
+        const msg = await say('mejor por la tarde');
+
+        expect(msg).not.toContain('no te entendí');
+        expect((convoState.flowData as any).offeredSlots).toHaveLength(1);
+      });
+    });
+
+    describe('salida al form web tras dos respuestas sin entender', () => {
+      beforeEach(() => {
+        availability.getSlots.mockResolvedValue([slotAt(1, 9)]);
+      });
+
+      it('la primera repite la lista; la segunda ofrece el link sin resetear la FSM', async () => {
+        await reachAskSlot();
+
+        const first = await say('ehh no sé');
+        expect(first).not.toContain('?t=');
+        expect((convoState.flowData as any).invalidCount).toBe(1);
+
+        const second = await say('qué opciones hay');
+        expect(second).toContain('?t=tok-abc');
+        expect(convoState.flowStep).toBe('ASK_SLOT');
+        expect((convoState.flowData as any).invalidCount).toBe(2);
+      });
+
+      it('una respuesta válida reinicia el contador', async () => {
+        prisma.service.findMany.mockResolvedValue([
+          service1,
+          { ...service1, id: 'svc-2', name: 'Control anual' },
+        ]);
+
+        await say('agendar');
+        expect(convoState.flowStep).toBe('ASK_SERVICE');
+
+        await say('ninguno de esos');
+        expect((convoState.flowData as any).invalidCount).toBe(1);
+
+        await say('1');
+        expect(convoState.flowStep).toBe('ASK_SLOT');
+        expect((convoState.flowData as any).invalidCount).toBe(0);
+      });
+    });
+  });
+
   it('mensaje amable cuando no hay servicios activos', async () => {
     prisma.service.findMany.mockResolvedValue([]);
     await bot.handleIncoming({
@@ -736,6 +968,95 @@ describe('BotService — FSM de agendamiento', () => {
     expect(msg).toMatch(/lunes a viernes/);
     // NO cambia el estado de la conversación (sigue en BOT).
     expect(convoState.state).toBe('BOT');
+  });
+
+  // ── M6: cierre con acción tras responder una duda ──
+  describe('cierre con acción tras el RAG (M6)', () => {
+    beforeEach(() => {
+      intent.detect.mockResolvedValue(Intent.PREGUNTA_FAQ);
+      knowledge.answer.mockResolvedValue({
+        answer: 'Abrimos de lunes a viernes de 9 a 18h.',
+        sources: ['faq-1'],
+      });
+    });
+
+    async function ask() {
+      await bot.handleIncoming({
+        clinicId: 'clinic-A',
+        chatId: convoState.chatId,
+        phone: convoState.phone,
+        text: '¿cuál es el horario?',
+      });
+      return waha.sendText.mock.calls.at(-1)![2] as string;
+    }
+
+    it('sin cita próxima: anexa la invitación a agendar con el link sin token', async () => {
+      prisma.patient.findUnique.mockResolvedValue(null);
+
+      const msg = await ask();
+
+      expect(msg).toContain('Abrimos de lunes a viernes');
+      expect(msg).toMatch(/\*agendar\*/);
+      expect(msg).toContain('/es/agendar/clinica-a');
+      expect(msg).not.toContain('?t='); // link público, no tokenizado
+    });
+
+    it('con cita próxima: responde la duda y NO invita a agendar otra', async () => {
+      prisma.patient.findUnique.mockResolvedValue({
+        id: 'pat-1',
+        clinicId: 'clinic-A',
+        phone: convoState.phone,
+        name: 'Ana',
+      });
+      prisma.appointment.findFirst.mockResolvedValue({
+        id: 'appt-7',
+        clinicId: 'clinic-A',
+        patientId: 'pat-1',
+        status: 'PENDIENTE',
+        startAt: tomorrow10.toJSDate(),
+      });
+
+      const msg = await ask();
+
+      expect(msg).toBe('Abrimos de lunes a viernes de 9 a 18h.');
+      expect(msg).not.toContain('/agendar/');
+    });
+
+    it('no repite el link si el mensaje anterior del bot ya lo llevaba', async () => {
+      prisma.patient.findUnique.mockResolvedValue(null);
+      prisma.message.findFirst.mockResolvedValue({
+        body: 'Reserva en línea: http://localhost:3000/es/agendar/clinica-a',
+      });
+
+      const msg = await ask();
+
+      expect(msg).toBe('Abrimos de lunes a viernes de 9 a 18h.');
+    });
+
+    it('chat @lid sin teléfono: invita igual (no puede tener cita resoluble por phone)', async () => {
+      convoState.phone = null;
+
+      await bot.handleIncoming({
+        clinicId: 'clinic-A',
+        chatId: 'abc123@lid',
+        phone: null,
+        lid: 'abc123',
+        text: '¿cuál es el horario?',
+      });
+
+      expect(prisma.appointment.findFirst).not.toHaveBeenCalled();
+      expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/\*agendar\*/);
+    });
+
+    it('el handoff (answer=null) no lleva cierre con acción', async () => {
+      knowledge.answer.mockResolvedValue(null);
+      prisma.patient.findUnique.mockResolvedValue(null);
+
+      const msg = await ask();
+
+      expect(msg).toMatch(/persona del equipo/i);
+      expect(msg).not.toContain('/agendar/');
+    });
   });
 
   it('Intent.PREGUNTA_FAQ desde un chat @lid: pasa phone=null al RAG, sin romper', async () => {

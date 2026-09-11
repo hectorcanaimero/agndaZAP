@@ -35,6 +35,9 @@ import {
 } from '@prisma/client';
 import { DateTime } from 'luxon';
 import { hashPassword } from '../src/auth/password.util';
+import { ClinicFactsService } from '../src/knowledge/clinic-facts.service';
+import { LlmRouterService } from '../src/common/llm/llm-router.service';
+import { PrismaService } from '../src/prisma/prisma.service';
 import {
   KnowledgeService,
   KnowledgeUnavailableError,
@@ -44,6 +47,30 @@ const prisma = new PrismaClient();
 
 // Marca única para reconocer y limpiar la data histórica del seed.
 const SEED_TAG = '[seed:v1]';
+
+
+/**
+ * `KnowledgeService` para uso de script: solo `ingest()` / `embedText()`.
+ *
+ * Esos dos métodos no tocan `llm` ni `clinicFacts` (verificado: solo los usa
+ * `answer()`, que es el RAG), así que el seed no tiene con qué construirlos ni
+ * los necesita.
+ *
+ * Los casts van tipados y NO como `any` suelto: con `as any` en cada argumento
+ * un cambio en el TIPO de una dependencia pasa inadvertido. La aridad sí la
+ * comprueba TypeScript — de hecho fue lo que rompió este archivo cuando el
+ * servicio ganó el tercer parámetro; lo que faltaba era que ALGUIEN
+ * typecheckease `prisma/` (ver `tsconfig.scripts.json`).
+ */
+function makeIngestOnlyKnowledgeService(
+  prisma: PrismaClient,
+): KnowledgeService {
+  return new KnowledgeService(
+    prisma as unknown as PrismaService,
+    undefined as unknown as LlmRouterService,
+    undefined as unknown as ClinicFactsService,
+  );
+}
 
 async function main() {
   // Guard duro: el seed crea usuarios dev con passwords conocidos y una
@@ -266,9 +293,9 @@ async function main() {
   }
 
   // 6) FAQs — idempotente por (clinicId, content).
-  // `llm` solo se usa en answer() (RAG); el seed solo llama ingest(), que a lo
-  // sumo toca embedText y ya tolera OPENAI_API_KEY ausente vía KnowledgeUnavailableError.
-  const knowledge = new KnowledgeService(prisma as unknown as any, null as any);
+  // El seed solo llama ingest(), que a lo sumo toca embedText y ya tolera
+  // OPENAI_API_KEY ausente vía KnowledgeUnavailableError.
+  const knowledge = makeIngestOnlyKnowledgeService(prisma);
   const faqSamples = [
     'Horarios de atención: L-V de 9:00 a 18:00. Sin atención sábados y domingos.',
     'Dirección: Av. Principal 123, Caracas. A 2 cuadras del metro Chacaíto.',

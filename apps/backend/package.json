@@ -9,6 +9,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:reindex-faq": "ts-node prisma/reindex-faq.ts",
+    "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
     "test": "jest"
   },
   "prisma": {

@@ -67,12 +67,28 @@ export class IcalService {
   async buildFeed(professionalId: string): Promise<string> {
     const prof = await this.prisma.professional.findUnique({
       where: { id: professionalId },
-      include: { clinic: { select: { name: true, timezone: true } } },
+      include: {
+        clinic: { select: { name: true, timezone: true, status: true } },
+      },
     });
     if (!prof) {
       // El token prueba conocimiento del ID, pero si el profesional ya no existe
       // devolvemos un feed vacío válido sin revelar detalles.
       return this.emptyFeed('Showly');
+    }
+
+    // Clínica suspendida por impago o archivada al terminar el contrato: el
+    // feed deja de servir datos. Es el endpoint con el offboarding más flojo de
+    // todos, porque la URL vive indefinidamente en la app de calendario del
+    // profesional y cada evento lleva nombre y teléfono del paciente — PII de
+    // salud que seguiría sincronizándose meses después de cerrar la cuenta.
+    // Feed vacío y no 404: el calendario del profesional deja de mostrar datos
+    // sin romperse ni revelar por qué.
+    if (prof.clinic.status !== 'ACTIVE') {
+      this.logger.warn(
+        `ical feed servido vacío: clínica no activa profId=${professionalId} status=${prof.clinic.status}`,
+      );
+      return this.emptyFeed(prof.clinic.name);
     }
 
     const now = DateTime.now();

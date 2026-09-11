@@ -1,0 +1,21 @@
+{
+  // Typecheck de los scripts sueltos de `prisma/` (seed, reindex), que el
+  // tsconfig base NO cubre: su `include` es solo `src/**/*`.
+  //
+  // Va en un archivo aparte y NO ampliando el `include` del base a propósito.
+  // `tsconfig.build.json` extiende el base, y con dos raíces (`src/` y
+  // `prisma/`) TypeScript inferiría `rootDir: apps/backend`, la salida pasaría
+  // de `dist/main.js` a `dist/src/main.js` y el `node dist/main.js` del
+  // Dockerfile dejaría de arrancar en producción.
+  //
+  // Estos scripts se ejecutan con `ts-node`, que sí typechequea, pero solo al
+  // correrlos: hasta ahora un cambio de firma en un service rompía el seed y no
+  // se veía hasta el paso "Migrate + seed" del job E2E — tarde, en un job caro
+  // y con un error que no apunta al PR culpable.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["prisma/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
