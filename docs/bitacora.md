@@ -1,5 +1,13 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-11 — S31: el fallback de Gemini estaba muerto y nadie lo sabía (rama `fix/router-gemini-modelo-vigente`)
+- **Dos fallos que se tapaban entre sí**: el router llamaba a `models/gemini-2.0-flash`, que Google marca como **(Shut down)** en su documentación, y además `GEMINI_API_KEY` nunca se configuró en producción. Como el router se saltaba **en silencio** los providers sin clave, la cadena real llevaba semanas siendo `deepseek → opencode` sin tercer eslabón.
+- Lo encontré preparando la nota de STT (M10), verificando la premisa de que "Gemini multimodal ya está en el router".
+- **Arreglos**: modelo por defecto `gemini-2.5-flash` (el que Google documenta como mejor relación precio/rendimiento para baja latencia y alto volumen) y **configurable por `GEMINI_MODEL`** — el fallo original fue quedarse clavado en un modelo retirado, así que migrar debe ser una variable de entorno y no un deploy.
+- **El router avisa al arrancar** qué providers se va a saltar y qué env les falta; si no queda ninguno, lo registra como `error` y no como `warn`, porque sin LLM el bot no clasifica intenciones ni responde consultas: degrada a "no te entendí" en cada mensaje.
+- **Caso real cubierto en test**: en Coolify hay variables duplicadas con valor vacío (`OPENCODE_API_KEY` aparece dos veces, una en blanco). Un provider "a medias" ahora cuenta como no disponible y se nombra qué le falta.
+- **Tests**: 1345 verdes.
+
 ## 2026-09-11 — M10: exploración de STT para notas de voz (sin código)
 - Nota en [[notas/2026-09-11-exploracion-stt-notas-de-voz]] con comparativa, precios verificados en septiembre de 2026 y plan de 3 PRs.
 - **Recomendación: OpenAI `gpt-4o-mini-transcribe`.** No por precio —a este volumen las tres opciones cuestan céntimos— sino porque es el único proveedor **ya dentro del consent del ADR 0004**, que nombra explícitamente a OpenAI, DeepSeek y Google. Sumar Deepgram obligaría a reescribir el texto legal, versionarlo y volver a pedirlo.
