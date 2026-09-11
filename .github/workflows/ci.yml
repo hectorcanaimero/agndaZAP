@@ -52,6 +52,15 @@ jobs:
         working-directory: apps/backend
         run: pnpm exec tsc --noEmit
 
+      # Los scripts de `prisma/` (seed, reindex) quedan fuera del tsconfig base
+      # — su `include` es solo `src/**/*`. Sin este paso, un cambio de firma en
+      # un service los rompe en silencio y solo se ve cuando el job E2E ejecuta
+      # el seed: tarde, en un job caro y con un error que no señala al PR
+      # culpable. Pasó con el constructor de KnowledgeService (2026-09-11).
+      - name: TypeScript check (scripts de prisma/)
+        working-directory: apps/backend
+        run: pnpm typecheck:scripts
+
       - name: Unit tests
         working-directory: apps/backend
         run: pnpm test

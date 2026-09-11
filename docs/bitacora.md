@@ -1,5 +1,10 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-11 — S10: los scripts de `prisma/` no los typecheckeaba nadie (rama `chore/typecheck-scripts-prisma`)
+- **Causa raíz del CI rojo de #42**: `apps/backend/tsconfig.json` tiene `include: ["src/**/*"]`, así que `prisma/seed.ts` y `prisma/reindex-faq.ts` quedaban fuera. `pnpm tsc --noEmit` pasaba en verde con el seed roto y el error solo aparecía cuando el job E2E ejecutaba `ts-node prisma/seed.ts` — tarde, en un job caro y sin señalar al PR culpable.
+- **Arreglo**: `tsconfig.scripts.json` aparte (con `noEmit`), script `typecheck:scripts` y paso propio en el job Backend de CI. **No** se amplía el `include` del tsconfig base: `tsconfig.build.json` lo extiende y con dos raíces TypeScript inferiría `rootDir: apps/backend`, la salida pasaría a `dist/src/main.js` y el `node dist/main.js` del Dockerfile dejaría de arrancar en prod.
+- **Segundo bug encontrado al activarlo**: `prisma/reindex-faq.ts:51` construía `KnowledgeService` con 1 argumento de 3. Estaba en main y no lo cubría el hotfix #53; `pnpm prisma:reindex-faq` habría explotado al ejecutarse.
+- Los `as any` sueltos de ambos scripts se sustituyen por una factory `makeIngestOnlyKnowledgeService` con casts tipados. Verificado que `ingest()` y `embedText()` no tocan `llm` ni `clinicFacts` (solo los usa `answer()`), así que las dependencias ausentes no se llaman nunca.
 ## 2026-09-11 — S12: auditoría de `Clinic.status` en la superficie sin auth (rama `fix/clinic-status-endpoints-publicos`)
 - **Disparador**: al construir los endpoints de gestión de cita por link se me olvidó el filtro `status = ACTIVE` que los otros endpoints públicos sí tenían. Lo cazó el `security-auditor` y la pregunta obvia fue dónde más faltaba. Faltaba en tres sitios.
 - **El feed iCal era el peor**: servía nombre y teléfono del paciente en cada evento sin mirar el estado de la clínica, y la URL vive indefinidamente en la app de calendario del profesional — habría seguido sincronizando PII de salud meses después de cerrar la cuenta, sin que nadie visite nada. Ahora devuelve feed vacío.
