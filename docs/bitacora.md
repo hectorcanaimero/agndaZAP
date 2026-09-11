@@ -1,5 +1,11 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-11 — S25: error tipado para el tope de reagendamientos (rama `fix/reschedule-limit-error-tipado`)
+- **Deuda propia**: al implementar el tope en S6 dejé que el controller distinguiera los dos 409 de `rescheduleAppointment` con `e.message.includes('tope de reagendamientos')`. Funcionaba y era frágil por definición — este repo reescribe copy a menudo, por tono o por traducción, y cualquiera de esas pasadas rompía la lógica sin fallar en compilación ni en los tests del emisor.
+- **Arreglo**: `SchedulingConflictException` con `code` en el cuerpo, y dos subclases — `RescheduleLimitExceededException` (`RESCHEDULE_LIMIT`) y `SlotTakenException` (`SLOT_TAKEN`). Siguen siendo `ConflictException`, así que el status y todo el manejo existente no cambian: quien no mire el `code` se comporta igual que antes.
+- **Por qué importa el caso**: los dos 409 piden respuestas **opuestas** — "el horario se ocupó" invita a elegir otro, "ya cambiaste demasiadas veces" invita a llamar a la clínica. Confundirlos manda al paciente al sitio equivocado.
+- **Tests**: 1168 verdes, incluido uno que reescribe el mensaje por completo y comprueba que la distinción sobrevive.
+
 ## 2026-09-11 — S13: los links de gestión mueren con la cita (rama `fix/invalidar-tokens-gestion`)
 - **El problema**: solo se podía quemar el token que el paciente acababa de usar. Se emiten varios por cita (respuesta del POST, recordatorios, mensajes del bot), así que los demás sobrevivían apuntando a una cita ya cancelada y seguían mostrando nombre, servicio, profesional y horario hasta agotar su TTL de 30 días. No permitían mutar nada, pero era PII expuesta sin motivo.
 - **Arreglo**: índice `sched:manage:appt:{id}` en Redis e `invalidateAllForAppointment`, llamado desde el panel (al pasar a estado terminal) y desde la cancelación por link.

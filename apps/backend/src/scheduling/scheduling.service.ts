@@ -19,6 +19,10 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { RemindersService } from '../reminders/reminders.service';
 import { AvailabilityService } from './availability.service';
+import {
+  RescheduleLimitExceededException,
+  SlotTakenException,
+} from './scheduling.errors';
 
 // Re-export para que el resto del backend consuma el mismo type que la DB.
 // BOT_WEB representa el flujo "bot mandó link web y el paciente completó allá".
@@ -188,7 +192,7 @@ export class SchedulingService {
     const stillFree = slots.some((s) => s.startAt.getTime() === startMs);
     if (!stillFree) {
       // Puede ser porque cae fuera de horario, en TimeOff o porque otro reservó.
-      throw new ConflictException('slot ya no está disponible');
+      throw new SlotTakenException('slot ya no está disponible');
     }
 
     // 4) ¿Ya existe el paciente? Lo leemos para dos cosas:
@@ -319,7 +323,7 @@ export class SchedulingService {
         e instanceof Prisma.PrismaClientKnownRequestError &&
         e.code === 'P2002'
       ) {
-        throw new ConflictException('slot ya tomado');
+        throw new SlotTakenException('slot ya tomado');
       }
       throw e;
     }
@@ -509,7 +513,7 @@ export class SchedulingService {
     const startMs = newStartDT.toMillis();
     const stillFree = slots.some((s) => s.startAt.getTime() === startMs);
     if (!stillFree) {
-      throw new ConflictException('slot no disponible');
+      throw new SlotTakenException('slot no disponible');
     }
 
     // 4) Update de la cita. El @@unique([professionalId, startAt]) es la última
@@ -545,7 +549,7 @@ export class SchedulingService {
           },
         });
         if (count === 0) {
-          throw new ConflictException('tope de reagendamientos alcanzado');
+          throw new RescheduleLimitExceededException();
         }
         updated = await this.prisma.appointment.findFirstOrThrow({
           where: { id: appointmentId, clinicId },
@@ -566,7 +570,7 @@ export class SchedulingService {
         e instanceof Prisma.PrismaClientKnownRequestError &&
         e.code === 'P2002'
       ) {
-        throw new ConflictException('slot ya tomado');
+        throw new SlotTakenException('slot ya tomado');
       }
       throw e;
     }
