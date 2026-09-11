@@ -4,7 +4,7 @@ date: 2026-09-11
 tags: [multi-tenant, seguridad, prisma, base-de-datos]
 ---
 
-# ADR 0021 — FKs compuestas para que el aislamiento entre clínicas no dependa del código
+# ADR 0022 — FKs compuestas para que el aislamiento entre clínicas no dependa del código
 
 ## Contexto
 

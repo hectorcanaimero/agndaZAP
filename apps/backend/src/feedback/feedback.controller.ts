@@ -64,7 +64,7 @@ export class FeedbackController {
         ...scope,
         // El `include` de abajo trae paciente, profesional y servicio DE LA
         // CITA. Filtrar solo por `Feedback.clinicId` da por hecho que la cita
-        // es del mismo tenant, y hasta la FK compuesta (ADR 0021) nada en la BD
+        // es del mismo tenant, y hasta la FK compuesta (ADR 0022) nada en la BD
         // lo garantizaba: una fila con el clinicId cruzado habría expuesto
         // datos de otra clínica. Exigirlo también en la cita es barato y no
         // depende de que la migración ya se haya aplicado.

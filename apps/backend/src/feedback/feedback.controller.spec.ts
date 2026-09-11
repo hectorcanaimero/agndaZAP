@@ -10,7 +10,7 @@ import type { AuthUser } from '../auth/tenant-context.util';
  * Lo que se fija acá es que el tenant se exige **también sobre la cita**, no
  * solo sobre el feedback. Los `include` traen nombre de paciente, profesional y
  * servicio DE LA CITA: filtrar solo por `Feedback.clinicId` da por hecho que la
- * cita es del mismo tenant, y hasta la FK compuesta (ADR 0021) nada en la BD lo
+ * cita es del mismo tenant, y hasta la FK compuesta (ADR 0022) nada en la BD lo
  * garantizaba.
  */
 describe('FeedbackController', () => {
