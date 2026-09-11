@@ -45,7 +45,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[specs/2026-08-21-hmac-webhook-cookies|2026-08-21 — Spec HMAC webhook + hardening cookies — Sprint día 5]]
 
 ## Planes de implementación
-- [[planes/2026-09-11-p0-bot-reparto|2026-09-11 — P0 del bot: reparto entre sesiones]]
+- [[plans/2026-09-11-p0-bot-reparto|2026-09-11 — P0 del bot: reparto entre sesiones]]
 - [[plans/2026-08-18-observabilidad-plan|2026-08-18 — Plan Observabilidad (16h, 21 tasks, 2 días)]]
 
 ## Notas y descubrimientos

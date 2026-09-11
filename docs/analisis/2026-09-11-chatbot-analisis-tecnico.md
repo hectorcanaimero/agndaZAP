@@ -1,7 +1,7 @@
 ---
 titulo: Análisis técnico del asistente de WhatsApp
 fecha: 2026-09-11
-estado: P0 aprobado 2026-09-11 (ver planes/2026-09-11-p0-bot-reparto); P1-P3 pendientes
+estado: P0 aprobado 2026-09-11 (ver plans/2026-09-11-p0-bot-reparto); P1-P3 pendientes
 autor: sesión planner (Fable)
 tags: [bot, whatsapp, rag, llm, fsm, analisis, checklist]
 ---
@@ -262,6 +262,14 @@ copy en tuteo LATAM, `security-auditor` en todo lo que toque `Patient`/`Appointm
 - [ ] **B4** Webhook: mensajes sin texto (audio/imagen/sticker/ubicación) no llaman al LLM; respuesta fija con throttle por conversación; `Message IN` con marcador de tipo.
 - [ ] **B8** Prompt del RAG y `TONE_INSTRUCTIONS` en tuteo neutro; eliminar la mención al voseo.
 - [ ] **M1** `ClinicFactsService` + inyección como fuente en `KnowledgeService.answer`; cache 60 s; tests de formato y de que precios `null` no se inventan. Actualizar [[notas/2026-08-09-rag-faq]].
+
+> Resultado P0 (2026-09-11): B1+B2+B3 en PR #47 con dos desvíos justificados por code-reviewer:
+> (1) B2 acepta `SÍ` cuando hay contexto de confirmación, es decir, último mensaje OUT con `*SÍ*`
+> **o** recordatorio `SENT` en 48 h, y el corte no es por número de palabras sino por si el
+> mensaje nombra otra cosa ("sí, confirmo mi cita" confirma; "sí, quiero agendar" va a la FSM).
+> (2) B1 considera contenido cualquier resto con palabra de intención (agendar, cita, cuesta,
+> horario, quiero, necesito…) aunque tenga 2 palabras. SPEC.md actualizado en ese PR.
+> B4 en #43, S2 en #46, B8 en #41, M1 en #42, B9 en #44.
 
 ### P1
 - [ ] **M2-a** Backend: token de gestión + endpoints públicos `manage/:token`, `cancel`, `reschedule` con rate-limit y validación de slug/estado. Tests + `security-auditor`.
