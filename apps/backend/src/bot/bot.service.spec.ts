@@ -1522,7 +1522,7 @@ describe('BotService — FSM de agendamiento', () => {
     );
 
     it.each(['reagendar', 'reprogramar'])(
-      '"%s" → manda el link de gestión, NO mueve la cita y NO apaga los recordatorios',
+      '"%s" → ofrece horarios por chat con el link como alternativa, sin mover ni apagar nada',
       async (text) => {
         await say(text);
 
@@ -1532,11 +1532,56 @@ describe('BotService — FSM de agendamiento', () => {
         expect(reminders.cancelForAppointment).not.toHaveBeenCalled();
         expect(prisma.appointment.update).not.toHaveBeenCalled();
         expect(convoState.state).toBe('BOT');
+
+        // B5: la FSM queda lista para elegir horario, con la cita a mover.
+        expect(convoState.flowStep).toBe('ASK_SLOT');
+        expect((convoState.flowData as any).rescheduleOf).toBe('appt-7');
         const msg = waha.sendText.mock.calls.at(-1)![2];
+        expect(msg).toContain('sigue en pie');
         expect(msg).toContain('/cita?t=');
-        expect(msg).toMatch(/\*CANCELAR\*/);
       },
     );
+
+    it('reagendar usa el MISMO servicio y profesional de la cita', async () => {
+      await say('reagendar');
+
+      const call = availability.getSlots.mock.calls.at(-1)![0];
+      expect(call.serviceId).toBe('svc-1');
+      expect(call.professionalId).toBe('prof-1');
+      expect((convoState.flowData as any).serviceId).toBe('svc-1');
+      expect((convoState.flowData as any).professionalId).toBe('prof-1');
+    });
+
+    it('elegir el horario MUEVE la cita in-place: mismo id, sin crear otra', async () => {
+      scheduling.rescheduleAppointment = jest.fn().mockResolvedValue({
+        id: 'appt-7',
+        status: 'PENDIENTE',
+        patientId: 'pat-1',
+        startAt: tomorrow10.toJSDate(),
+        endAt: tomorrow1030.toJSDate(),
+      });
+      prisma.patient.findUnique.mockResolvedValue({ ...patient, name: 'Ana' });
+
+      await say('reagendar');
+      await say('1');
+
+      expect(convoState.flowStep).toBe('CONFIRM');
+
+      await say('sí');
+
+      expect(scheduling.rescheduleAppointment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clinicId: 'clinic-A',
+          appointmentId: 'appt-7',
+          byPatient: true,
+          maxPatientReschedules: 3,
+        }),
+      );
+      // Nunca se crea una cita nueva: eso inflaría CANCELADA y diluiría el
+      // no-show rate.
+      expect(scheduling.createAppointment).not.toHaveBeenCalled();
+      expect(waha.sendText.mock.calls.at(-1)![2]).toContain('movida');
+    });
 
     it('si no se puede emitir el link, reagendar sigue derivando a recepción', async () => {
       schedulingSessions.issueManageUrl.mockRejectedValue(new Error('redis down'));
