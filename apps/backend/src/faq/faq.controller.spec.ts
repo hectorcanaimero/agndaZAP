@@ -591,9 +591,13 @@ describe('KnowledgeService.answer sanitización de "---" en fuentes', () => {
     const llmMock = {
       complete: jest.fn().mockResolvedValue('Respuesta OK.'),
     };
+    // ClinicFactsService mock: sin hechos de BD — este test es sólo sobre
+    // sanitización de `---` en fuentes de FAQ.
+    const clinicFactsMock = { build: jest.fn().mockResolvedValue('') };
     const svc = new KnowledgeService(
       prismaLocal as unknown as PrismaService,
       llmMock as any,
+      clinicFactsMock as any,
     );
     await svc.answer({ clinicId: 'clinic-A', question: '¿Horarios?' });
 
