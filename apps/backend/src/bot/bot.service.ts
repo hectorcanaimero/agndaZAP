@@ -17,7 +17,6 @@ import { AvailabilityService, Slot } from '../scheduling/availability.service';
 import { SchedulingSessionService } from '../scheduling/scheduling-session.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { WahaService } from '../whatsapp/waha.service';
-import { hashChatId, withinBotRateLimit } from './bot-rate-limit';
 import { Intent, IntentService } from './intent.service';
 import {
   asksForSomethingElse,
@@ -439,15 +438,20 @@ export class BotService {
   }): Promise<void> {
     const { clinicId, chatId, phone, lid, contactName, text } = input;
 
-    // Rate-limit + circuit breaker del ADR 0007. Mismas claves y presupuesto
-    // que el camino de adjuntos del webhook: ver `bot-rate-limit.ts`.
-    if (!(await withinBotRateLimit(this.redis, this.logger, {
-      clinicId,
-      chatId,
-      scope: 'bot',
-    }))) {
-      return;
-    }
+    // NO hay rate-limit acá a propósito. Las dos capas del ADR 0007 viven en
+    // `webhook.controller.ts`, ANTES de encolar en `bot-inbound` (ver
+    // `docs/adr/0021-cola-bot-inbound.md`). Con la cola en medio, tenerlo
+    // también aquí rompía dos cosas:
+    //
+    //  - cada mensaje consumía presupuesto dos veces (webhook + worker), así
+    //    que los topes efectivos quedaban a la mitad;
+    //  - un reintento de BullMQ volvía a consumir y, si cruzaba el cap, este
+    //    método hacía `return` en silencio: el job se marcaba completado y el
+    //    mensaje del paciente se perdía sin fallo, sin Sentry y sin quedar en
+    //    la bandeja.
+    //
+    // Si vienes del ADR 0007 buscando por qué no está: está cubierto, delante
+    // de la cola y de la escritura en Redis. No lo devuelvas aquí.
 
     const clinic = await this.prisma.clinic.findUniqueOrThrow({
       where: { id: clinicId },

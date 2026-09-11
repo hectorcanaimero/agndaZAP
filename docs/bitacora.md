@@ -685,3 +685,14 @@
 - Pendiente y anotado en el ADR: quitar el rate-limit de `handleIncoming` (mientras esté en los dos
   sitios, un reintento puede cruzar el cap y perder el mensaje en silencio), encolar sólo un id para
   sacar los datos del paciente de Redis, y un compare-and-set en la FSM porque un reintento reordena.
+
+## 2026-09-11 — El rate-limit del bot sale de `handleIncoming` (va con la cola `bot-inbound`)
+- Con la cola en medio, tener las dos capas del ADR 0007 dentro de `handleIncoming` además del
+  webhook consumía presupuesto dos veces y dejaba un agujero peor: un reintento de BullMQ que
+  cruzara el cap hacía `return` en silencio, el job se marcaba completado y el mensaje del paciente
+  se perdía sin fallo, sin Sentry y sin bandeja.
+- El bloque se quita de `handleIncoming` y queda solo en el webhook, delante del `inbound.add`.
+  Queda un comentario en su sitio explicando por qué no debe volver: quien llegue desde el ADR 0007
+  y lo vea ausente podría "restaurarlo" de buena fe.
+- La cobertura se muda al spec del webhook, que además gana el fail-open del camino de texto.
+- ADR 0007 actualizado.

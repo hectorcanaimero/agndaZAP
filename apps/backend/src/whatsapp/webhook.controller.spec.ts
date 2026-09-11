@@ -309,6 +309,17 @@ describe('WebhookController', () => {
         expect(inbound.add).not.toHaveBeenCalled();
       });
 
+      it('Redis caído: fail-open, el mensaje se encola igual', async () => {
+        // La cota protege de un flood; quedarse sin bot por una caída de Redis
+        // es peor que el flood. Con la cola, además, descartar acá sería
+        // perder el mensaje del paciente sin dejar rastro.
+        redis.incr.mockRejectedValue(new Error('redis down'));
+
+        await post(messageEvent(MSG_ID));
+
+        expect(inbound.add).toHaveBeenCalled();
+      });
+
       it('la cota se consulta ANTES del add, no después', async () => {
         const order: string[] = [];
         redis.incr.mockImplementation(async () => {
