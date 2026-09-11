@@ -79,14 +79,12 @@ describe('SchedulingService.createAppointment', () => {
         findFirst: jest.fn().mockResolvedValue(makeProfessional()),
       },
       patient: {
+        // Por defecto el paciente NO existe → camino `create` y
+        // `patientCreated: true`. Los tests que necesitan uno preexistente
+        // sobreescriben `findUnique`.
         findUnique: jest.fn().mockResolvedValue(null),
-        upsert: jest.fn().mockResolvedValue({
-          id: 'pat-1',
-          clinicId: 'clinic-A',
-          phone: '+584141234567',
-          name: 'Ana',
-          consent: false,
-        }),
+        create: jest.fn().mockResolvedValue({ id: 'pat-1' }),
+        update: jest.fn().mockResolvedValue({ id: 'pat-1' }),
       },
       appointment: {
         findFirst: jest.fn().mockResolvedValue(null),
@@ -117,7 +115,7 @@ describe('SchedulingService.createAppointment', () => {
 
   // Scenario Gherkin: Paciente agenda en un horario disponible
   it('crea la cita y programa recordatorios cuando el slot está libre', async () => {
-    const appt = await service.createAppointment({
+    const { appointment: appt } = await service.createAppointment({
       clinicId: 'clinic-A',
       patient: { phone: '+584141234567', name: 'Ana' },
       serviceId: 'svc-1',
@@ -126,7 +124,7 @@ describe('SchedulingService.createAppointment', () => {
       source: 'BOT',
     });
 
-    expect(prisma.patient.upsert).toHaveBeenCalledTimes(1);
+    expect(prisma.patient.create).toHaveBeenCalledTimes(1);
     expect(prisma.appointment.create).toHaveBeenCalledTimes(1);
     expect(reminders.scheduleForAppointment).toHaveBeenCalledWith('appt-1');
     // Estado PENDIENTE porque autoConfirm=false
@@ -139,7 +137,7 @@ describe('SchedulingService.createAppointment', () => {
     prisma.clinic.findUnique.mockResolvedValueOnce(
       makeClinic({ autoConfirm: true }),
     );
-    const appt = await service.createAppointment({
+    const { appointment: appt } = await service.createAppointment({
       clinicId: 'clinic-A',
       patient: { phone: '+584141234567' },
       serviceId: 'svc-1',
@@ -240,7 +238,7 @@ describe('SchedulingService.createAppointment', () => {
       endAt: tomorrow10.plus({ minutes: 30 }).toJSDate(),
     });
 
-    const appt = await service.createAppointment({
+    const { appointment: appt } = await service.createAppointment({
       clinicId: 'clinic-A',
       patient: { phone: '+584141234567' },
       serviceId: 'svc-1',
@@ -263,9 +261,132 @@ describe('SchedulingService.createAppointment', () => {
       startAtISO,
       source: 'PUBLIC',
     });
-    const upsertCall = prisma.patient.upsert.mock.calls[0][0];
-    expect(upsertCall.create.consent).toBe(true);
-    expect(upsertCall.update.consent).toBe(true);
+    // Paciente nuevo → INSERT con consent true.
+    expect(prisma.patient.create.mock.calls[0][0].data.consent).toBe(true);
+  });
+
+  it('consent solo se prende: con paciente preexistente el update nunca lo apaga', async () => {
+    prisma.patient.findUnique.mockResolvedValue({ id: 'pat-1' });
+
+    await service.createAppointment({
+      clinicId: 'clinic-A',
+      patient: { phone: '+584141234567', name: 'Ana', consent: true },
+      serviceId: 'svc-1',
+      professionalId: 'prof-1',
+      startAtISO,
+      source: 'PUBLIC',
+    });
+
+    expect(prisma.patient.create).not.toHaveBeenCalled();
+    expect(prisma.patient.update.mock.calls[0][0].data.consent).toBe(true);
+  });
+
+  it('consent=false con paciente preexistente no toca el campo (no pisa un true previo)', async () => {
+    prisma.patient.findUnique.mockResolvedValue({ id: 'pat-1' });
+
+    await service.createAppointment({
+      clinicId: 'clinic-A',
+      patient: { phone: '+584141234567', consent: false },
+      serviceId: 'svc-1',
+      professionalId: 'prof-1',
+      startAtISO,
+      source: 'PUBLIC',
+    });
+
+    expect(prisma.patient.update.mock.calls[0][0].data).not.toHaveProperty(
+      'consent',
+    );
+  });
+
+  // ── patientCreated: lo consume el bot para decidir si liga la Conversation ──
+  it('patientCreated=true solo cuando el Patient nació en esta llamada', async () => {
+    const nuevo = await service.createAppointment({
+      clinicId: 'clinic-A',
+      patient: { phone: '+584141234567', name: 'Ana' },
+      serviceId: 'svc-1',
+      professionalId: 'prof-1',
+      startAtISO,
+      source: 'PUBLIC',
+    });
+    expect(nuevo.patientCreated).toBe(true);
+
+    prisma.patient.findUnique.mockResolvedValue({ id: 'pat-1' });
+    const existente = await service.createAppointment({
+      clinicId: 'clinic-A',
+      patient: { phone: '+584141234567', name: 'Ana' },
+      serviceId: 'svc-1',
+      professionalId: 'prof-1',
+      startAtISO,
+      source: 'PUBLIC',
+    });
+    expect(existente.patientCreated).toBe(false);
+  });
+
+  it('carrera: si otro request creó el paciente entre el findUnique y el insert, patientCreated=false', async () => {
+    // Sin esto el dato mentiría bajo concurrencia y el bot ligaría una
+    // conversación a un paciente que no creó — justo lo que hay que evitar.
+    prisma.patient.findUnique.mockResolvedValue(null);
+    prisma.patient.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('unique', {
+        code: 'P2002',
+        clientVersion: 'x',
+      }),
+    );
+
+    const res = await service.createAppointment({
+      clinicId: 'clinic-A',
+      patient: { phone: '+584141234567', name: 'Ana' },
+      serviceId: 'svc-1',
+      professionalId: 'prof-1',
+      startAtISO,
+      source: 'PUBLIC',
+    });
+
+    expect(res.patientCreated).toBe(false);
+    expect(prisma.patient.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('un error que NO es P2002 se propaga: no lo tapamos con un update', async () => {
+    prisma.patient.findUnique.mockResolvedValue(null);
+    prisma.patient.create.mockRejectedValue(new Error('conexión caída'));
+
+    await expect(
+      service.createAppointment({
+        clinicId: 'clinic-A',
+        patient: { phone: '+584141234567', name: 'Ana' },
+        serviceId: 'svc-1',
+        professionalId: 'prof-1',
+        startAtISO,
+        source: 'PUBLIC',
+      }),
+    ).rejects.toThrow('conexión caída');
+    expect(prisma.patient.update).not.toHaveBeenCalled();
+  });
+
+  it('un P2002 de OTRO unique también se propaga, no se confunde con el de phone', async () => {
+    // El día que Patient gane un unique de email o documento, mandar ese
+    // conflicto a un update por clinicId_phone moriría con P2025 y taparía el
+    // error real.
+    prisma.patient.findUnique.mockResolvedValue(null);
+    prisma.patient.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('unique', {
+        code: 'P2002',
+        clientVersion: 'x',
+        meta: { target: ['clinicId', 'email'] },
+      }),
+    );
+
+    await expect(
+      service.createAppointment({
+        clinicId: 'clinic-A',
+        patient: { phone: '+584141234567', name: 'Ana' },
+        serviceId: 'svc-1',
+        professionalId: 'prof-1',
+        startAtISO,
+        source: 'PUBLIC',
+      }),
+    ).rejects.toMatchObject({ code: 'P2002' });
+    expect(prisma.patient.update).not.toHaveBeenCalled();
   });
 });
 
@@ -435,5 +556,175 @@ describe('SchedulingService.rescheduleAppointment', () => {
     // Cita reagendada aunque reminders explote.
     expect(updated.startAt).toEqual(newStart.toJSDate());
     expect(prisma.appointment.update).toHaveBeenCalled();
+  });
+});
+
+/**
+ * Cancelación por el paciente desde el link de gestión (ADR 0020).
+ *
+ * Sin usuario autenticado: la autorización la da el token y por eso el estado
+ * se re-valida contra la DB en cada llamada.
+ */
+describe('SchedulingService.cancelByPatient', () => {
+  let prisma: any;
+  let availability: any;
+  let reminders: any;
+  let service: SchedulingService;
+
+  const future = () => new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const past = () => new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  function makeAppt(over: Record<string, unknown> = {}) {
+    return {
+      id: 'appt-1',
+      clinicId: 'clinic-A',
+      status: 'CONFIRMADA',
+      startAt: future(),
+      ...over,
+    };
+  }
+
+  beforeEach(() => {
+    prisma = {
+      appointment: {
+        // El UPDATE lleva la condición dentro (anti lost-update): devuelve
+        // count 1 cuando la cita era cancelable.
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findFirst: jest.fn().mockResolvedValue(makeAppt()),
+        findFirstOrThrow: jest
+          .fn()
+          .mockResolvedValue(makeAppt({ status: 'CANCELADA', canceledAt: new Date() })),
+      },
+    };
+    availability = { getSlots: jest.fn() };
+    reminders = { cancelForAppointment: jest.fn().mockResolvedValue(undefined) };
+    service = new SchedulingService(
+      prisma as unknown as PrismaService,
+      availability as unknown as AvailabilityService,
+      reminders as unknown as RemindersService,
+    );
+  });
+
+  it('cancela, sella canceledAt y apaga los recordatorios', async () => {
+    const res = await service.cancelByPatient({
+      clinicId: 'clinic-A',
+      appointmentId: 'appt-1',
+    });
+
+    expect(res.status).toBe('CANCELADA');
+    expect(prisma.appointment.updateMany.mock.calls[0][0].data.canceledAt).toBeInstanceOf(Date);
+    // Un recordatorio de una cita cancelada solo puede hacer daño.
+    expect(reminders.cancelForAppointment).toHaveBeenCalledWith('appt-1');
+  });
+
+  it('la condición va DENTRO del UPDATE: no hay ventana de lost-update', async () => {
+    // Si la recepcionista marca ATENDIDA entre la lectura y la escritura, un
+    // update incondicional la pisaría y dejaría una transición imposible.
+    await service.cancelByPatient({ clinicId: 'clinic-A', appointmentId: 'appt-1' });
+
+    const where = prisma.appointment.updateMany.mock.calls[0][0].where;
+    expect(where.id).toBe('appt-1');
+    expect(where.clinicId).toBe('clinic-A');
+    expect(where.status.in).toEqual(['PENDIENTE', 'CONFIRMADA', 'EN_RIESGO']);
+    expect(where.startAt.gt).toBeInstanceOf(Date);
+  });
+
+  it('multi-tenant: el UPDATE va SIEMPRE acotado por clinicId', async () => {
+    await service.cancelByPatient({ clinicId: 'clinic-A', appointmentId: 'appt-1' });
+
+    expect(prisma.appointment.updateMany.mock.calls[0][0].where.clinicId).toBe('clinic-A');
+  });
+
+  it('cita de otra clínica → 404, nunca se cancela', async () => {
+    prisma.appointment.updateMany.mockResolvedValue({ count: 0 });
+    prisma.appointment.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.cancelByPatient({ clinicId: 'clinic-B', appointmentId: 'appt-1' }),
+    ).rejects.toThrow(NotFoundException);
+    expect(reminders.cancelForAppointment).not.toHaveBeenCalled();
+  });
+
+  it('es idempotente: cancelar dos veces no re-cancela recordatorios', async () => {
+    prisma.appointment.updateMany.mockResolvedValue({ count: 0 });
+    prisma.appointment.findFirst.mockResolvedValue(makeAppt({ status: 'CANCELADA' }));
+
+    const res = await service.cancelByPatient({
+      clinicId: 'clinic-A',
+      appointmentId: 'appt-1',
+    });
+
+    expect(res.status).toBe('CANCELADA');
+    expect(reminders.cancelForAppointment).not.toHaveBeenCalled();
+  });
+
+  it.each(['ATENDIDA', 'NO_SHOW'])(
+    'estado terminal %s → 409: cambiarlo falsearía el histórico',
+    async (status) => {
+      // El propio UPDATE no matchea (su where excluye los terminales).
+      prisma.appointment.updateMany.mockResolvedValue({ count: 0 });
+      prisma.appointment.findFirst.mockResolvedValue(makeAppt({ status }));
+
+      await expect(
+        service.cancelByPatient({ clinicId: 'clinic-A', appointmentId: 'appt-1' }),
+      ).rejects.toThrow(ConflictException);
+      expect(reminders.cancelForAppointment).not.toHaveBeenCalled();
+    },
+  );
+
+  it('cita ya pasada → 409 aunque el estado siga PENDIENTE', async () => {
+    prisma.appointment.updateMany.mockResolvedValue({ count: 0 });
+    prisma.appointment.findFirst.mockResolvedValue(
+      makeAppt({ status: 'PENDIENTE', startAt: past() }),
+    );
+
+    await expect(
+      service.cancelByPatient({ clinicId: 'clinic-A', appointmentId: 'appt-1' }),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it('si falla apagar los recordatorios, la cancelación NO se revierte', async () => {
+    // Fail-open deliberado: lo que el paciente pidió ya está hecho; un
+    // recordatorio huérfano se detecta por el log.
+    reminders.cancelForAppointment.mockRejectedValue(new Error('redis down'));
+
+    const res = await service.cancelByPatient({
+      clinicId: 'clinic-A',
+      appointmentId: 'appt-1',
+    });
+
+    expect(res.status).toBe('CANCELADA');
+  });
+});
+
+describe('SchedulingService.isPatientMutable', () => {
+  const future = new Date(Date.now() + 3600_000);
+  const past = new Date(Date.now() - 3600_000);
+
+  it.each(['PENDIENTE', 'CONFIRMADA', 'EN_RIESGO'])(
+    '%s en el futuro → gestionable',
+    (status) => {
+      expect(
+        SchedulingService.isPatientMutable({ status, startAt: future } as any),
+      ).toBe(true);
+    },
+  );
+
+  it.each(['ATENDIDA', 'CANCELADA', 'NO_SHOW'])(
+    '%s → no gestionable',
+    (status) => {
+      expect(
+        SchedulingService.isPatientMutable({ status, startAt: future } as any),
+      ).toBe(false);
+    },
+  );
+
+  it('el pasado no se gestiona, sea cual sea el estado', () => {
+    expect(
+      SchedulingService.isPatientMutable({
+        status: 'CONFIRMADA',
+        startAt: past,
+      } as any),
+    ).toBe(false);
   });
 });

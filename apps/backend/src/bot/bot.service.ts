@@ -6,7 +6,6 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Clinic, Conversation, Prisma, Service } from '@prisma/client';
-import { createHash } from 'node:crypto';
 import Redis from 'ioredis';
 import { DateTime } from 'luxon';
 import { FollowUpsService } from '../follow-ups/follow-ups.service';
@@ -18,6 +17,7 @@ import { AvailabilityService, Slot } from '../scheduling/availability.service';
 import { SchedulingSessionService } from '../scheduling/scheduling-session.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { WahaService } from '../whatsapp/waha.service';
+import { hashChatId, withinBotRateLimit } from './bot-rate-limit';
 import { Intent, IntentService } from './intent.service';
 import {
   asksForSomethingElse,
@@ -95,11 +95,6 @@ type FlowConfirmAction = ReminderReplyAction | 'NO';
 export class BotService {
   private readonly logger = new Logger(BotService.name);
 
-  /** Rate-limit por conversación (chatId): cap por minuto — ver ADR 0007. */
-  private static readonly PER_CHAT_LIMIT = 15;
-  /** Circuit breaker global por clínica: cap por hora — ver ADR 0007. */
-  private static readonly PER_CLINIC_HOURLY_LIMIT = 500;
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly waha: WahaService,
@@ -146,16 +141,6 @@ export class BotService {
       process.env.WEB_BASE_URL ?? 'http://localhost:3000'
     ).replace(/\/+$/, '');
     return `${baseUrl}/${clinic.locale}/agendar/${clinic.slug}?t=${token}`;
-  }
-
-  /**
-   * Hash corto del `chatId` para poder loguear sin filtrar PII (el chatId
-   * incluye el número E.164 del paciente). 8 hex chars ≈ 32 bits, suficiente
-   * para correlacionar eventos de la misma conversación en logs sin exponer
-   * el identificador real.
-   */
-  private hashChatId(chatId: string): string {
-    return createHash('sha256').update(chatId).digest('hex').slice(0, 8);
   }
 
   /**
@@ -233,6 +218,17 @@ export class BotService {
       '¡Con gusto! Si necesitas algo más, escríbeme. 🙌',
       'De nada. Aquí estoy si necesitas algo más. 🙌',
       '¡Un gusto ayudarte! Cualquier cosa, escríbeme. 🙌',
+    ],
+    /**
+     * Cierre con acción tras responder una duda (M6). Solo se anexa cuando el
+     * paciente NO tiene cita próxima: si ya tiene una, invitarlo a agendar es
+     * ruido. `{link}` es la página pública SIN token — responder una pregunta
+     * no debe escribir una `SchedulingSession` en DB.
+     */
+    ctaAfterAnswer: [
+      '¿Quieres agendar? Escríbeme *agendar* y lo hacemos aquí, o reserva en línea: {link}',
+      'Si quieres una cita, escríbeme *agendar* o resérvala aquí: {link}',
+      'Cuando quieras agendar, escríbeme *agendar* o usa nuestra página: {link}',
     ],
     confirmAppointment: [
       '✅ Listo. Tu cita de {service} con {professional} quedó {status} para el {when} en {clinicName}.{address}\n\nTe recordaré antes de la cita. Si necesitas cambiarla, escríbeme *reagendar*.',
@@ -315,6 +311,48 @@ export class BotService {
     return key === 'greeting'
       ? `${rendered}\n\n${BotService.AI_DISCLOSURE}`
       : rendered;
+  }
+
+  /**
+   * Cierre con acción (M6): tras responder una duda, invita a agendar.
+   *
+   * No se anexa cuando:
+   *  - el paciente YA tiene una cita próxima — invitarlo a agendar otra es
+   *    ruido, y encima confunde a quien creía estar preguntando por la suya;
+   *  - el mensaje anterior del bot ya llevaba el link. Repetir la misma
+   *    llamada a la acción en cada respuesta es el patrón que delata a un bot,
+   *    y el paciente que hace tres preguntas seguidas la leería tres veces.
+   *
+   * El link es el público SIN token: responder una pregunta no debe escribir
+   * una `SchedulingSession` en DB.
+   */
+  private async withClosingCta(
+    clinic: Clinic,
+    convo: Conversation,
+    answer: string,
+  ): Promise<string> {
+    // Mismo helper que usa el resto del bot para resolver la cita del
+    // paciente, así que hereda el orden de resolución sin duplicarlo.
+    if (convo.phone) {
+      const upcoming = await this.findUpcomingAppointment(
+        clinic.id,
+        convo.phone,
+      );
+      if (upcoming) return answer;
+    }
+
+    const link = this.publicSchedulingUrl(clinic);
+    const lastOut = await this.prisma.message.findFirst({
+      where: { conversationId: convo.id, direction: 'OUT' },
+      orderBy: { createdAt: 'desc' },
+      select: { body: true },
+    });
+    if (lastOut?.body.includes(link)) return answer;
+
+    const cta = this.pickVariant(
+      BotService.DEFAULT_BOT_MESSAGES.ctaAfterAnswer,
+    ).replace(/\{link\}/g, link);
+    return `${answer}\n\n${cta}`;
   }
 
   /**
@@ -401,38 +439,14 @@ export class BotService {
   }): Promise<void> {
     const { clinicId, chatId, phone, lid, contactName, text } = input;
 
-    // ── Rate-limit por conversación + circuit breaker global (ADR 0007) ──
-    // Fixed-window por minuto en `(clinicId, chatId)`. Silencio total al superar:
-    // no respondemos al spammer (evita amplificar el ataque quemando LLM budget).
-    // Fail-open si Redis está caído (loggeamos error) — la protección real la
-    // dan los constraints DB y el resto de rate-limits.
-    try {
-      const now = Date.now();
-      const rlKey = `bot:msg:${clinicId}:${chatId}:${Math.floor(now / 60000)}`;
-      const count = await this.redis.incr(rlKey);
-      if (count === 1) await this.redis.expire(rlKey, 90);
-      if (count > BotService.PER_CHAT_LIMIT) {
-        this.logger.warn(
-          `bot rate-limit clinic=${clinicId} chat=${this.hashChatId(chatId)} count=${count}`,
-        );
-        return;
-      }
-
-      // Circuit breaker por clínica/hora — cap costo LLM ante ataque distribuido.
-      const chKey = `bot:msg:${clinicId}:hour:${Math.floor(now / 3600000)}`;
-      const hourCount = await this.redis.incr(chKey);
-      if (hourCount === 1) await this.redis.expire(chKey, 3900);
-      if (hourCount > BotService.PER_CLINIC_HOURLY_LIMIT) {
-        this.logger.error(
-          `bot hourly cap clinic=${clinicId} count=${hourCount} — circuit OPEN`,
-        );
-        return;
-      }
-    } catch (e) {
-      this.logger.error(
-        `bot rate-limit falló (redis) clinic=${clinicId}: ${(e as Error).message}`,
-      );
-      // fail-open: seguimos procesando.
+    // Rate-limit + circuit breaker del ADR 0007. Mismas claves y presupuesto
+    // que el camino de adjuntos del webhook: ver `bot-rate-limit.ts`.
+    if (!(await withinBotRateLimit(this.redis, this.logger, {
+      clinicId,
+      chatId,
+      scope: 'bot',
+    }))) {
+      return;
     }
 
     const clinic = await this.prisma.clinic.findUniqueOrThrow({
@@ -631,7 +645,7 @@ export class BotService {
             clinic.wahaSession,
             chatId,
             convo.id,
-            result.answer,
+            await this.withClosingCta(clinic, convo, result.answer),
           );
         } else {
           await this.markNeedsHuman(convo.id);
@@ -1435,7 +1449,7 @@ export class BotService {
     }
 
     try {
-      const appt = await this.scheduling.createAppointment({
+      const { appointment: appt } = await this.scheduling.createAppointment({
         clinicId: clinic.id,
         // Solo pasamos `name` si lo recolectamos en ASK_NAME. Si el paciente ya
         // existía con nombre, no lo mandamos → el upsert respeta el valor previo.

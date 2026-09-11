@@ -4,6 +4,7 @@ import {
   ConflictException,
   Controller,
   Get,
+  Header,
   HttpCode,
   Logger,
   NotFoundException,
@@ -22,6 +23,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { Public } from '../auth/decorators/public.decorator';
 import { CreatePublicAppointmentDto } from './dto/create-public-appointment.dto';
+import { RescheduleByTokenDto } from './dto/reschedule-by-token.dto';
 import { RateLimit } from './rate-limit.guard';
 import { SlugValidationPipe } from './slug.pipe';
 import { normalizeE164 } from '../common/phone.util';
@@ -263,6 +265,8 @@ export class PublicController {
         startAt: Date;
         endAt: Date;
         status: string;
+        /** Link de gestión (ADR 0020). Ausente si no se pudo emitir el token. */
+        manageUrl?: string;
       }
     | { ok: true }
   > {
@@ -276,7 +280,9 @@ export class PublicController {
     // 2) Resolvemos clínica por slug.
     const clinic = await this.prisma.clinic.findFirst({
       where: { slug, status: 'ACTIVE' },
-      select: { id: true },
+      // `locale` va acá y no en una query aparte: lo necesita `issueManageUrl`
+      // para armar la URL de la web.
+      select: { id: true, locale: true },
     });
     if (!clinic) {
       throw new NotFoundException('clínica no encontrada');
@@ -321,7 +327,10 @@ export class PublicController {
     // reemplaza el 409 por un texto orientado a paciente ("elegí otro").
     let appointment;
     try {
-      appointment = await this.scheduling.createAppointment({
+      // `patientCreated` se queda acá dentro: en el borde público diría si ese
+      // teléfono ya era paciente de la clínica, o sea un oráculo para enumerar
+      // pacientes probando números.
+      ({ appointment } = await this.scheduling.createAppointment({
         clinicId: clinic.id,
         patient: {
           phone: normalizedPhone,
@@ -334,12 +343,12 @@ export class PublicController {
         notes: dto.notes,
         source,
         conversationId,
-      });
+      }));
     } catch (e) {
       if (e instanceof ConflictException) {
         // Mensaje orientado al usuario final del form público.
         throw new ConflictException(
-          'El horario elegido ya no está disponible. Elegí otro.',
+          'El horario elegido ya no está disponible. Elige otro.',
         );
       }
       throw e;
@@ -350,6 +359,19 @@ export class PublicController {
       `appointment created slug=${slug} apptId=${appointment.id} source=${source} status=${appointment.status}`,
     );
 
+    // Link de gestión para que /gracias ofrezca "cancelar o cambiar horario"
+    // sin que el paciente tenga que escribir por WhatsApp. Fail-open: si Redis
+    // está caído la cita ya está creada y eso es lo que importa — devolvemos
+    // la respuesta sin `manageUrl` y el front simplemente no muestra el link.
+    let manageUrl: string | undefined;
+    try {
+      manageUrl = await this.issueManageUrl(appointment, slug, clinic.locale);
+    } catch (e) {
+      this.logger.error(
+        `no se pudo emitir el manage token slug=${slug} apptId=${appointment.id}: ${(e as Error).message}`,
+      );
+    }
+
     // Cero PII en la respuesta: NO devolvemos `patient.{name,phone}`. El frontend
     // ya tiene el nombre en su state; no hace falta reflejarlo. Esto minimiza
     // superficie de exposición en logs de red / caches / etc.
@@ -358,6 +380,239 @@ export class PublicController {
       startAt: appointment.startAt,
       endAt: appointment.endAt,
       status: appointment.status,
+      ...(manageUrl ? { manageUrl } : {}),
+    };
+  }
+
+  // ──────────────────── Gestión de cita por link (ADR 0020) ────────────────────
+
+  /**
+   * Emite un token de gestión y arma la URL pública de la página de la cita.
+   * `{WEB_BASE_URL}/{locale}/agendar/{slug}/cita?t={token}`.
+   */
+  private async issueManageUrl(
+    appt: { id: string; clinicId: string; startAt: Date },
+    slug: string,
+    locale: string,
+  ): Promise<string> {
+    const { token } = await this.sessions.createManage(
+      {
+        appointmentId: appt.id,
+        clinicId: appt.clinicId,
+        clinicSlug: slug,
+      },
+      appt.startAt,
+    );
+    const baseUrl = (
+      process.env.WEB_BASE_URL ?? 'http://localhost:3000'
+    ).replace(/\/+$/, '');
+    return `${baseUrl}/${locale}/agendar/${slug}/cita?t=${token}`;
+  }
+
+  /**
+   * Resuelve un token de gestión a su cita, validando tenant.
+   *
+   * Todos los fallos (token inexistente, expirado, slug que no coincide, cita
+   * borrada) devuelven el MISMO 404 con el mismo mensaje. Diferenciarlos le
+   * diría a quien pruebe tokens si acertó el formato o la clínica.
+   */
+  private async resolveManageOr404(slug: string, token: string) {
+    const session = await this.sessions.resolveManage(token);
+    if (!session || session.clinicSlug !== slug) {
+      throw new NotFoundException(
+        'este link ya no es válido — pide uno nuevo por WhatsApp',
+      );
+    }
+
+    const appointment = await this.prisma.appointment.findFirst({
+      // El `clinicId` del token es la barrera multi-tenant: aunque el id de la
+      // cita se filtrara, sin el token de esa clínica no se resuelve.
+      //
+      // `clinic.status ACTIVE` replica lo que hacen los otros tres endpoints
+      // públicos: una clínica suspendida por impago o archivada al terminar el
+      // contrato deja de servir datos de pacientes y de aceptar cambios. Sin
+      // esto seguiría haciéndolo durante los 30 días de vida del token.
+      where: {
+        id: session.appointmentId,
+        clinicId: session.clinicId,
+        clinic: { status: 'ACTIVE' },
+      },
+      include: {
+        service: { select: { id: true, name: true, durationMin: true } },
+        professional: { select: { id: true, name: true } },
+        patient: { select: { name: true } },
+        clinic: {
+          select: { name: true, address: true, timezone: true, locale: true },
+        },
+      },
+    });
+    if (!appointment) {
+      throw new NotFoundException(
+        'este link ya no es válido — pide uno nuevo por WhatsApp',
+      );
+    }
+
+    return { session, appointment };
+  }
+
+  /**
+   * `GET /:slug/appointments/manage/:token` — datos de la cita para la página
+   * de gestión. NO consume el token: el paciente puede abrir el link, mirar,
+   * recargar y volver más tarde.
+   *
+   * Devuelve solo lo que la página necesita mostrar. Del paciente sale el
+   * nombre y nada más: quien tiene el link ya sabe de quién es la cita, pero no
+   * hay motivo para exponer su teléfono en una URL que puede quedar en el
+   * historial del navegador o reenviada por WhatsApp.
+   */
+  @Get(':slug/appointments/manage/:token')
+  // Por TOKEN y no por IP: la web consume este GET desde un server component,
+  // así que la IP que llega es la del servidor Next y la comparten todos los
+  // pacientes de la clínica. Con un cubo por IP, una tanda de recordatorios a
+  // las 9:00 hace que el paciente número 11 que abre su link se coma un 429.
+  @UseGuards(RateLimit(30, 'manage-read', { by: 'token' }))
+  @Header('Cache-Control', 'no-store')
+  async getManagedAppointment(
+    @Param('slug', SlugValidationPipe) slug: string,
+    @Param('token') token: string,
+  ) {
+    const { appointment } = await this.resolveManageOr404(slug, token);
+    const mutable = SchedulingService.isPatientMutable(appointment);
+
+    return {
+      appointment: {
+        id: appointment.id,
+        serviceId: appointment.service.id,
+        serviceName: appointment.service.name,
+        professionalId: appointment.professional.id,
+        professionalName: appointment.professional.name,
+        startAtISO: appointment.startAt.toISOString(),
+        durationMin: appointment.service.durationMin,
+        status: appointment.status,
+      },
+      clinic: {
+        name: appointment.clinic.name,
+        address: appointment.clinic.address,
+        timezone: appointment.clinic.timezone,
+        locale: appointment.clinic.locale,
+      },
+      patient: { name: appointment.patient.name },
+      canCancel: mutable,
+      canReschedule: mutable,
+    };
+  }
+
+  /**
+   * `POST /:slug/appointments/manage/:token/cancel` — el paciente cancela.
+   *
+   * El estado se re-valida en el servicio contra la DB: entre que se pintó la
+   * página y se pulsó el botón la clínica pudo marcarla ATENDIDA. 409 en ese
+   * caso, con el estado actual para que la web pueda decir qué pasó.
+   */
+  @Post(':slug/appointments/manage/:token/cancel')
+  @UseGuards(RateLimit(10, 'manage-write'))
+  @Header('Cache-Control', 'no-store')
+  @HttpCode(200)
+  async cancelManagedAppointment(
+    @Param('slug', SlugValidationPipe) slug: string,
+    @Param('token') token: string,
+  ): Promise<{ status: string }> {
+    const { session, appointment } = await this.resolveManageOr404(slug, token);
+
+    const updated = await this.scheduling.cancelByPatient({
+      clinicId: session.clinicId,
+      appointmentId: appointment.id,
+    });
+
+    // La cita ya no es gestionable: el token no tiene nada más que ofrecer.
+    await this.sessions.invalidateManage(token);
+
+    this.logger.log(
+      `appointment canceled via link slug=${slug} apptId=${appointment.id}`,
+    );
+    return { status: updated.status };
+  }
+
+  /**
+   * `POST /:slug/appointments/manage/:token/reschedule` — el paciente mueve su
+   * cita a otro horario del mismo servicio y profesional.
+   *
+   * Mueve la cita in-place (mismo id). La alternativa —crear una nueva y
+   * cancelar la vieja— dejaría una fila `CANCELADA` por cada reagendamiento, y
+   * el no-show rate se calcula sobre `ATENDIDA + NO_SHOW + CANCELADA`: cada
+   * paciente que reagenda en vez de faltar diluiría hacia abajo justo la
+   * métrica que el producto promete mejorar. Ver ADR 0020.
+   *
+   * Emite un token nuevo porque el TTL va atado a `startAt`, que acaba de
+   * cambiar, e invalida el anterior.
+   */
+  @Post(':slug/appointments/manage/:token/reschedule')
+  @UseGuards(RateLimit(10, 'manage-write'))
+  @Header('Cache-Control', 'no-store')
+  @HttpCode(200)
+  async rescheduleManagedAppointment(
+    @Param('slug', SlugValidationPipe) slug: string,
+    @Param('token') token: string,
+    @Body() dto: RescheduleByTokenDto,
+  ) {
+    const { session, appointment } = await this.resolveManageOr404(slug, token);
+
+    // Misma regla que `canReschedule` del GET: el servicio de reagendamiento lo
+    // comparte con el panel, donde el staff sí puede mover citas en estados que
+    // al paciente le cerramos, así que el corte va acá.
+    if (!SchedulingService.isPatientMutable(appointment)) {
+      throw new ConflictException('esta cita ya no se puede cambiar de horario');
+    }
+
+    let updated;
+    try {
+      updated = await this.scheduling.rescheduleAppointment({
+        clinicId: session.clinicId,
+        appointmentId: appointment.id,
+        startAtISO: dto.startAtISO,
+      });
+    } catch (e) {
+      if (e instanceof ConflictException) {
+        throw new ConflictException(
+          'Ese horario ya no está disponible. Elige otro.',
+        );
+      }
+      throw e;
+    }
+
+    // Token nuevo con el TTL del horario nuevo. El viejo se quema DESPUÉS y
+    // solo si el nuevo salió bien: al revés, un fallo de Redis dejaría al
+    // paciente sin ningún link para volver a su cita. El ADR 0020 acepta que
+    // convivan varios tokens por cita, así que este orden no cuesta nada.
+    let manageUrl: string | undefined;
+    try {
+      manageUrl = await this.issueManageUrl(
+        updated,
+        slug,
+        appointment.clinic.locale,
+      );
+      await this.sessions.invalidateManage(token);
+    } catch (e) {
+      this.logger.error(
+        `no se pudo re-emitir el manage token slug=${slug} apptId=${updated.id}: ${(e as Error).message}`,
+      );
+    }
+
+    this.logger.log(
+      `appointment rescheduled via link slug=${slug} apptId=${updated.id}`,
+    );
+    return {
+      appointment: {
+        id: updated.id,
+        serviceId: updated.serviceId,
+        serviceName: appointment.service.name,
+        professionalId: updated.professionalId,
+        professionalName: appointment.professional.name,
+        startAtISO: updated.startAt.toISOString(),
+        durationMin: appointment.service.durationMin,
+        status: updated.status,
+      },
+      ...(manageUrl ? { manageUrl } : {}),
     };
   }
 }

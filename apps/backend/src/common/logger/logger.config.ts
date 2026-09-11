@@ -50,6 +50,30 @@ function requestFields(req: RequestWithObservability, res: ServerResponse) {
   return fields;
 }
 
+/**
+ * Tokens que viajan en el path o en la query, borrados antes de loguear.
+ *
+ * Los links de gestión de cita (`/appointments/manage/:token`, ADR 0020) llevan
+ * una credencial bearer de hasta 30 días EN LA URL: quien la tenga puede leer
+ * los datos del paciente y cancelar o mover su cita. `pino-http` hace
+ * `logger.child({ req })`, así que sin esto el token acabaría no solo en la
+ * línea de completion sino en CADA log del request — y de ahí a Axiom (un
+ * tercero), a `docker logs` y a los access logs.
+ *
+ * Cubre también los tokens de sesión de agendamiento (ADR 0018) y los de
+ * invitación, que tienen el mismo problema con TTL más corto.
+ */
+const TOKEN_IN_PATH =
+  /\/(manage|session|invitations)\/[A-Za-z0-9_-]{20,}/g;
+
+function scrubUrl(url: string | undefined): string | undefined {
+  if (!url) return url;
+  // La query se corta entera: `?t=<token>` es como la web pasa el token, y
+  // ningún parámetro de query nuestro vale lo bastante como para arriesgarse.
+  const [path] = url.split('?');
+  return path.replace(TOKEN_IN_PATH, '/$1/[REDACTED]');
+}
+
 function healthPath(url: string | undefined): boolean {
   const path = (url ?? '').split('?')[0];
   return path === '/api/health' || path === '/api/health/live';
@@ -166,11 +190,11 @@ export function pinoConfig(): Params {
         req: (req: IncomingMessage & { id?: string }) => ({
           id: req.id,
           method: req.method,
-          url: req.url,
+          url: scrubUrl(req.url),
           headers: {
             host: req.headers.host,
             'user-agent': req.headers['user-agent'],
-            referer: req.headers.referer,
+            referer: scrubUrl(req.headers.referer),
           },
         }),
         res: (res: ServerResponse) => ({
