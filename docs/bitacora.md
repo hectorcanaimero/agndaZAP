@@ -599,3 +599,9 @@
 - También: pantalla propia para fallos transitorios (un 429 ya no dice "link inválido", que llevaba
   a citas duplicadas), confirmación al reagendar, `noindex` en la ruta, y aviso de que el rate-limit
   por IP ve la del servidor Next en SSR — pendiente de resolver en M2-a.
+- Tras la revisión de M2-a: el `GET manage` pasa a limitarse **por token y no por IP** (en SSR el
+  cubo veía la IP del servidor Next, compartida por toda la clínica); se descartó mandar la IP real
+  en una cabecera, que es el vector que `TRUST_PROXY` existe para cerrar. Y dos cambios de contrato
+  que la web ya contempla: reagendar devuelve la cita a `PENDIENTE` (limpia `confirmedAt`) y hay un
+  tope de reagendamientos **del paciente**, cuyo `canReschedule` actualizado viene en la respuesta
+  del POST — sin usarlo, quien gastaba su último cambio seguía viendo el botón.

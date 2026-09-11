@@ -236,9 +236,21 @@ export function ManageAppointmentClient({
       return;
     }
 
-    setData((prev) => ({ ...prev, appointment: res.data.appointment }));
+    // El POST ya nos dice si al paciente le queda cupo, así que actualizamos
+    // `canReschedule` con eso en vez de pedir otra vez el GET. Sin esto, quien
+    // acaba de gastar su último cambio seguiría viendo el botón y sólo se
+    // enteraría al elegir un horario y comerse el rechazo.
+    // Ojo: la cita vuelve a PENDIENTE, el backend limpia `confirmedAt`.
+    const spent = res.data.canReschedule === false;
+    setData((prev) => ({
+      ...prev,
+      appointment: res.data.appointment,
+      canReschedule: res.data.canReschedule ?? prev.canReschedule,
+    }));
     setMode('view');
-    setNotice(t('reschedule.success'));
+    setNotice(
+      spent ? t('reschedule.successLastOne') : t('reschedule.success'),
+    );
     // La foto de disponibilidad quedó vieja (su slot nuevo figura libre y el
     // viejo ocupado). Sin esto, reabrir "cambiar horario" dentro del staleTime
     // muestra datos que ya no son ciertos.

@@ -155,7 +155,8 @@
       "linkLost": "Mudamos a sua consulta, mas este link parou de funcionar. Se precisar vê-la de novo, use o último que enviamos pelo WhatsApp.",
       "confirmTitle": "Mudar sua consulta para este horário?",
       "confirmDescription": "Sua consulta ficaria em {when}. O horário atual fica livre para outro paciente.",
-      "confirmLabel": "Sim, mudar"
+      "confirmLabel": "Sim, mudar",
+      "successLastOne": "Pronto! Mudamos a sua consulta. Era a última mudança que você podia fazer por aqui: se precisar de outra, fale com a clínica pelo WhatsApp."
     },
     "errors": {
       "generic": "Não foi possível concluir a ação. Tente de novo daqui a pouco.",

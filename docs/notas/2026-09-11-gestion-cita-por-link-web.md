@@ -117,14 +117,42 @@ El E2E del flujo completo (`apps/web/e2e/cita-gestion.spec.ts`) está detrás de
 M2-a esté en `main`.** Los dos tests de link inválido sí corren siempre: esa
 pantalla se pinta con cualquier 404.
 
-## Pendiente de coordinar con el backend
+## El rate-limit del GET en SSR (resuelto en M2-a)
 
 El `GET manage` se hace en **SSR**, así que el cubo de rate-limit por `slug+ip`
-lo ve con la IP del servidor Next, **compartida por todos los pacientes de la
-clínica**. Una tanda de recordatorios a las 9:00, varios pacientes abriendo su
-link en el mismo minuto, y el 11º se come un 429. Hoy eso ya no dice "link
-inválido" (se distingue lo transitorio), pero sigue siendo una página que no
-carga. Hay que resolverlo en M2-a: excluir el `GET` del cubo por IP, o
-reenviarle la IP real del paciente.
+lo veía con la IP del servidor Next, **compartida por todos los pacientes de la
+clínica**: una tanda de recordatorios a las 9:00, varios abriendo su link en el
+mismo minuto, y el 11º se comía un 429.
+
+M2-a lo cerró limitando **ese GET por token en vez de por IP** (los dos POST
+siguen por IP, donde el cubo sí discrimina porque salen del navegador). Se
+descartó la alternativa de mandar la IP real en una cabecera, que es justo el
+vector de spoofing que `TRUST_PROXY` existe para cerrar. Limitar por token es
+aceptable en lectura porque el token tiene ~192 bits: no es iterable, así que
+ese cubo nunca estuvo para frenar fuerza bruta sino para que nadie martillee una
+misma cita.
+
+La mitigación del lado web se queda igual aunque el 429 ya no pase: distinguir
+"no pude hablar con el backend" de "este link no vale" es lo que evita el peor
+resultado, que era empujar con un CTA de *Agendar una cita* a alguien cuya cita
+seguía viva.
+
+## Reagendar devuelve la cita a PENDIENTE y gasta cupo
+
+Dos cosas que cambiaron después del contrato inicial y que la página contempla:
+
+- **El estado no se conserva**: mover la cita invalida la confirmación anterior,
+  así que el backend la devuelve a `PENDIENTE` y limpia `confirmedAt`. La
+  tarjeta lo refleja sola porque el estado sale de la respuesta.
+- **Hay un tope de reagendamientos del paciente**, separado de los movimientos
+  que hace recepción desde el panel. El `POST reschedule` devuelve
+  `canReschedule` ya actualizado, así que se usa eso en vez de volver a pedir el
+  GET. Sin ello, quien acabara de gastar su último cambio seguiría viendo el
+  botón y sólo se enteraría al elegir horario y comerse el rechazo. Cuando el
+  cupo se acaba, el mensaje de éxito lo dice.
+
+Los dos campos (`rescheduleCount`, `canReschedule` en la respuesta del POST) van
+**opcionales** en los tipos: llegaron después del contrato inicial y la web no
+puede dar por hecho que el backend desplegado ya los manda.
 
 Relacionado: [[adr/0004-pii-y-compliance]], [[notas/2026-09-11-feedback-cross-tenant]].

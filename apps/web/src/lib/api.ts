@@ -216,6 +216,12 @@ export interface ManagedAppointment {
   startAtISO: string;
   durationMin: number;
   status: AppointmentStatus;
+  /**
+   * Reagendamientos hechos **por el paciente**. Los movimientos que hace
+   * recepción desde el panel no cuentan aquí. Opcional: el backend lo añadió
+   * después del contrato inicial, así que la web no puede darlo por seguro.
+   */
+  rescheduleCount?: number;
 }
 
 /**
@@ -308,6 +314,10 @@ export async function cancelManagedAppointment(
  * no-show rate, que es la métrica estrella del producto. Por eso el éxito se
  * detecta por el 200 y el nuevo `startAtISO`, nunca comparando ids.
  *
+ * La cita vuelve a `PENDIENTE` (el backend limpia `confirmedAt`): moverla
+ * invalida la confirmación anterior, así que el estado que devuelve NO es el
+ * que tenía antes.
+ *
  * `manageUrl` es **opcional**: si Redis falla no se emite token nuevo, pero la
  * cita se movió igual (preferimos perder el link antes que la cita).
  */
@@ -319,6 +329,13 @@ export async function rescheduleManagedAppointment(
   ManageActionResponse<{
     appointment: ManagedAppointment;
     manageUrl?: string;
+    /**
+     * Estado del cupo **después** de este movimiento, para no tener que pedir
+     * otra vez el GET sólo para saber si al paciente le queda algún cambio.
+     * Opcionales: llegaron después del contrato inicial.
+     */
+    rescheduleCount?: number;
+    canReschedule?: boolean;
   }>
 > {
   return postManage(manageUrlFor(slug, token, '/reschedule'), { startAtISO });
