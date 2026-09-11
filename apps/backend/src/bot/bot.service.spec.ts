@@ -724,6 +724,10 @@ describe('BotService — FSM de agendamiento', () => {
     expect(call.clinicId).toBe('clinic-A');
     expect(call.question).toBe('¿Cuáles son los horarios?');
     expect(call.locale).toBe('es');
+    // El teléfono de la conversación va al RAG: habilita la parte de "tu
+    // próxima cita" del bloque de hechos de BD (ClinicFactsService lo filtra
+    // por clinicId + phone).
+    expect(call.phone).toBe(convoState.phone);
     // La respuesta del LLM llega al paciente.
     const msg = waha.sendText.mock.calls.at(-1)![2];
     expect(msg).toMatch(/lunes a viernes/);
@@ -818,6 +822,21 @@ describe('BotService — FSM de agendamiento', () => {
       expect(msg).toMatch(/persona del equipo/i);
       expect(msg).not.toContain('/agendar/');
     });
+  it('Intent.PREGUNTA_FAQ desde un chat @lid: pasa phone=null al RAG, sin romper', async () => {
+    convoState.phone = null;
+    intent.detect.mockResolvedValue(Intent.PREGUNTA_FAQ);
+    knowledge.answer.mockResolvedValue({ answer: 'Abrimos de 9 a 18h.', sources: [] });
+
+    await bot.handleIncoming({
+      clinicId: 'clinic-A',
+      chatId: 'abc123@lid',
+      phone: null,
+      lid: 'abc123',
+      text: '¿a qué hora abren?',
+    });
+
+    expect(knowledge.answer.mock.calls[0][0].phone).toBeNull();
+    expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/9 a 18h/);
   });
 
   it('Intent.PREGUNTA_FAQ con answer=null: handoff a NEEDS_HUMAN', async () => {
