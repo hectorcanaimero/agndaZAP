@@ -478,7 +478,7 @@ describe('SchedulingService.rescheduleAppointment', () => {
   });
 
   // ── S6: traza de reagendamientos y reinicio del ciclo de confirmación ──
-  it('vuelve a PENDIENTE y limpia confirmedAt cuando queda vía de recuperación', async () => {
+  it('vuelve a PENDIENTE cuando queda vía de recuperación', async () => {
     // Caso real: cita CONFIRMADA por teléfono que se mueve a otro día. El
     // recordatorio del horario nuevo permite reconfirmar, así que degradar el
     // estado es correcto.
@@ -506,7 +506,34 @@ describe('SchedulingService.rescheduleAppointment', () => {
 
     const reset = prisma.appointment.update.mock.calls.at(-1)[0].data;
     expect(reset.status).toBe('PENDIENTE');
-    expect(reset.confirmedAt).toBeNull();
+  });
+
+  it('NO borra confirmedAt: es un hecho histórico que alimenta el dashboard', async () => {
+    // Borrarlo reescribía métricas de días ya cerrados — el numerador perdía la
+    // confirmación y el denominador (recordatorios SENT) se quedaba, así que la
+    // tasa de confirmación bajaba sola. `status` dice si está confirmada AHORA;
+    // `confirmedAt`, si llegó a confirmarse alguna vez.
+    prisma.appointment.findFirst.mockResolvedValue({
+      id: 'appt-1',
+      clinicId: 'clinic-A',
+      status: 'CONFIRMADA',
+      confirmedAt: new Date('2030-05-30T10:00:00.000Z'),
+      startAt: new Date('2030-06-01T14:00:00.000Z'),
+      serviceId: 'svc-1',
+      professionalId: 'prof-1',
+      service: { durationMin: 30 },
+      clinic: { timezone: 'America/Caracas' },
+    });
+
+    await service.rescheduleAppointment({
+      clinicId: 'clinic-A',
+      appointmentId: 'appt-1',
+      startAtISO: newStartISO,
+    });
+
+    for (const [{ data }] of prisma.appointment.update.mock.calls) {
+      expect(data).not.toHaveProperty('confirmedAt');
+    }
   });
 
   it('SIN vía de recuperación conserva el estado: no desconfirma en silencio', async () => {

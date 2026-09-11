@@ -553,6 +553,17 @@ export class SchedulingService {
     // Con vía de recuperación → PENDIENTE y el paciente reconfirma con el
     // recordatorio nuevo. Sin ella → se conserva el estado, que es la
     // información más fiel: nadie ha dejado de confirmar nada.
+    //
+    // `confirmedAt` NO se borra, y la distinción es deliberada:
+    //   - `status` responde "¿está confirmada AHORA?" → PENDIENTE hasta que
+    //     el paciente responda al recordatorio del horario nuevo.
+    //   - `confirmedAt` responde "¿llegó a confirmar alguna vez?" → es un hecho
+    //     histórico y alimenta la tasa de confirmación del dashboard, que mide
+    //     si los recordatorios funcionan.
+    // Borrarlo reescribía métricas de días ya cerrados: el numerador perdía la
+    // confirmación mientras el denominador (recordatorios SENT) se quedaba,
+    // así que la tasa bajaba sola y el trend de 14 días cambiaba hacia atrás.
+    // Una reconfirmación posterior lo sobreescribe con la fecha nueva.
     try {
       const { remindersScheduled, riskScheduled } =
         await this.reminders.scheduleForAppointment(appointmentId);
@@ -561,7 +572,7 @@ export class SchedulingService {
       if (hasRecoveryPath && updated.status !== 'PENDIENTE') {
         updated = await this.prisma.appointment.update({
           where: { id: appointmentId },
-          data: { status: 'PENDIENTE', confirmedAt: null },
+          data: { status: 'PENDIENTE' },
         });
       } else if (!hasRecoveryPath) {
         this.logger.log(

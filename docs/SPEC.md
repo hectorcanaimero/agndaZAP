@@ -203,9 +203,17 @@ el dashboard la contaría a la vez como pendiente (por `status`) y como confirma
 `confirmedAt`).
 
 **Reagendar reinicia el ciclo de confirmación** (S6). Mover una cita —desde el panel o desde el
-link— la devuelve a `PENDIENTE`, limpia `confirmedAt` y reprograma recordatorios y
-`check-risk`: una confirmación vale para un horario concreto, y mantenerla haría que la clínica
-contara como confirmada una cita que el paciente no ha vuelto a mirar.
+link— la devuelve a `PENDIENTE` y reprograma recordatorios y `check-risk`: una confirmación vale
+para un horario concreto, y mantener el estado haría que la clínica contara como confirmada una
+cita que el paciente no ha vuelto a mirar.
+
+`confirmedAt` **no se borra**, y la distinción es deliberada: `status` responde "¿está
+confirmada ahora?" y `confirmedAt` responde "¿llegó a confirmar alguna vez?". Lo segundo es un
+hecho histórico que alimenta la tasa de confirmación del dashboard, que mide si los
+recordatorios funcionan. Borrarlo reescribía métricas de días ya cerrados —el numerador perdía
+la confirmación mientras el denominador (recordatorios `SENT`) se quedaba— y un dashboard
+histórico que cambia hacia atrás es un problema de confianza con la clínica. Una reconfirmación
+posterior sobreescribe `confirmedAt` con la fecha nueva.
 
 **Excepción**: si el horario nuevo está tan cerca que no cabe ningún recordatorio ni el
 `check-risk`, el estado se conserva. Degradar ahí dejaría la cita desconfirmada **para siempre
