@@ -573,3 +573,13 @@
   sale igual, sin la parte de la cita.
 - Es el teléfono que reporta WAHA, no uno declarado en un formulario. La distinción importa: ver
   la decisión de S5 sobre no rellenar `Conversation.phone` con el número del form público.
+
+## 2026-09-11 — M4: navegación de horarios en la FSM
+- "0. Ver más horarios" avanza la ventana 7 días (`flowData.slotWindowCount`), con tope de 4
+  ventanas y después el link tokenizado. Sin resetear la FSM en ningún caso.
+- "Cualquier profesional" como última opción de `ASK_PROFESSIONAL`: mezcla los horarios de todos
+  y fija el `professionalId` al elegir el slot (`offeredProfessionalIds`, paralelo a `offeredSlots`).
+- Preferencia del mismo mensaje ("1, por la tarde", "el martes") filtra antes de mostrar; si queda
+  vacía lo dice y muestra todo.
+- Tras dos respuestas seguidas sin entender, ofrece el form web sin resetear la FSM.
+- Detalle y gotchas en [[notas/2026-09-11-fsm-navegacion-horarios]].
