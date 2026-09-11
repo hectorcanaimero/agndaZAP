@@ -31,6 +31,10 @@ import {
   type CreateAppointmentResponse,
   type Slot,
 } from '@/lib/api';
+import {
+  formatSlotTime,
+  groupSlotsByDay,
+} from './slot-format';
 import { queryKeys } from '@/lib/query-keys';
 import { todayStartInTZ } from '@/lib/utils';
 import { useScheduleSelection } from './ScheduleSelection';
@@ -94,51 +98,6 @@ const scheduleSchema = z.object({
 });
 
 type ScheduleFormValues = z.infer<typeof scheduleSchema>;
-
-/**
- * Agrupa slots por fecha local (YYYY-MM-DD en la TZ de la clínica) para render
- * en columnas por día. Usamos `Intl.DateTimeFormat` con la TZ correcta — no
- * `Date.toLocaleDateString` del user agent, porque queremos la fecha desde la
- * perspectiva de la clínica.
- */
-function groupSlotsByDay(
-  slots: Slot[],
-  timezone: string,
-  locale: string,
-): Array<{ dayLabel: string; slots: Slot[] }> {
-  const dayFormatter = new Intl.DateTimeFormat(locale, {
-    timeZone: timezone,
-    weekday: 'short',
-    day: '2-digit',
-    month: 'short',
-  });
-  const keyFormatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-
-  const byKey = new Map<string, { dayLabel: string; slots: Slot[] }>();
-  for (const slot of slots) {
-    const d = new Date(slot.startAt);
-    const key = keyFormatter.format(d);
-    if (!byKey.has(key)) {
-      byKey.set(key, { dayLabel: dayFormatter.format(d), slots: [] });
-    }
-    byKey.get(key)!.slots.push(slot);
-  }
-  return Array.from(byKey.values());
-}
-
-function formatSlotTime(iso: string, timezone: string, locale: string): string {
-  return new Intl.DateTimeFormat(locale, {
-    timeZone: timezone,
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).format(new Date(iso));
-}
 
 /**
  * Skeleton de slots — 3 filas × 4 buttons con `animate-pulse`.
@@ -527,10 +486,22 @@ export function ScheduleForm(props: ScheduleFormProps) {
       // El nombre del paciente lo pasamos por sessionStorage (limitado a la
       // pestaña, sin persistencia). Sólo guardamos el primer nombre para
       // reducir aún más la superficie.
+      //
+      // El `manageUrl` viaja por el mismo canal y por una razón más fuerte: es
+      // un token bearer. En la query string quedaría en el Referer, en el
+      // historial y en los logs del CDN, y con él cualquiera puede cancelar la
+      // cita. Puede no venir (si Redis falló el backend crea la cita igual sin
+      // emitir token), y entonces /gracias simplemente no muestra el bloque.
       if (typeof window !== 'undefined') {
         try {
           const firstName = values.name.trim().split(/\s+/)[0] ?? '';
           window.sessionStorage.setItem('agz.thanks.name', firstName);
+          if (result.data.manageUrl) {
+            window.sessionStorage.setItem(
+              'agz.thanks.manageUrl',
+              result.data.manageUrl,
+            );
+          }
         } catch {
           // sessionStorage puede fallar en modo privado / algunas WebViews.
           // No es crítico — la página /gracias muestra un fallback.

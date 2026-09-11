@@ -145,6 +145,12 @@ export interface CreateAppointmentResult {
   startAt: string;
   endAt: string;
   status: string;
+  /**
+   * Link de gestión de la cita. **Opcional**: si Redis está caído el backend
+   * no emite el token pero crea la cita igual. El caller tiene que tratar su
+   * ausencia como normal y simplemente no ofrecer el bloque de gestión.
+   */
+  manageUrl?: string;
 }
 
 export type CreateAppointmentResponse =
@@ -183,6 +189,139 @@ export async function createAppointment(
   const message =
     (body as { message?: string } | null)?.message ?? `HTTP ${res.status}`;
   return { ok: false, status: res.status, message };
+}
+
+/* ─────────────────── Gestión de cita por link (M2) ─────────────────── */
+
+/**
+ * Cita tal como la devuelve el endpoint de gestión. `startAtISO` viene con
+ * zona explícita; se formatea siempre con `clinic.timezone`, nunca con la del
+ * navegador.
+ */
+/** Espejo del enum `AppointmentStatus` de Prisma. */
+export type AppointmentStatus =
+  | 'PENDIENTE'
+  | 'CONFIRMADA'
+  | 'EN_RIESGO'
+  | 'ATENDIDA'
+  | 'CANCELADA'
+  | 'NO_SHOW';
+
+export interface ManagedAppointment {
+  id: string;
+  serviceId: string;
+  serviceName: string;
+  professionalId: string;
+  professionalName: string;
+  startAtISO: string;
+  durationMin: number;
+  status: AppointmentStatus;
+}
+
+/**
+ * Respuesta del `GET manage/:token`.
+ *
+ * De `patient` llega **sólo el nombre**, nunca el teléfono: el link puede
+ * acabar reenviado por WhatsApp a un tercero, y el nombre alcanza para que el
+ * paciente reconozca que la cita es suya.
+ *
+ * `canCancel`/`canReschedule` son una pista para la UI, **no una garantía**:
+ * la clínica puede marcar la cita ATENDIDA entre que se pinta la página y el
+ * clic, así que las acciones tienen que manejar el 409 igual.
+ */
+export interface ManagedAppointmentData {
+  appointment: ManagedAppointment;
+  clinic: {
+    name: string;
+    address: string | null;
+    timezone: string;
+    locale: string;
+  };
+  patient: { name: string };
+  canCancel: boolean;
+  canReschedule: boolean;
+}
+
+export type ManageActionResponse<T> =
+  | { ok: true; data: T }
+  | { ok: false; status: number; message: string };
+
+function manageUrlFor(slug: string, token: string, suffix = ''): string {
+  return `${API_URL}/api/public/clinics/${encodeURIComponent(
+    slug,
+  )}/appointments/manage/${encodeURIComponent(token)}${suffix}`;
+}
+
+/**
+ * Hidrata la página de gestión. Devuelve `null` ante un 404.
+ *
+ * El backend responde **el mismo 404 para todos los fallos de token**
+ * (expirado, de otra clínica, cita borrada) a propósito: no le confirma nada a
+ * quien prueba tokens. Por eso el front no puede ni debe intentar distinguir
+ * el motivo — una sola pantalla de "este link ya no vale".
+ */
+export async function fetchManagedAppointment(
+  slug: string,
+  token: string,
+): Promise<ManagedAppointmentData | null> {
+  const res = await fetch(manageUrlFor(slug, token), { cache: 'no-store' });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new Error(`fetchManagedAppointment failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+async function postManage<T>(
+  url: string,
+  body?: unknown,
+): Promise<ManageActionResponse<T>> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body ?? {}),
+  });
+
+  let parsed: unknown = null;
+  try {
+    parsed = await res.json();
+  } catch {
+    parsed = null;
+  }
+
+  if (res.ok) return { ok: true, data: parsed as T };
+  const message =
+    (parsed as { message?: string } | null)?.message ?? `HTTP ${res.status}`;
+  return { ok: false, status: res.status, message };
+}
+
+export async function cancelManagedAppointment(
+  slug: string,
+  token: string,
+): Promise<ManageActionResponse<{ status: AppointmentStatus }>> {
+  return postManage(manageUrlFor(slug, token, '/cancel'));
+}
+
+/**
+ * Mueve la cita. **Es in-place: `appointment.id` NO cambia** — el backend no
+ * crea una fila nueva, porque una CANCELADA por reagendamiento diluiría el
+ * no-show rate, que es la métrica estrella del producto. Por eso el éxito se
+ * detecta por el 200 y el nuevo `startAtISO`, nunca comparando ids.
+ *
+ * `manageUrl` es **opcional**: si Redis falla no se emite token nuevo, pero la
+ * cita se movió igual (preferimos perder el link antes que la cita).
+ */
+export async function rescheduleManagedAppointment(
+  slug: string,
+  token: string,
+  startAtISO: string,
+): Promise<
+  ManageActionResponse<{
+    appointment: ManagedAppointment;
+    manageUrl?: string;
+  }>
+> {
+  return postManage(manageUrlFor(slug, token, '/reschedule'), { startAtISO });
 }
 
 /* ─────────────────────────── Leads (panel admin) ─────────────────────────── */
