@@ -535,3 +535,8 @@
 - `AI_DISCLOSURE` del bot queda en una línea sin listar proveedores; el consent del form sigue nombrándolos. ADR 0004 §7.1.
 - Palabra de escape unificada: `escribe *humano*`.
 - RAG: umbral de distancia 0.5 → 0.65 tras calibrar con preguntas reales (la pregunta de ubicación hacía handoff). Ver [[notas/2026-09-10-rag-umbral-distancia]].
+
+## 2026-09-11 — PR B1 (P0 bot, item B8): tuteo neutro también en el prompt RAG
+- La migración a tuteo del 2026-09-10 (PR #40) cubrió `bot.service.ts`, `public.controller.ts` y `es.json`, pero se quedó afuera `knowledge.service.ts`: el system prompt de `answer()` seguía en voseo rioplatense ("Sos", "Respondés", "Usá") y el tono "cercano" de `TONE_INSTRUCTIONS` mezclaba voseo (Argentina) con "você" (Brasil).
+- PR #41 (`fix/rag-prompt-tuteo`): prompt y los tres tonos reescritos en tuteo neutro; 4 tests de regresión nuevos en `knowledge.service.spec.ts` (prompt base + `it.each` por tono) que fallan si vuelve a colarse voseo. 52 suites / 765 tests verdes.
+- Parte del reparto P0 del análisis del bot ([[analisis/2026-09-11-chatbot-analisis-tecnico]], [[planes/2026-09-11-p0-bot-reparto]]) — sesión B (Sonnet), primer PR del reparto, sin dependencias con la sesión A.
