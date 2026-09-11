@@ -759,3 +759,15 @@
     distingue por el mensaje, que no es ideal: si el service expone un error tipado, cambiarlo.
 - El tope por chat es el mismo que en el borde público (3): el canal no debe cambiar cuántas veces
   puede moverla.
+
+## 2026-09-11 — S23: una lectura de `Conversation` para las dos guardas
+- La guarda de **persona** (¿este chat tiene derecho a esta cita?) se muda del
+  `public.controller.ts` a `SchedulingService.createAppointment`, junto a la de **tenant**
+  (¿la conversación es de esta clínica?). Una sola lectura sirve a las dos.
+- No es solo ahorrar una query: dentro del service `patientCreated` ya es un hecho, así que
+  desaparece la ventana de carrera que tenía comprobarlo antes de crear con un `findFirst` extra.
+- Las dos quedan comentadas como distintas y no intercambiables: una falla duro, la otra descarta
+  el enlace y sigue. El riesgo que motivó el ítem era que alguien viera dos lecturas iguales y
+  borrara "la repetida", quedándose sin uno de los dos controles.
+- Efecto lateral: la regla aplica ahora a **todos** los callers de `createAppointment`, no solo al
+  endpoint público.
