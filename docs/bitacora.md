@@ -535,3 +535,25 @@
 - `AI_DISCLOSURE` del bot queda en una línea sin listar proveedores; el consent del form sigue nombrándolos. ADR 0004 §7.1.
 - Palabra de escape unificada: `escribe *humano*`.
 - RAG: umbral de distancia 0.5 → 0.65 tras calibrar con preguntas reales (la pregunta de ubicación hacía handoff). Ver [[notas/2026-09-10-rag-umbral-distancia]].
+
+## 2026-09-11 — P0 del bot · B4: mensajes sin texto no llegan al bot
+- PR A2 del reparto [[planes/2026-09-11-p0-bot-reparto]]. Antes, una nota de voz entraba a
+  `BotService.handleIncoming` con `text: ''` y terminaba en el fallback genérico (o gastando LLM).
+- Ahora `WebhookController` los detecta por `payload.type` / `_data.type` / `hasMedia` / `body` vacío,
+  los registra en la bandeja (`Conversation` + `Message IN` con `[audio]`, `[imagen]`, `[sticker]`,
+  `[ubicación]`, `[archivo]`, `[contacto]`, `[video]`) y responde una vez cada 6 h
+  "Por ahora solo puedo leer mensajes de texto…". Sin LLM.
+- Decisiones no obvias en [[notas/2026-09-11-waha-mensajes-sin-texto]]: throttle fail-closed
+  (al revés que el dedup), el registro se hace aunque la conversación esté en `HUMAN`, y el pie de
+  foto de una imagen se conserva (truncado a 500) detrás de la etiqueta.
+- **Dos blockers salidos de `code-reviewer` + `security-auditor`, corregidos antes del PR**:
+  (1) el camino nuevo se saltaba las dos capas de rate-limit del [[adr/0007-rate-limit-bot]],
+  porque viven dentro de `BotService.handleIncoming` — ahora `withinRateLimit` reusa las mismas
+  claves de Redis para compartir presupuesto; (2) `MEDIA_LABELS[type]` con `type: "constructor"`
+  devolvía algo de `Object.prototype` y provocaba 500 + reintento infinito de WAHA — ahora va con
+  `Object.hasOwn`. También: se ignoran reacciones y eventos de sistema, se cortan grupos y
+  estados (`@g.us`, `status@broadcast`), un `type: chat` con texto va al bot aunque marque
+  `hasMedia`, y el aviso pasó a best-effort (no relanza; libera el throttle).
+- Pendientes anotados en la nota, no hechos aquí: escalar a `NEEDS_HUMAN` tras varios adjuntos
+  (decisión de producto), hashear el `chatId` en las claves de Redis (junto con las de `bot:msg:`)
+  y una columna `kind` en `Message` para no concatenar etiqueta y contenido.
