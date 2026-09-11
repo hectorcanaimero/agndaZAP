@@ -6,7 +6,6 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Clinic, Conversation, Prisma, Service } from '@prisma/client';
-import { createHash } from 'node:crypto';
 import Redis from 'ioredis';
 import { DateTime } from 'luxon';
 import { FollowUpsService } from '../follow-ups/follow-ups.service';
@@ -18,6 +17,7 @@ import { AvailabilityService, Slot } from '../scheduling/availability.service';
 import { SchedulingSessionService } from '../scheduling/scheduling-session.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { WahaService } from '../whatsapp/waha.service';
+import { hashChatId, withinBotRateLimit } from './bot-rate-limit';
 import { Intent, IntentService } from './intent.service';
 import {
   asksForSomethingElse,
@@ -79,11 +79,6 @@ type FlowConfirmAction = ReminderReplyAction | 'NO';
 export class BotService {
   private readonly logger = new Logger(BotService.name);
 
-  /** Rate-limit por conversación (chatId): cap por minuto — ver ADR 0007. */
-  private static readonly PER_CHAT_LIMIT = 15;
-  /** Circuit breaker global por clínica: cap por hora — ver ADR 0007. */
-  private static readonly PER_CLINIC_HOURLY_LIMIT = 500;
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly waha: WahaService,
@@ -130,16 +125,6 @@ export class BotService {
       process.env.WEB_BASE_URL ?? 'http://localhost:3000'
     ).replace(/\/+$/, '');
     return `${baseUrl}/${clinic.locale}/agendar/${clinic.slug}?t=${token}`;
-  }
-
-  /**
-   * Hash corto del `chatId` para poder loguear sin filtrar PII (el chatId
-   * incluye el número E.164 del paciente). 8 hex chars ≈ 32 bits, suficiente
-   * para correlacionar eventos de la misma conversación en logs sin exponer
-   * el identificador real.
-   */
-  private hashChatId(chatId: string): string {
-    return createHash('sha256').update(chatId).digest('hex').slice(0, 8);
   }
 
   /**
@@ -366,38 +351,14 @@ export class BotService {
   }): Promise<void> {
     const { clinicId, chatId, phone, lid, contactName, text } = input;
 
-    // ── Rate-limit por conversación + circuit breaker global (ADR 0007) ──
-    // Fixed-window por minuto en `(clinicId, chatId)`. Silencio total al superar:
-    // no respondemos al spammer (evita amplificar el ataque quemando LLM budget).
-    // Fail-open si Redis está caído (loggeamos error) — la protección real la
-    // dan los constraints DB y el resto de rate-limits.
-    try {
-      const now = Date.now();
-      const rlKey = `bot:msg:${clinicId}:${chatId}:${Math.floor(now / 60000)}`;
-      const count = await this.redis.incr(rlKey);
-      if (count === 1) await this.redis.expire(rlKey, 90);
-      if (count > BotService.PER_CHAT_LIMIT) {
-        this.logger.warn(
-          `bot rate-limit clinic=${clinicId} chat=${this.hashChatId(chatId)} count=${count}`,
-        );
-        return;
-      }
-
-      // Circuit breaker por clínica/hora — cap costo LLM ante ataque distribuido.
-      const chKey = `bot:msg:${clinicId}:hour:${Math.floor(now / 3600000)}`;
-      const hourCount = await this.redis.incr(chKey);
-      if (hourCount === 1) await this.redis.expire(chKey, 3900);
-      if (hourCount > BotService.PER_CLINIC_HOURLY_LIMIT) {
-        this.logger.error(
-          `bot hourly cap clinic=${clinicId} count=${hourCount} — circuit OPEN`,
-        );
-        return;
-      }
-    } catch (e) {
-      this.logger.error(
-        `bot rate-limit falló (redis) clinic=${clinicId}: ${(e as Error).message}`,
-      );
-      // fail-open: seguimos procesando.
+    // Rate-limit + circuit breaker del ADR 0007. Mismas claves y presupuesto
+    // que el camino de adjuntos del webhook: ver `bot-rate-limit.ts`.
+    if (!(await withinBotRateLimit(this.redis, this.logger, {
+      clinicId,
+      chatId,
+      scope: 'bot',
+    }))) {
+      return;
     }
 
     const clinic = await this.prisma.clinic.findUniqueOrThrow({
@@ -584,6 +545,12 @@ export class BotService {
           question: effectiveText,
           locale: clinic.locale,
           tone: clinic.botTone, // custom per-tenant desde /panel/ajustes
+          // Teléfono de la conversación (el que WAHA reporta, no uno
+          // declarado): habilita la parte de "tu próxima cita" del bloque de
+          // hechos. `ClinicFactsService` lo filtra por clinicId + phone. Va
+          // `convo.phone` y no el `phone` del mensaje porque el upsert conserva
+          // el número ya conocido si este mensaje llegó por @lid.
+          phone: convo.phone,
         });
         if (result) {
           await this.reply(

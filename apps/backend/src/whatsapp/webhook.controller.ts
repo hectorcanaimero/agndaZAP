@@ -14,6 +14,7 @@ import { Public } from '../auth/decorators/public.decorator';
 import { BotService } from '../bot/bot.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizeE164 } from '../common/phone.util';
+import { hashChatId, withinBotRateLimit } from '../bot/bot-rate-limit';
 import { REDIS_CLIENT } from '../public/rate-limit.guard';
 import { WahaService } from './waha.service';
 import { verifyWebhookAuthFromEnv } from './webhook-auth.util';
@@ -108,10 +109,6 @@ export class WebhookController {
   /** Tope del pie de foto que guardamos junto a la etiqueta. */
   private static readonly MAX_CAPTION_CHARS = 500;
 
-  // Espejo de `BotService.PER_CHAT_LIMIT` / `PER_CLINIC_HOURLY_LIMIT`
-  // (ADR 0007). Si cambian allí, cambian aquí — comparten las claves de Redis.
-  private static readonly PER_CHAT_LIMIT = 15;
-  private static readonly PER_CLINIC_HOURLY_LIMIT = 500;
 
   /**
    * Una sola respuesta "solo leo texto" por conversación cada 6 h. Sin esto,
@@ -258,60 +255,20 @@ export class WebhookController {
   /**
    * Rate-limit del ADR 0007 aplicado al camino de los adjuntos.
    *
-   * `BotService.handleIncoming` trae las dos capas dentro, pero este camino no
-   * pasa por ahí: sin esto, un flood de stickers escribe en `Conversation` y
-   * `Message` sin cota (justo el ataque que motivó el ADR) y, con el token del
-   * webhook comprometido, saca un `sendText` por request variando `from`,
-   * saltándose el cap horario que protege el número de la clínica.
+   * `BotService.handleIncoming` lo aplica para los mensajes de texto, pero
+   * este camino no pasa por ahí: sin esto, un flood de stickers escribe en
+   * `Conversation` y `Message` sin cota (justo el ataque que motivó el ADR) y,
+   * con el token del webhook comprometido, saca un `sendText` por request
+   * variando `from`, saltándose el cap horario que protege el número.
    *
-   * Usa LAS MISMAS claves que `bot.service.ts:354` y `:365`, así que el
-   * presupuesto es compartido y un mensaje se cuenta una sola vez (los de
-   * texto los cuenta el bot, los adjuntos los contamos aquí).
-   *
-   * Fail-open ante Redis caído, igual que el bot: la cota real la ponen los
-   * constraints de la DB y el resto de rate-limits.
-   *
-   * TODO: cuando el PR A1 (que es dueño de `bot.service.ts` durante el P0)
-   * esté en `main`, extraer este bloque y el de `handleIncoming` a un helper
-   * compartido en vez de tener la lógica en dos sitios.
+   * Comparte claves y presupuesto con el bot — ver `bot/bot-rate-limit.ts`.
    */
-  private async withinRateLimit(
-    clinicId: string,
-    chatId: string,
-  ): Promise<boolean> {
-    try {
-      const now = Date.now();
-      const rlKey = `bot:msg:${clinicId}:${chatId}:${Math.floor(now / 60000)}`;
-      const count = await this.redis.incr(rlKey);
-      if (count === 1) await this.redis.expire(rlKey, 90);
-      if (count > WebhookController.PER_CHAT_LIMIT) {
-        this.logger.warn(
-          `media rate-limit clinic=${clinicId} chat=${this.hashChatId(chatId)} count=${count}`,
-        );
-        return false;
-      }
-
-      const chKey = `bot:msg:${clinicId}:hour:${Math.floor(now / 3600000)}`;
-      const hourCount = await this.redis.incr(chKey);
-      if (hourCount === 1) await this.redis.expire(chKey, 3900);
-      if (hourCount > WebhookController.PER_CLINIC_HOURLY_LIMIT) {
-        this.logger.error(
-          `bot hourly cap clinic=${clinicId} count=${hourCount} — circuit OPEN`,
-        );
-        return false;
-      }
-      return true;
-    } catch (e) {
-      this.logger.error(
-        `media rate-limit falló (redis) clinic=${clinicId}: ${(e as Error).message}`,
-      );
-      return true; // fail-open, igual que el bot
-    }
-  }
-
-  /** Hash corto del chatId para logs: correlacionable, sin teléfono. */
-  private hashChatId(chatId: string): string {
-    return createHash('sha256').update(chatId).digest('hex').slice(0, 12);
+  private withinRateLimit(clinicId: string, chatId: string): Promise<boolean> {
+    return withinBotRateLimit(this.redis, this.logger, {
+      clinicId,
+      chatId,
+      scope: 'media',
+    });
   }
 
   /**
