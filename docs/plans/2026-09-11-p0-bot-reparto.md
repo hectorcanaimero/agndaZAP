@@ -169,3 +169,79 @@ Tests (`bot.service.spec.ts`, `public.controller.spec.ts`):
 - Cero fuga: `patientId` de otra clínica nunca se liga.
 
 `security-auditor` obligatorio (toca `Patient` y `Appointment`).
+
+---
+
+# P1 (aprobado 2026-09-11) — gestión de cita por link, clasificador, reagendar por chat
+
+Mismas reglas que P0. Mapa de sesiones: `opus [0d6f55]` = sesión A (única que edita
+`bot.service.ts`); `agndazap-40` y `agndazap-ef` = Opus libres; `sonnet` (dueña de #42) = sesión B.
+
+## Contrato de API de M2 (para que backend y web avancen en paralelo)
+
+Token de gestión: `SchedulingSessionService` gana `kind: 'manage'` con payload
+`{ kind, appointmentId, clinicId, clinicSlug, phone }`, clave `sched:manage:<token>`, TTL hasta
+`appointment.startAt` (mínimo 30 min, máximo 30 días). Se emite en: respuesta del
+`POST /public/:slug/appointments` (campo `manageUrl`, para `/gracias`), recordatorios, mensaje
+de confirmación del bot y respuestas del bot a `REPROGRAMAR`/`CANCELAR`. **No se consume** en
+`GET`; se invalida al cancelar o reagendar.
+
+URL web: `{WEB_BASE_URL}/{locale}/agendar/{slug}/cita?t={token}`.
+
+| Método y ruta (bajo `/api/public/clinics/:slug`) | Respuesta |
+|---|---|
+| `GET /appointments/manage/:token` | `{ appointment: { id, serviceId, serviceName, professionalId, professionalName, startAtISO, durationMin, status }, clinic: { name, address, timezone, locale }, patient: { name }, canCancel, canReschedule }`. 404 si token inválido/expirado o slug no coincide. |
+| `POST /appointments/manage/:token/cancel` | `{ status: 'CANCELADA' }`. 409 si el estado no permite cancelar. Cancela recordatorios. |
+| `POST /appointments/manage/:token/reschedule` body `{ startAtISO }` | `{ appointment: {…nueva…}, manageUrl }`. Transacción: crea la nueva cita (misma clínica, servicio, profesional, paciente; `source` heredado; `conversationId` heredado), cancela la vieja, cancela recordatorios viejos y programa los nuevos. 409 si el slot se ocupó. Emite token nuevo. |
+| Disponibilidad | La web reutiliza `GET /availability?serviceId&professionalId` existente. |
+
+Reglas: `canCancel = canReschedule = status ∈ {PENDIENTE, CONFIRMADA, EN_RIESGO} && startAt > now`.
+Rate-limit scope `manage` (10/min por token+ip). Cero PII en logs. Todas las queries con `clinicId`.
+
+## Reparto P1
+
+### agndazap-40 → M2-a backend (rama `feat/cita-gestion-por-link-api`)
+Implementa el contrato de arriba: `SchedulingSessionService.createManage/resolveManage/invalidate`,
+`SchedulingService.cancelByPatient(appointmentId, clinicId)` y `reschedule(...)` (transacción),
+endpoints en `public.controller.ts`, `manageUrl` en la respuesta de creación, spec de cada
+endpoint, `security-auditor`, ADR `0020-gestion-cita-por-link.md`, SPEC.md (contratos). No
+tocar `bot.service.ts` ni `reminders.processor.ts` (eso es M2-c).
+
+### agndazap-ef → S4 y luego M2-b web
+- **S4** (rama `fix/feedback-tenant-check`): `FollowUpsService.recordFeedback` verifica
+  `appointment.findFirst({ id, clinicId })` antes de escribir; test de cross-tenant. PR chico.
+- **M2-b** (rama `feat/cita-gestion-por-link-web`): página `/[locale]/agendar/[slug]/cita`
+  (server component lee `?t=`, hidrata con `GET manage`, 404 amable si expiró), resumen de la
+  cita, botón "Cancelar cita" con `ConfirmDialog`, "Cambiar horario" que reutiliza
+  `ScheduleSelection` con `serviceId/professionalId` y llama a `reschedule`, estados de carga y
+  error, i18n es/pt, `/gracias` muestra el link de gestión cuando el POST devuelve `manageUrl`.
+  Mock del contrato hasta que M2-a esté en main; E2E Playwright al final.
+
+### sonnet (sesión B) → tras rebasar #42: M3-a clasificador (rama `feat/intent-clasificador-v2`)
+Solo `intent.service.ts` + spec (libre tras el merge de #47). Prompt con definición de cada
+intención y 2 ejemplos por clase en el idioma de la clínica; parámetro opcional
+`context: string[]` (últimos 3 mensajes, tope 600 chars); salida JSON `{ intent, confidence }`
+con `parse` por igualdad exacta y fallback a `OTRO` si `confidence < 0.6` o JSON inválido;
+nuevos valores `AGRADECER` y `CONSULTA_CITA` en el enum (el bot los cablea en M3-b).
+Set de 30 frases reales de WhatsApp en el spec (sin tildes, con emojis, cortas). Mantener el
+prefiltro determinista. `maxTokens` 40.
+
+### opus [0d6f55] (sesión A) → en serie, tras merge de #42 y #47
+1. Wiring `phone: convo.phone` a `knowledge.answer` (commit chico).
+2. **S5** (spec arriba).
+3. **S1** extraer el rate-limit de ADR 0007 a `bot/bot-rate-limit.ts` y usarlo en
+   `bot.service.ts` y `webhook.controller.ts`.
+4. **B6** `AI_DISCLOSURE` solo si no hay `Message OUT` en las últimas 24 h (siempre en el primer contacto).
+5. **M2-c** (tras M2-a en main): el bot manda el link de gestión primero en `REPROGRAMAR` y
+   `CANCELAR` con cita encontrada ("Puedes cambiarla o cancelarla aquí: {link}. Si prefieres,
+   responde *CANCELAR* aquí mismo"), en la confirmación post-agendamiento y en
+   `reminders.processor.ts`. `RESCHEDULE` deja de cancelar recordatorios (B5).
+6. **B5** reagendar por chat: `REPROGRAMAR` con cita → FSM desde `ASK_SLOT` con
+   `serviceId/professionalId` de la cita y `rescheduleOf: appointmentId` en `flowData`; en
+   `CONFIRM` usa `SchedulingService.reschedule` de M2-a.
+7. **M3-b** cablear `AGRADECER` ("¡Con gusto! Aquí estoy si necesitas algo más.", sin LLM) y
+   `CONSULTA_CITA` (responde desde `findUpcomingAppointment` con link de gestión) y pasar
+   `context` al clasificador.
+
+## Después (P2 y P3)
+M4, M5, M6, M7, B7 (bot) · B10, M8, M9 · M10 audio. Se reparten cuando P1 esté mergeado.
