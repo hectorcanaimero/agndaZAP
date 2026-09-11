@@ -1,5 +1,13 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-11 — S8: FK compuesta en Feedback y barrido de tablas que copian `clinicId` (rama `fix/feedback-fk-compuesta`)
+- **El problema**: `Feedback` llevaba dos FKs sueltas (`clinicId` → Clinic y `appointmentId` → Appointment) y nada en la BD impedía que apuntaran a clínicas distintas. El `include` del panel trae nombre de paciente, profesional y servicio **de la cita**, así que una fila cruzada habría servido datos de otra clínica. El chequeo de S4 cierra el camino conocido; esto lo cierra para cualquier caller futuro.
+- **La decisión** (→ [[adr/0022-fk-compuestas-multi-tenant]]): FK compuesta `(clinicId, appointmentId)` → `Appointment(clinicId, id)`, con `@@unique([clinicId, id])` en Appointment. Un par cruzado deja de ser un bug que hay que recordar evitar y pasa a ser un INSERT que Postgres rechaza.
+- **La migración falla ruidosamente** si ya hay filas cruzadas, con la query exacta para revisarlas: si existen son datos mezclados entre tenants y hay que mirarlos a mano, no borrarlos desde una migración.
+- **Barrido**: seis tablas copian `clinicId` junto a una FK a otra entidad con `clinicId`, con 10 pares en total. Casi todas tienen validación en el camino de escritura; el único sin ella que merece mirarse pronto es `Appointment.conversationId`, que hoy no es alcanzable pero tiene exactamente la forma del bug de `Feedback` antes de S4.
+- **`feedback.controller.ts` no tenía spec** pese a servir PII de pacientes con scoping multi-tenant. Ahora sí, y el `where` exige el tenant también sobre la cita, no solo sobre el feedback — defensa que no depende de que la migración se haya aplicado.
+- **Tests**: 1086 verdes.
+
 ## 2026-09-11 — S11: avisar a recepción cuando el paciente gestiona su cita (rama `feat/aviso-recepcion-cancelacion`)
 - **El hueco que cerraba**: una cancelación por link solo aparecía si alguien refrescaba el panel. Para un producto anti no-show eso es media feature — el valor está en que la clínica pueda rellenar el hueco.
 - **`alertReception` extraído** de `reminders.processor.ts` a `conversations/reception-alert.ts` y compartido. Es función suelta y no `@Injectable` porque el worker de recordatorios se construye a mano en `main.ts`, fuera del contenedor de Nest.

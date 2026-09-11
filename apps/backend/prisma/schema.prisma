@@ -284,6 +284,10 @@ model Appointment {
 
   // Evita doble reserva del mismo profesional en el mismo instante de inicio
   @@unique([professionalId, startAt])
+  // Redundante por sí solo (`id` ya es PK), pero es lo que permite que otras
+  // tablas apunten aquí con una FK COMPUESTA `(clinicId, id)` y que sea la BD
+  // —no la disciplina de cada caller— la que impida mezclar tenants.
+  @@unique([clinicId, id])
   @@index([clinicId, startAt])
   @@index([status])
   @@index([conversationId])
@@ -326,7 +330,13 @@ model Feedback {
   clinicId      String
   clinic        Clinic   @relation(fields: [clinicId], references: [id])
   appointmentId String   @unique
-  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  // FK COMPUESTA: la cita referenciada tiene que ser de ESTA clínica. Con dos
+  // FKs sueltas (`clinicId` → Clinic y `appointmentId` → Appointment) nada
+  // impedía que difirieran, y un feedback con el clinicId de otra clínica
+  // filtraba nombre de paciente, profesional y servicio por el `include` del
+  // panel. El chequeo en `recordFeedback` cierra el camino conocido; esto lo
+  // cierra para cualquier caller futuro.
+  appointment   Appointment @relation(fields: [clinicId, appointmentId], references: [clinicId, id], onDelete: Cascade)
   // Escala 1-5 (1 muy mala, 5 excelente). Ver ADR 0012 sobre por qué NO NPS 0-10.
   score         Int
   comment       String?
@@ -334,6 +344,10 @@ model Feedback {
   createdAt     DateTime @default(now())
 
   @@index([clinicId, respondedAt])
+  // Lo exige Prisma para usar `(clinicId, appointmentId)` como lado definidor
+  // de la relación 1-1. Funcionalmente lo implica ya `appointmentId @unique`,
+  // que es la restricción de negocio de verdad: un feedback por cita.
+  @@unique([clinicId, appointmentId])
 }
 
 // ─────────────────────────── Conversaciones (bandeja) ───────────────────────────

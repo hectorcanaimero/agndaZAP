@@ -39,6 +39,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[adr/0018-scheduling-link-wa|0018 — Link de agendamiento por WhatsApp (bot → web con token efímero)]]
 - [[adr/0019-rag-hechos-de-bd|0019 — Hechos de BD como fuente del RAG (sin embeddings)]]
 - [[adr/0020-gestion-cita-por-link|0020 — Gestión de cita por link (cancelar y reagendar sin escribir)]]
+- [[adr/0022-fk-compuestas-multi-tenant|0022 — FKs compuestas para que el aislamiento entre clínicas no dependa del código]]
 - [[adr/0021-cola-bot-inbound|ADR 0021 — Cola `bot-inbound` entre el webhook de WAHA y el bot]]
 
 ## Specs de sprint (implementación)
