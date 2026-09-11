@@ -563,3 +563,13 @@
 - Detalle: [[notas/2026-09-11-bot-matching-saludo-si-persona]]. Fuente: §4 de
   [[analisis/2026-09-11-chatbot-analisis-tecnico]]; reparto en [[plans/2026-09-11-p0-bot-reparto]]
   (ambos llegan por el PR #45).
+
+## 2026-09-11 — S1: el rate-limit del bot, en un solo sitio
+- El bloque del ADR 0007 estaba duplicado palabra por palabra en `bot.service.ts` y en
+  `webhook.controller.ts` (el camino de los adjuntos, que no pasa por el bot). Extraído a
+  `apps/backend/src/bot/bot-rate-limit.ts` con spec propio; los dos callers lo consumen.
+- Claves de Redis, límites y TTLs **sin cambios**: el presupuesto sigue compartido y cada mensaje
+  se cuenta una sola vez. `scope` (`bot` | `media`) solo etiqueta el log.
+- El hash del `chatId` en logs queda unificado en 12 hex: el bot usaba 8 y el webhook 12, así que
+  las dos mitades de una misma conversación no se correlacionaban con un grep.
+- ADR 0007 actualizado con la sección de implementación.
