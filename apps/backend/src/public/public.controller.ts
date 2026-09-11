@@ -466,7 +466,11 @@ export class PublicController {
    * historial del navegador o reenviada por WhatsApp.
    */
   @Get(':slug/appointments/manage/:token')
-  @UseGuards(RateLimit(30, 'manage-read'))
+  // Por TOKEN y no por IP: la web consume este GET desde un server component,
+  // así que la IP que llega es la del servidor Next y la comparten todos los
+  // pacientes de la clínica. Con un cubo por IP, una tanda de recordatorios a
+  // las 9:00 hace que el paciente número 11 que abre su link se coma un 429.
+  @UseGuards(RateLimit(30, 'manage-read', { by: 'token' }))
   @Header('Cache-Control', 'no-store')
   async getManagedAppointment(
     @Param('slug', SlugValidationPipe) slug: string,
