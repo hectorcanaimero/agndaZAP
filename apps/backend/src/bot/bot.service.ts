@@ -203,6 +203,17 @@ export class BotService {
       'De nada. Aquí estoy si necesitas algo más. 🙌',
       '¡Un gusto ayudarte! Cualquier cosa, escríbeme. 🙌',
     ],
+    /**
+     * Cierre con acción tras responder una duda (M6). Solo se anexa cuando el
+     * paciente NO tiene cita próxima: si ya tiene una, invitarlo a agendar es
+     * ruido. `{link}` es la página pública SIN token — responder una pregunta
+     * no debe escribir una `SchedulingSession` en DB.
+     */
+    ctaAfterAnswer: [
+      '¿Quieres agendar? Escríbeme *agendar* y lo hacemos aquí, o reserva en línea: {link}',
+      'Si quieres una cita, escríbeme *agendar* o resérvala aquí: {link}',
+      'Cuando quieras agendar, escríbeme *agendar* o usa nuestra página: {link}',
+    ],
     confirmAppointment: [
       '✅ Listo. Tu cita de {service} con {professional} quedó {status} para el {when} en {clinicName}.{address}\n\nTe recordaré antes de la cita. Si necesitas cambiarla, escríbeme *reagendar*.',
       '¡Perfecto! Reservé tu cita de {service} con {professional} para el {when} en {clinicName}.{address}\n\nTe avisaré antes para recordártela. Cualquier cambio, escríbeme *reagendar*.',
@@ -265,6 +276,48 @@ export class BotService {
     return key === 'greeting'
       ? `${rendered}\n\n${BotService.AI_DISCLOSURE}`
       : rendered;
+  }
+
+  /**
+   * Cierre con acción (M6): tras responder una duda, invita a agendar.
+   *
+   * No se anexa cuando:
+   *  - el paciente YA tiene una cita próxima — invitarlo a agendar otra es
+   *    ruido, y encima confunde a quien creía estar preguntando por la suya;
+   *  - el mensaje anterior del bot ya llevaba el link. Repetir la misma
+   *    llamada a la acción en cada respuesta es el patrón que delata a un bot,
+   *    y el paciente que hace tres preguntas seguidas la leería tres veces.
+   *
+   * El link es el público SIN token: responder una pregunta no debe escribir
+   * una `SchedulingSession` en DB.
+   */
+  private async withClosingCta(
+    clinic: Clinic,
+    convo: Conversation,
+    answer: string,
+  ): Promise<string> {
+    // Mismo helper que usa el resto del bot para resolver la cita del
+    // paciente, así que hereda el orden de resolución sin duplicarlo.
+    if (convo.phone) {
+      const upcoming = await this.findUpcomingAppointment(
+        clinic.id,
+        convo.phone,
+      );
+      if (upcoming) return answer;
+    }
+
+    const link = this.publicSchedulingUrl(clinic);
+    const lastOut = await this.prisma.message.findFirst({
+      where: { conversationId: convo.id, direction: 'OUT' },
+      orderBy: { createdAt: 'desc' },
+      select: { body: true },
+    });
+    if (lastOut?.body.includes(link)) return answer;
+
+    const cta = this.pickVariant(
+      BotService.DEFAULT_BOT_MESSAGES.ctaAfterAnswer,
+    ).replace(/\{link\}/g, link);
+    return `${answer}\n\n${cta}`;
   }
 
   /**
@@ -557,7 +610,7 @@ export class BotService {
             clinic.wahaSession,
             chatId,
             convo.id,
-            result.answer,
+            await this.withClosingCta(clinic, convo, result.answer),
           );
         } else {
           await this.markNeedsHuman(convo.id);
