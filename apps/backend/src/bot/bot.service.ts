@@ -6,6 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Clinic, Conversation, Prisma, Service } from '@prisma/client';
+import { RescheduleLimitExceededException } from '../scheduling/scheduling.errors';
 import Redis from 'ioredis';
 import { DateTime } from 'luxon';
 import { FollowUpsService } from '../follow-ups/follow-ups.service';
@@ -1026,6 +1027,43 @@ export class BotService {
    * tarde"); si el filtro deja la lista vacía lo decimos y mostramos todo, que
    * es mejor que un "no hay nada" que suena a que la agenda está llena.
    */
+  /**
+   * Campos de `FlowData` atados al PASO actual: la lista que se acaba de
+   * mostrar, el horario elegido, los contadores de esa pantalla. Todo lo demás
+   * describe QUÉ se está agendando y tiene que sobrevivir a un re-listado.
+   */
+  private static readonly STEP_SCOPED_FLOW_FIELDS = [
+    'startAtISO',
+    'offeredSlots',
+    'offeredProfessionalIds',
+    'anyProfessional',
+    'choices',
+    'invalidCount',
+    'slotWindowCount',
+  ] as const satisfies readonly (keyof FlowData)[];
+
+  /**
+   * Conserva el contexto del flujo y descarta lo atado al paso actual (S26).
+   *
+   * **La polaridad es lo importante**: conservar por defecto y descartar solo
+   * lo enumerado, no al revés. Antes los re-ofrecimientos de horarios
+   * reconstruían `flowData` campo a campo, así que al añadir `rescheduleOf`
+   * (B5) se perdía en silencio — y con él, la cita que el paciente quería
+   * mover: la FSM seguía como si fuera una cita nueva y acababa con dos.
+   *
+   * Nada falló al introducir ese bug: ni el compilador, porque todos los
+   * campos son opcionales, ni los tests, porque ninguno cubría "re-listar
+   * horarios en mitad de un reagendado". Con esta función, un campo nuevo se
+   * conserva salvo que alguien lo añada a la lista de arriba a propósito.
+   */
+  private carryFlowContext(data: FlowData): FlowData {
+    const next: FlowData = { ...data };
+    for (const field of BotService.STEP_SCOPED_FLOW_FIELDS) {
+      delete next[field];
+    }
+    return next;
+  }
+
   private async advanceToSlot(
     clinic: Clinic,
     convo: Conversation,
@@ -1086,8 +1124,11 @@ export class BotService {
     const preferenceMissed = opts.preference != null && filtered.length === 0;
     const shown = (preferenceMissed ? all : filtered).slice(0, 6);
 
+    // `carryFlowContext` limpia lo del paso anterior: sin él, una lista de
+    // "cualquier profesional" dejaba `anyProfessional` y sus ids pegados a la
+    // siguiente aunque ya fuera de un profesional concreto.
     const nextData: FlowData = {
-      ...data,
+      ...this.carryFlowContext(data),
       offeredSlots: shown.map((e) => e.slot.startAt.toISOString()),
       ...(anyProfessional
         ? {
@@ -1582,14 +1623,15 @@ export class BotService {
       );
     } catch (e) {
       if (e instanceof ConflictException) {
-        // `rescheduleAppointment` usa el MISMO tipo de excepción para dos cosas
-        // distintas: el slot ocupado y el tope de movimientos del paciente.
-        // Re-ofrecer horarios ante el tope sería un bucle infinito — el
-        // paciente elegiría otro y volvería a fallar igual.
+        // Los dos 409 de `rescheduleAppointment` piden respuestas OPUESTAS: el
+        // slot ocupado invita a elegir otro horario, el tope a hablar con una
+        // persona. Confundirlos no daba un mensaje raro, daba un bucle:
+        // re-ofrecer → elegir → fallar → re-ofrecer.
         //
-        // El discriminante es el mensaje, que no es ideal; si algún día el
-        // service expone un error tipado, hay que cambiarlo por eso.
-        if (/tope de reagendamientos/i.test((e as Error).message)) {
+        // Se distinguen por tipo desde S25. Antes se comparaba el texto del
+        // mensaje, que se rompía con cualquier reescritura de copy sin que
+        // fallara nada.
+        if (e instanceof RescheduleLimitExceededException) {
           await this.resetFlow(convo.id);
           const link = data.rescheduleOf
             ? await this.manageLink(clinic, {
@@ -1685,17 +1727,10 @@ export class BotService {
 
     const offeredSlots = slots.map((s) => s.startAt.toISOString());
     const labels = slots.map((s, i) => `${i + 1}. ${this.slotLabel(s, clinic)}`);
-    // Preservamos serviceId, professionalId, patientName y `rescheduleOf`;
-    // descartamos el startAtISO viejo (ese era el que se acababa de ocupar).
-    //
-    // `rescheduleOf` es crítico: sin él, tras un choque de horario la FSM
-    // seguiría como si fuera una cita nueva y el paciente acabaría con DOS
-    // —la vieja sin mover y otra recién creada— en vez de con la suya movida.
+    // Conservamos el contexto del flujo y descartamos el startAtISO viejo (ese
+    // era el que se acababa de ocupar). Ver `carryFlowContext`.
     const nextData: FlowData = {
-      serviceId: data.serviceId,
-      professionalId: data.professionalId,
-      ...(data.patientName ? { patientName: data.patientName } : {}),
-      ...(data.rescheduleOf ? { rescheduleOf: data.rescheduleOf } : {}),
+      ...this.carryFlowContext(data),
       offeredSlots,
     };
     await this.prisma.conversation.update({
@@ -1756,13 +1791,10 @@ export class BotService {
 
     const offeredSlots = slots.map((s) => s.startAt.toISOString());
     const labels = slots.map((s, i) => `${i + 1}. ${this.slotLabel(s, clinic)}`);
-    // `rescheduleOf` viaja con el flujo: si no, tras un slot caducado la FSM
-    // crearía una cita nueva en vez de mover la que el paciente quería mover.
+    // Mismo criterio que en el re-ofrecimiento por conflicto: el contexto del
+    // flujo viaja entero, lo del paso anterior se descarta.
     const nextData: FlowData = {
-      serviceId: data.serviceId,
-      professionalId: data.professionalId,
-      ...(data.patientName ? { patientName: data.patientName } : {}),
-      ...(data.rescheduleOf ? { rescheduleOf: data.rescheduleOf } : {}),
+      ...this.carryFlowContext(data),
       offeredSlots,
     };
     await this.prisma.conversation.update({
