@@ -1,5 +1,13 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-11 — S18: tests de integración contra Redis real en CI (rama `ci/tests-integracion-redis`)
+- **El motivo concreto**: escribiendo los tests unitarios del índice de tokens (S13), mi mock de `del` solo borraba claves de tipo string, así que el test de "borra también el índice" pasaba **sin que el índice —un SET— se borrara**. El `DEL` real borra la clave sea del tipo que sea. El mock confirmaba lo que yo creía en vez de lo que Redis hace.
+- **Qué se prueba**: lo que un mock no puede demostrar — atomicidad de `SET NX` (dedup del webhook) y de `INCR` (rate-limit) bajo concurrencia real, semántica de expiración, mezcla de tipos de clave, y el dedup por `jobId` de BullMQ.
+- **El test de BullMQ fija un comportamiento que ya nos mordió**: un `add` con un `jobId` existente es un **no-op silencioso** — no lanza, no reemplaza, no avisa, y el job conserva el delay viejo. Es la razón de que el `check-risk` pudiera quedarse rancio y de que ahora lleve `startAtMs`.
+- **Job de CI separado** del `backend`: los unitarios siguen corriendo en segundos y sin servicios, que es lo que hace que se ejecuten a menudo. El de integración levanta `redis:7-alpine` con healthcheck.
+- Los de integración se llaman `*.int-spec.ts` **con guion**, para que el `testRegex` de los unitarios no los capture.
+- **Pendiente**: los tests de la cola `bot-inbound` en sí, cuando #65 esté en main. La semántica de la que depende ya queda cubierta.
+- **Tests**: 1163 unitarios + 21 de integración, verdes.
 ## 2026-09-11 — S25: error tipado para el tope de reagendamientos (rama `fix/reschedule-limit-error-tipado`)
 - **Deuda propia**: al implementar el tope en S6 dejé que el controller distinguiera los dos 409 de `rescheduleAppointment` con `e.message.includes('tope de reagendamientos')`. Funcionaba y era frágil por definición — este repo reescribe copy a menudo, por tono o por traducción, y cualquiera de esas pasadas rompía la lógica sin fallar en compilación ni en los tests del emisor.
 - **Arreglo**: `SchedulingConflictException` con `code` en el cuerpo, y dos subclases — `RescheduleLimitExceededException` (`RESCHEDULE_LIMIT`) y `SlotTakenException` (`SLOT_TAKEN`). Siguen siendo `ConflictException`, así que el status y todo el manejo existente no cambian: quien no mire el `code` se comporta igual que antes.
