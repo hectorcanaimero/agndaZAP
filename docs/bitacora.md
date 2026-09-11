@@ -892,3 +892,39 @@
   exactamente lo que le pedimos y el bot no lo entendiera. Hay un test que fija esa correspondencia.
 - El override por tenant gana sobre el idioma: no traducimos lo que escribió un operador.
 - Detalle en [[notas/2026-09-11-bot-copy-es-pt]].
+## 2026-09-11 — P1 · S4: `Feedback` admitía filas cruzadas entre clínicas
+- `FollowUpsService.recordFeedback` escribía `clinicId` y `appointmentId` sin comprobar que fueran
+  juntos. `Feedback` tiene FKs separadas a `Clinic` y `Appointment`, así que la base lo permite, y el
+  `appointmentId` viene de `Conversation.flowData` (JSON durable), no de la request. Doble daño: el
+  panel de una clínica leería el comentario en texto libre de un paciente de otra
+  (`@@index([clinicId, respondedAt])`), y como `appointmentId` es `@unique`, la clínica legítima ya
+  no podría registrar nunca el feedback real de esa cita.
+- Ahora valida con `appointment.findFirst({ id, clinicId })` antes de escribir, y ante un cruce
+  devuelve `created: false` con log de `error` en vez de lanzar (el caller es el webhook: un 500 ahí
+  es un bucle de reintentos de WAHA sobre un `flowData` que no se arregla solo).
+- **Segundo agujero, sin cerrar todavía**: `bot.service.ts` (`handleAwaitingNpsComment`) hace
+  `feedback.update({ where: { appointmentId } })` sin `clinicId`, y ese sí *sobrescribe* texto de un
+  paciente de otra clínica. No se puede arreglar en el sitio porque `update` exige un `where` único.
+  Queda `FollowUpsService.recordComment` (con `updateMany`, que sí acepta `where` compuesto) listo
+  para que la sesión dueña de `bot.service.ts` lo cablee en una línea. Detalle en
+  [[notas/2026-09-11-feedback-cross-tenant]].
+- El `security-auditor` no encontró blockers, pero sí que la justificación de `updateMany` que
+  escribí era **falsa**: con `extendedWhereUnique` (GA desde Prisma 5.0) `update` sí admite el
+  filtro por `clinicId`. El motivo real es que `update` lanza P2025 sin match y eso es un 500 en el
+  webhook. Corregido en el comentario, en el nombre del test y en la nota.
+- También salió del audit: el guard de idempotencia de `scheduleForAppointment` leía sin `clinicId`
+  (una fila envenenada dejaba a la clínica legítima sin prompt), y el catch de `recordFeedback` ahora
+  cubre P2003/P2025 además de P2002. Pendientes anotados: FK compuesta
+  `Feedback → Appointment(clinicId, id)` con migración y ADR propio, y el `include` de
+  `feedback.controller.ts`, que sigue el `appointmentId` hasta `patient.name` sin revalidar tenant.
+
+## 2026-09-11 — El comentario del feedback también se escribe con `clinicId`
+- `handleAwaitingNpsComment` hacía `prisma.feedback.update({ where: { appointmentId } })` sin
+  `clinicId`: si `flowData.feedbackAppointmentId` quedaba con una cita de otra clínica, el bot
+  pisaba el comentario de esa fila. Ahora usa `FollowUpsService.recordComment(clinicId, …)`, que
+  filtra por las dos columnas (lo dejó listo S4, PR #50).
+- Alcance real: `flowData` lo escribe el processor de follow-ups para esa conversación, no el
+  paciente, así que no era explotable desde WhatsApp. Es defensa en profundidad, misma clase que
+  S4 — pero el `update` por id suelto es exactamente el patrón que la convención del repo prohíbe.
+- Con 0 filas afectadas el bot cierra igual y agradece: el paciente no debe enterarse de un
+  problema de datos nuestro. Queda el `logger.warn` de `recordComment` para verlo en observabilidad.

@@ -180,6 +180,7 @@ describe('BotService — FSM de agendamiento', () => {
       scheduleForAppointment: jest.fn().mockResolvedValue(undefined),
       cancelForAppointment: jest.fn().mockResolvedValue(undefined),
       recordFeedback: jest.fn().mockResolvedValue({ created: true }),
+      recordComment: jest.fn().mockResolvedValue(true),
     };
     intent = { detect: jest.fn().mockResolvedValue(Intent.AGENDAR) };
     availability = {
@@ -1136,21 +1137,11 @@ describe('BotService — FSM de agendamiento', () => {
     });
 
     async function pedirHumano() {
-  // ── B7: una clínica pt recibe el bot en portugués ──
-  describe('copy por idioma de la clínica (B7)', () => {
-    beforeEach(() => {
-      prisma.clinic.findUniqueOrThrow.mockResolvedValue(
-        makeClinic({ locale: 'pt', name: 'Clínica Sorriso' }),
-      );
-    });
-
-    async function say(text: string) {
       await bot.handleIncoming({
         clinicId: 'clinic-A',
         chatId: convoState.chatId,
         phone: convoState.phone,
         text: 'humano',
-        text,
       });
       return waha.sendText.mock.calls.at(-1)![2] as string;
     }
@@ -1222,6 +1213,27 @@ describe('BotService — FSM de agendamiento', () => {
 
       expect(convoState.state).toBe('NEEDS_HUMAN');
       expect(msg).toBeTruthy();
+    });
+  });
+
+  // ── B7: una clínica pt recibe el bot en portugués ──
+  describe('copy por idioma de la clínica (B7)', () => {
+    beforeEach(() => {
+      prisma.clinic.findUniqueOrThrow.mockResolvedValue(
+        makeClinic({ locale: 'pt', name: 'Clínica Sorriso' }),
+      );
+    });
+
+    async function say(text: string) {
+      await bot.handleIncoming({
+        clinicId: 'clinic-A',
+        chatId: convoState.chatId,
+        phone: convoState.phone,
+        text,
+      });
+      return waha.sendText.mock.calls.at(-1)![2] as string;
+    }
+
     function conCitaProxima() {
       prisma.patient.findUnique.mockResolvedValue({
         id: 'pat-1',
@@ -2454,10 +2466,39 @@ describe('BotService — FSM de agendamiento', () => {
 
       await say(`  ${long}  `);
 
-      expect(prisma.feedback.update).toHaveBeenCalledWith({
-        where: { appointmentId: 'appt-9' },
-        data: { comment: 'x'.repeat(1000) },
-      });
+      // Vía FollowUpsService, que filtra por clinicId: nunca un
+      // `feedback.update` por `appointmentId` suelto. El recorte a 1000 y el
+      // trim los hace el service (testeados en follow-ups.service.spec.ts).
+      expect(followUps.recordComment).toHaveBeenCalledWith(
+        'clinic-A',
+        'appt-9',
+        `  ${long}  `,
+      );
+      expect(prisma.feedback.update).not.toHaveBeenCalled();
+      expect(convoState.flowStep).toBeNull();
+      expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/Muchas gracias/);
+    });
+
+    it('el comentario se escribe siempre con el clinicId de la conversación', async () => {
+      // Escenario del bug: `flowData` quedó con la cita de OTRA clínica (por
+      // un follow-up viejo o un flowData manipulado). El filtro por clinicId
+      // hace que el updateMany no matchee nada en vez de pisar esa fila.
+      convoState.flowStep = 'AWAITING_NPS_COMMENT';
+      convoState.flowData = {
+        feedbackAppointmentId: 'appt-de-otra-clinica',
+        feedbackScore: 4,
+      };
+      followUps.recordComment.mockResolvedValue(false); // 0 filas afectadas
+
+      await say('todo excelente');
+
+      expect(followUps.recordComment).toHaveBeenCalledWith(
+        'clinic-A',
+        'appt-de-otra-clinica',
+        'todo excelente',
+      );
+      expect(prisma.feedback.update).not.toHaveBeenCalled();
+      // El paciente no se entera: cerramos igual, sin error.
       expect(convoState.flowStep).toBeNull();
       expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/Muchas gracias/);
     });
