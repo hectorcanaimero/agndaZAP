@@ -1,5 +1,6 @@
 import { LlmRouterService } from '../common/llm/llm-router.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ClinicFactsService } from './clinic-facts.service';
 import {
   EMBEDDING_DIMS,
   KnowledgeService,
@@ -25,6 +26,7 @@ function mockOpenAIEmbeddingsOk(vector = FAKE_VECTOR): jest.Mock {
 describe('KnowledgeService', () => {
   let prisma: Deep<PrismaService>;
   let llm: { complete: jest.Mock };
+  let clinicFacts: { build: jest.Mock };
   let svc: KnowledgeService;
   const originalOpenAIKey = process.env.OPENAI_API_KEY;
 
@@ -37,9 +39,13 @@ describe('KnowledgeService', () => {
       },
     };
     llm = { complete: jest.fn() };
+    // Sin hechos de BD por default — la mayoría de los tests son sobre el
+    // camino FAQ puro. Los tests de M1 pisan este mock con un string no vacío.
+    clinicFacts = { build: jest.fn().mockResolvedValue('') };
     svc = new KnowledgeService(
       prisma as unknown as PrismaService,
       llm as unknown as LlmRouterService,
+      clinicFacts as unknown as ClinicFactsService,
     );
     process.env.OPENAI_API_KEY = 'sk-test-key';
   });
@@ -325,6 +331,80 @@ describe('KnowledgeService', () => {
         expect(opts.system).not.toMatch(/priorizá/);
       },
     );
+
+    // ─────────── M1: hechos de BD (ClinicFactsService) ───────────
+
+    it('sin FAQ matches pero con hechos de BD: igual llama al LLM (antes cortaba en null)', async () => {
+      mockOpenAIEmbeddingsOk();
+      prisma.$queryRawUnsafe.mockResolvedValueOnce([]); // 0 matches de FAQ
+      clinicFacts.build.mockResolvedValueOnce(
+        'Clínica: Clínica Demo\nHorario de atención: Lunes a viernes 8:00 a 17:00.',
+      );
+      llm.complete.mockResolvedValueOnce('Atendemos de lunes a viernes.');
+
+      const result = await svc.answer({
+        clinicId: 'clinic-A',
+        question: '¿Qué horario tienen?',
+      });
+
+      expect(result).not.toBeNull();
+      expect(llm.complete).toHaveBeenCalledTimes(1);
+      const opts = llm.complete.mock.calls[0][0];
+      expect(opts.user).toMatch(/--- FUENTE BD ---/);
+      expect(opts.user).toMatch(/Lunes a viernes 8:00 a 17:00/);
+      expect(opts.user).toMatch(/--- FIN FUENTE BD ---/);
+      // Sin FAQ matches: sources queda vacío (no hay FaqChunk detrás de la respuesta).
+      expect(result!.sources).toEqual([]);
+    });
+
+    it('sin FAQ matches y sin hechos de BD: sigue devolviendo null sin llamar al LLM', async () => {
+      mockOpenAIEmbeddingsOk();
+      prisma.$queryRawUnsafe.mockResolvedValueOnce([]);
+      clinicFacts.build.mockResolvedValueOnce('');
+
+      const result = await svc.answer({
+        clinicId: 'clinic-A',
+        question: '¿Cuánto cuesta?',
+      });
+
+      expect(result).toBeNull();
+      expect(llm.complete).not.toHaveBeenCalled();
+    });
+
+    it('pasa clinicId y phone a ClinicFactsService.build', async () => {
+      mockOpenAIEmbeddingsOk();
+      prisma.$queryRawUnsafe.mockResolvedValueOnce([]);
+      clinicFacts.build.mockResolvedValueOnce('Clínica: Demo');
+      llm.complete.mockResolvedValueOnce('Respuesta.');
+
+      await svc.answer({
+        clinicId: 'clinic-A',
+        question: '¿Tienen turno hoy?',
+        phone: '+584121234567',
+      });
+
+      expect(clinicFacts.build).toHaveBeenCalledWith(
+        'clinic-A',
+        '+584121234567',
+      );
+    });
+
+    it('con FAQ matches Y hechos de BD: el bloque FUENTE BD va antes que las FAQ', async () => {
+      prisma.$queryRawUnsafe.mockResolvedValueOnce([
+        { id: 'f-1', content: 'Horario: L-V 9-18h.', distance: 0.15 },
+      ]);
+      mockOpenAIEmbeddingsOk();
+      clinicFacts.build.mockResolvedValueOnce('Clínica: Demo');
+      llm.complete.mockResolvedValueOnce('Respuesta.');
+
+      await svc.answer({ clinicId: 'clinic-A', question: '¿Horario?' });
+
+      const opts = llm.complete.mock.calls[0][0];
+      const bdIndex = opts.user.indexOf('--- FUENTE BD ---');
+      const faqIndex = opts.user.indexOf('--- FUENTE 1 ---');
+      expect(bdIndex).toBeGreaterThanOrEqual(0);
+      expect(faqIndex).toBeGreaterThan(bdIndex);
+    });
 
     it('devuelve null si el LLM responde NULL_ANSWER', async () => {
       prisma.$queryRawUnsafe.mockResolvedValueOnce([
