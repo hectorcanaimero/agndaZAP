@@ -1402,6 +1402,9 @@ describe('BotService — FSM de agendamiento', () => {
       id: 'appt-7',
       clinicId: 'clinic-A',
       patientId: 'pat-1',
+      // B5 reagenda sobre el mismo servicio y profesional de la cita.
+      serviceId: 'svc-1',
+      professionalId: 'prof-1',
       status: 'PENDIENTE',
       startAt: tomorrow10.toJSDate(),
       endAt: tomorrow1030.toJSDate(),
@@ -1522,7 +1525,7 @@ describe('BotService — FSM de agendamiento', () => {
     );
 
     it.each(['reagendar', 'reprogramar'])(
-      '"%s" → manda el link de gestión, NO mueve la cita y NO apaga los recordatorios',
+      '"%s" → ofrece horarios por chat con el link como alternativa, sin mover ni apagar nada',
       async (text) => {
         await say(text);
 
@@ -1532,13 +1535,124 @@ describe('BotService — FSM de agendamiento', () => {
         expect(reminders.cancelForAppointment).not.toHaveBeenCalled();
         expect(prisma.appointment.update).not.toHaveBeenCalled();
         expect(convoState.state).toBe('BOT');
+
+        // B5: la FSM queda lista para elegir horario, con la cita a mover.
+        expect(convoState.flowStep).toBe('ASK_SLOT');
+        expect((convoState.flowData as any).rescheduleOf).toBe('appt-7');
         const msg = waha.sendText.mock.calls.at(-1)![2];
+        expect(msg).toContain('sigue en pie');
         expect(msg).toContain('/cita?t=');
-        expect(msg).toMatch(/\*CANCELAR\*/);
       },
     );
 
-    it('si no se puede emitir el link, reagendar sigue derivando a recepción', async () => {
+    it('reagendar usa el MISMO servicio y profesional de la cita', async () => {
+      await say('reagendar');
+
+      const call = availability.getSlots.mock.calls.at(-1)![0];
+      expect(call.serviceId).toBe('svc-1');
+      expect(call.professionalId).toBe('prof-1');
+      expect((convoState.flowData as any).serviceId).toBe('svc-1');
+      expect((convoState.flowData as any).professionalId).toBe('prof-1');
+    });
+
+    it('elegir el horario MUEVE la cita in-place: mismo id, sin crear otra', async () => {
+      scheduling.rescheduleAppointment = jest.fn().mockResolvedValue({
+        id: 'appt-7',
+        status: 'PENDIENTE',
+        patientId: 'pat-1',
+        startAt: tomorrow10.toJSDate(),
+        endAt: tomorrow1030.toJSDate(),
+      });
+      prisma.patient.findUnique.mockResolvedValue({ ...patient, name: 'Ana' });
+
+      await say('reagendar');
+      await say('1');
+
+      expect(convoState.flowStep).toBe('CONFIRM');
+
+      await say('sí');
+
+      expect(scheduling.rescheduleAppointment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clinicId: 'clinic-A',
+          appointmentId: 'appt-7',
+          byPatient: true,
+          maxPatientReschedules: 3,
+        }),
+      );
+      // Nunca se crea una cita nueva: eso inflaría CANCELADA y diluiría el
+      // no-show rate.
+      expect(scheduling.createAppointment).not.toHaveBeenCalled();
+      expect(waha.sendText.mock.calls.at(-1)![2]).toContain('movida');
+    });
+
+    it('sin link (Redis caído) el reagendado por chat sigue funcionando', async () => {
+      // El camino por chat no depende del token de gestión: solo se pierde la
+      // alternativa web, no la posibilidad de mover la cita.
+      schedulingSessions.issueManageUrl.mockRejectedValue(new Error('redis down'));
+
+      await say('reagendar');
+
+      expect(convoState.flowStep).toBe('ASK_SLOT');
+      expect((convoState.flowData as any).rescheduleOf).toBe('appt-7');
+      expect(convoState.state).toBe('BOT');
+      expect(waha.sendText.mock.calls.at(-1)![2]).not.toContain('/cita?t=');
+    });
+
+    it('si el horario se ocupa a mitad, el reagendado NO se convierte en una cita nueva', async () => {
+      // Sin `rescheduleOf` en el re-ofrecimiento, el paciente acabaría con DOS
+      // citas: la vieja sin mover y otra recién creada.
+      scheduling.rescheduleAppointment = jest
+        .fn()
+        .mockRejectedValueOnce(new ConflictException('slot ocupado'))
+        .mockResolvedValue({
+          id: 'appt-7',
+          status: 'PENDIENTE',
+          patientId: 'pat-1',
+          startAt: tomorrow10.toJSDate(),
+          endAt: tomorrow1030.toJSDate(),
+        });
+      prisma.patient.findUnique.mockResolvedValue({ ...patient, name: 'Ana' });
+
+      await say('reagendar');
+      await say('1');
+      await say('sí'); // choca
+
+      expect(convoState.flowStep).toBe('ASK_SLOT');
+      expect((convoState.flowData as any).rescheduleOf).toBe('appt-7');
+
+      await say('1');
+      await say('sí'); // segundo intento
+
+      expect(scheduling.createAppointment).not.toHaveBeenCalled();
+      expect(scheduling.rescheduleAppointment).toHaveBeenCalledTimes(2);
+    });
+
+    it('alcanzado el tope de movimientos, deriva a recepción en vez de volver a ofrecer', async () => {
+      // El tope llega como ConflictException igual que el slot ocupado; si no
+      // se distinguen, re-ofrecer horarios es un bucle infinito.
+      scheduling.rescheduleAppointment = jest
+        .fn()
+        .mockRejectedValue(new ConflictException('tope de reagendamientos alcanzado'));
+      prisma.patient.findUnique.mockResolvedValue({ ...patient, name: 'Ana' });
+
+      await say('reagendar');
+      await say('1');
+      await say('sí');
+
+      expect(convoState.state).toBe('NEEDS_HUMAN');
+      expect(convoState.flowStep).toBeNull();
+      expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/recepción/i);
+    });
+
+    it('cita sin servicio ni profesional resolubles: deriva a recepción', async () => {
+      // No podemos listar horarios comparables, así que el único camino honesto
+      // es una persona (o el link, si se pudo emitir).
+      prisma.appointment.findFirst.mockResolvedValue({
+        ...upcoming,
+        serviceId: null,
+        professionalId: null,
+      });
       schedulingSessions.issueManageUrl.mockRejectedValue(new Error('redis down'));
 
       await say('reagendar');
