@@ -8,6 +8,13 @@
 - **Ya estaban bien** y se verificaron: los tres endpoints de `/public/clinics`, el webhook WAHA (para `message`; `session.status` se procesa igual a propósito) y el login. `POST /public/leads` no es de clínica y los health checks no leen datos.
 - Regla que queda escrita en [[notas/2026-09-11-offboarding-clinic-status]]: un token emitido cuando la clínica estaba activa **no es un permiso permanente**; el estado se comprueba al usarlo.
 - **Tests**: 947 verdes, con caso `SUSPENDED`/`ARCHIVED` por endpoint.
+## 2026-09-11 — M2-a: gestión de cita por link (rama `feat/cita-gestion-por-link-api`)
+- **Qué**: backend para que el paciente vea, cancele o mueva su cita desde `/agendar/{slug}/cita?t={token}`, sin escribir por WhatsApp. Token `manage` en Redis (no se consume al leerlo, TTL derivado de `startAt`), `SchedulingService.cancelByPatient`, tres endpoints públicos con rate-limit y `manageUrl` en la respuesta de creación. Ver [[adr/0020-gestion-cita-por-link]].
+- **Decisión que cambió el contrato**: el plan pedía que reagendar creara una cita nueva y cancelara la vieja. Se descartó porque el no-show rate se calcula sobre `ATENDIDA + NO_SHOW + CANCELADA`: cada reagendamiento habría inflado el denominador y **diluido hacia abajo la métrica estrella del producto**, justo cuando la feature funcionara bien. Se mueve in-place reusando `rescheduleAppointment`. La traza de reagendamientos va aparte como S6 (`rescheduleCount`), sin tocar el enum de estados.
+- **Segunda desviación del contrato**: el rate-limit iba a ser por token+ip. Se dejó por `scope:slug:ip` porque limitar por token lo vuelve inútil — cada token probado estrenaría su propio cupo, que es lo que necesita quien quiere iterar.
+- **Cambio de firma**: `createAppointment` pasa a devolver `{ appointment, patientCreated }` (lo consume la sesión A en S5). Los tres callers actualizados. `patientCreated` **no sale nunca** al borde público: diría si un teléfono ya es paciente de la clínica, o sea un oráculo para enumerar pacientes. El dato se calcula con `create` + captura de P2002 en vez de deducirlo del `findUnique`, que mentiría bajo concurrencia.
+- **Tests**: 980 backend verdes, `tsc --noEmit` limpio. Cobertura nueva en `scheduling-session.service.spec.ts` (TTL, suelo/techo, aislamiento entre los dos tipos de token), `scheduling.service.spec.ts` (cancelación, idempotencia, estados terminales, carrera del patientCreated) y `public.controller.spec.ts` (los tres endpoints, multi-tenant, no filtrar teléfono ni `patientCreated`).
+- De paso: `Elegí otro` → `Elige otro` en el 409 del endpoint público, por [[notas/2026-09-10-tono-espanol-neutro]].
 
 ## 2026-09-11 — B9: el follow-up de satisfacción perdía el score (rama `fix/follow-up-upsert-conversation`)
 - **Bug** (ítem B9 de [[analisis/2026-09-11-chatbot-analisis-tecnico]], ya anotado como deuda el 2026-09-09: "follow-up sin Conversation"): `send-follow-up` mandaba el prompt "1-5" por WhatsApp pero solo marcaba `flowStep=AWAITING_NPS_SCORE` dentro de un `if (convo)`. Un paciente que agendó por la página pública y nunca escribió por WhatsApp no tiene `Conversation`, así que el prompt salía igual y su "5" entraba al bot sin `flowStep`: caía al clasificador LLM, el score se perdía y el paciente recibía un fallback sin sentido. Silencioso — no había error en logs.
@@ -582,3 +589,44 @@
   sale igual, sin la parte de la cita.
 - Es el teléfono que reporta WAHA, no uno declarado en un formulario. La distinción importa: ver
   la decisión de S5 sobre no rellenar `Conversation.phone` con el número del form público.
+
+## 2026-09-11 — P1 · M2-b: página web de gestión de cita por link
+- `/[locale]/agendar/[clinicSlug]/cita?t=<token>`: el paciente ve su cita, la cancela con
+  confirmación o le cambia el horario. Server component que hidrata contra el `GET manage` de M2-a;
+  el resto es client con react-query.
+- `/gracias` muestra el link de gestión cuando la creación devuelve `manageUrl`. **El link es un
+  token bearer**, así que viaja por `sessionStorage` y no por la query string (Referer, historial y
+  logs del CDN) — mismo canal y mismo motivo que el nombre del paciente en el ADR 0004 §B.4.
+- Decisiones en [[notas/2026-09-11-gestion-cita-por-link-web]]: una sola pantalla para todos los
+  fallos de token (el backend devuelve el mismo 404 a propósito), `canCancel` tratado como pista y
+  no como garantía (409 manejado en las dos acciones, con `router.refresh()` en vez de adivinar), y
+  aviso explícito cuando el reagendamiento no devuelve token nuevo.
+- **Corrección al plan**: decía "reutiliza `ScheduleSelection`", pero ese archivo no es un selector
+  de horarios sino un context + el resumen de la sidebar; el selector real está acoplado a
+  `react-hook-form` dentro de `ScheduleForm.tsx`. Se extrajo sólo el formateo puro
+  (`slot-format.ts`, que ahora usan las dos páginas) y la página de gestión tiene su propio picker.
+- Pendiente: el E2E del flujo completo está tras `E2E_MANAGE=1` hasta que M2-a entre en `main`.
+- Del `code-reviewer` salieron cinco blockers, todos corregidos antes del PR: (1) `router.refresh()`
+  no resincronizaba el client (React conserva su state) → el copy del 409 mentía; (2) cancelar no
+  actualizaba el estado de la cita en la tarjeta; (3) el `ConfirmDialog` se quedaba abierto tapando
+  el resultado y permitiendo un segundo POST; (4) `new Date().toISOString()` como `from` de
+  disponibilidad usaba la TZ del navegador; (5) si no se podía extraer el token nuevo del
+  `manageUrl`, la página quedaba con un token muerto y sin avisar.
+- También: pantalla propia para fallos transitorios (un 429 ya no dice "link inválido", que llevaba
+  a citas duplicadas), confirmación al reagendar, `noindex` en la ruta, y aviso de que el rate-limit
+  por IP ve la del servidor Next en SSR — pendiente de resolver en M2-a.
+- Tras la revisión de M2-a: el `GET manage` pasa a limitarse **por token y no por IP** (en SSR el
+  cubo veía la IP del servidor Next, compartida por toda la clínica); se descartó mandar la IP real
+  en una cabecera, que es el vector que `TRUST_PROXY` existe para cerrar. Y dos cambios de contrato
+  que la web ya contempla: reagendar devuelve la cita a `PENDIENTE` (limpia `confirmedAt`) y hay un
+  tope de reagendamientos **del paciente**, cuyo `canReschedule` actualizado viene en la respuesta
+  del POST — sin usarlo, quien gastaba su último cambio seguía viendo el botón.
+## 2026-09-11 — M4: navegación de horarios en la FSM
+- "0. Ver más horarios" avanza la ventana 7 días (`flowData.slotWindowCount`), con tope de 4
+  ventanas y después el link tokenizado. Sin resetear la FSM en ningún caso.
+- "Cualquier profesional" como última opción de `ASK_PROFESSIONAL`: mezcla los horarios de todos
+  y fija el `professionalId` al elegir el slot (`offeredProfessionalIds`, paralelo a `offeredSlots`).
+- Preferencia del mismo mensaje ("1, por la tarde", "el martes") filtra antes de mostrar; si queda
+  vacía lo dice y muestra todo.
+- Tras dos respuestas seguidas sin entender, ofrece el form web sin resetear la FSM.
+- Detalle y gotchas en [[notas/2026-09-11-fsm-navegacion-horarios]].

@@ -38,6 +38,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[adr/0017-webhook-hmac-cookie-hardening|0017 — HMAC del webhook WAHA + hardening de cookies]]
 - [[adr/0018-scheduling-link-wa|0018 — Link de agendamiento por WhatsApp (bot → web con token efímero)]]
 - [[adr/0019-rag-hechos-de-bd|0019 — Hechos de BD como fuente del RAG (sin embeddings)]]
+- [[adr/0020-gestion-cita-por-link|0020 — Gestión de cita por link (cancelar y reagendar sin escribir)]]
 
 ## Specs de sprint (implementación)
 - [[specs/2026-08-18-observabilidad-pino-axiom-sentry|2026-08-18 — Spec Observabilidad (Pino + Axiom + Sentry) — Sprint 40 clínicas día 1-2]]
@@ -76,8 +77,11 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[notas/2026-09-11-offboarding-clinic-status|2026-09-11 — Offboarding: qué deja de funcionar cuando una clínica no está ACTIVE]]
 - [[notas/2026-09-11-bot-matching-saludo-si-persona|2026-09-11 — Bot: saludo recortado, `sí` con contexto de recordatorio, `persona` no deriva]]
 - [[notas/2026-09-11-source-map-stack-overflow|2026-09-11 — ts-jest: mockear `Math.random` rompe el reporte de fallos con un RangeError opaco]]
+- [[notas/2026-09-11-fsm-navegacion-horarios|2026-09-11 — FSM del bot: más horarios, cualquier profesional y preferencias]]
 - [[notas/2026-09-11-conversation-chatid-canonico|2026-09-11 — `Conversation.chatId`: formato canónico y por qué no se puede hacer upsert a ciegas]]
 - [[notas/2026-09-11-waha-mensajes-sin-texto|2026-09-11 — WAHA: mensajes sin texto (audio, imagen, sticker) y cómo detectarlos]]
+- [[notas/2026-09-11-gestion-cita-por-link-web|2026-09-11 — Gestión de cita por link: decisiones de la web (M2-b)]]
+- [[notas/2026-09-11-feedback-cross-tenant|2026-09-11 — `Feedback` admitía filas cruzadas entre clínicas (S4)]]
 
 ## Análisis
 - [[analisis/2026-09-11-chatbot-analisis-tecnico|2026-09-11 — Análisis técnico del asistente de WhatsApp]] — premisas, bugs (B1-B10), mejoras (M1-M10), seguimiento (S1-S5) y checklist por prioridad

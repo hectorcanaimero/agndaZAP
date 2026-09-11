@@ -270,3 +270,74 @@ export function isHumanEscape(normalized: string): boolean {
     .split(/\s+/)
     .some((token) => HUMAN_ESCAPE_TOKEN_RE.test(token));
 }
+
+/**
+ * Preferencia de horario que el paciente menciona de paso, en el mismo mensaje
+ * con el que elige servicio o profesional ("el martes por la tarde", "mañana",
+ * "algo temprano"). Sirve para filtrar la lista ANTES de mostrarla (M4).
+ *
+ * `weekday` usa la numeración de Luxon (1 = lunes … 7 = domingo).
+ * `relativeDay` cubre el "mañana" que significa *el día siguiente*, no la
+ * franja horaria — la ambigüedad del español que más se cruza aquí.
+ */
+export interface SlotPreference {
+  period?: 'manana' | 'tarde';
+  weekday?: number;
+  relativeDay?: 'hoy' | 'manana';
+}
+
+const WEEKDAYS: Record<string, number> = {
+  lunes: 1,
+  martes: 2,
+  miercoles: 3,
+  jueves: 4,
+  viernes: 5,
+  sabado: 6,
+  domingo: 7,
+};
+
+/**
+ * Devuelve `null` si el mensaje no expresa ninguna preferencia.
+ *
+ * Desambiguación de "mañana": solo cuenta como franja horaria cuando viene
+ * con preposición ("por la mañana", "en la mañana", "de mañana"). Un "mañana"
+ * suelto es el día siguiente, que es como lo usa la gente.
+ */
+export function parseSlotPreference(normalized: string): SlotPreference | null {
+  const pref: SlotPreference = {};
+
+  const morningPhrase = /\b(por|en|de|a) la manana\b|\bde manana\b|\btemprano\b/u;
+  const afternoonPhrase = /\b(por|en|de|a) la tarde\b|\bde tarde\b|\btarde\b/u;
+  if (morningPhrase.test(normalized)) pref.period = 'manana';
+  else if (afternoonPhrase.test(normalized)) pref.period = 'tarde';
+
+  if (!pref.period && /\bmanana\b/u.test(normalized)) {
+    pref.relativeDay = 'manana';
+  } else if (/\bhoy\b/u.test(normalized)) {
+    pref.relativeDay = 'hoy';
+  } else if (pref.period === 'manana' && /\bmanana manana\b/u.test(normalized)) {
+    pref.relativeDay = 'manana';
+  }
+
+  for (const [name, n] of Object.entries(WEEKDAYS)) {
+    if (new RegExp(`\\b${name}\\b`, 'u').test(normalized)) {
+      pref.weekday = n;
+      break;
+    }
+  }
+
+  return Object.keys(pref).length > 0 ? pref : null;
+}
+
+/**
+ * "Cualquiera", "el que sea", "me da igual": el paciente no tiene preferencia
+ * de profesional (M4). Va aparte de `resolveChoice` porque esa resuelve por
+ * substring del label, y "cualquiera" no está contenido en "Cualquier
+ * profesional" — que es justo la palabra que usa la gente.
+ */
+const ANY_CHOICE_RE =
+  /\b(cualquier|cualquiera|el que sea|la que sea|quien sea|me da igual|da igual|indiferente|sin preferencia|no tengo preferencia|el primero|lo antes posible)\b/u;
+
+export function isNoPreferenceChoice(normalized: string): boolean {
+  return ANY_CHOICE_RE.test(normalized);
+}

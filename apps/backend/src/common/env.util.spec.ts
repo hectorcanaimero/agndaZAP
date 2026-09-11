@@ -8,6 +8,7 @@ const base = {
   CORS_ORIGINS: 'https://app.example.com',
   JWT_SECRET: 'a'.repeat(48),
   SENTRY_DSN: 'https://sentry',
+  WEB_BASE_URL: 'https://showly.us',
   WEBHOOK_TOKEN: 't'.repeat(32),
 };
 
