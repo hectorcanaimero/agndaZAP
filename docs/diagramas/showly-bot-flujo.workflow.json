@@ -1,0 +1,274 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Flujo del asistente de Showly en WhatsApp",
+    "quality_profile": "showcase",
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "backend": {
+          "label": "Lógica del bot"
+        },
+        "security": {
+          "label": "Escalado a humano"
+        },
+        "messagebus": {
+          "label": "Trabajo asíncrono"
+        },
+        "database": {
+          "label": "Datos de la cita"
+        },
+        "cloud": {
+          "label": "Servicio LLM"
+        },
+        "external": {
+          "label": "Actor externo"
+        }
+      }
+    }
+  },
+  "lanes": [
+    {
+      "id": "canal",
+      "label": "Canal WhatsApp"
+    },
+    {
+      "id": "bot",
+      "label": "Ruta determinista"
+    },
+    {
+      "id": "ia",
+      "label": "Capa LLM"
+    },
+    {
+      "id": "humano",
+      "label": "Escalado a humano",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "entrada",
+      "label": "Entrada y guardas",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "ruteo",
+      "label": "Ruteo sin tokens",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "emphasis"
+    },
+    {
+      "id": "resolucion",
+      "label": "Resolución",
+      "fromCol": 3,
+      "toCol": 4
+    }
+  ],
+  "mainPath": [
+    "paciente",
+    "entrada",
+    "escalera",
+    "fsm",
+    "cita"
+  ],
+  "nodes": [
+    {
+      "id": "paciente",
+      "lane": "canal",
+      "col": 0,
+      "type": "external",
+      "label": "Paciente",
+      "sublabel": "mensaje de WhatsApp",
+      "width": 150
+    },
+    {
+      "id": "entrada",
+      "lane": "canal",
+      "col": 1,
+      "type": "backend",
+      "label": "Webhook y guardas",
+      "sublabel": "dedup y tope por chat",
+      "tag": "silencio al exceder",
+      "width": 150
+    },
+    {
+      "id": "escalera",
+      "lane": "bot",
+      "col": 2,
+      "type": "backend",
+      "label": "Ruteo determinista",
+      "sublabel": "cuatro reglas antes del LLM",
+      "tag": "cero tokens",
+      "width": 150
+    },
+    {
+      "id": "fsm",
+      "lane": "bot",
+      "col": 3,
+      "type": "backend",
+      "label": "FSM de agenda",
+      "sublabel": "servicio, profesional, hora",
+      "width": 150
+    },
+    {
+      "id": "cita",
+      "lane": "bot",
+      "col": 4,
+      "type": "database",
+      "label": "Cita creada",
+      "sublabel": "revalida horario y unicidad",
+      "width": 150
+    },
+    {
+      "id": "intencion",
+      "lane": "ia",
+      "col": 3,
+      "type": "cloud",
+      "label": "Clasificador",
+      "sublabel": "prefijos y luego el modelo",
+      "tag": "tres proveedores",
+      "width": 150
+    },
+    {
+      "id": "rag",
+      "lane": "ia",
+      "col": 4,
+      "type": "cloud",
+      "label": "Respuesta de FAQ",
+      "sublabel": "pgvector con umbral",
+      "width": 150
+    },
+    {
+      "id": "handoff",
+      "lane": "humano",
+      "col": 3,
+      "type": "security",
+      "label": "Bandeja de recepción",
+      "sublabel": "conversación a un humano",
+      "width": 150
+    },
+    {
+      "id": "recordatorios",
+      "lane": "canal",
+      "col": 4,
+      "type": "messagebus",
+      "label": "Recordatorios",
+      "sublabel": "salen antes de la cita",
+      "tag": "marca en riesgo",
+      "width": 150
+    }
+  ],
+  "edges": [
+    {
+      "id": "entra-mensaje",
+      "from": "paciente",
+      "to": "entrada",
+      "label": "mensaje entrante",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "pasa-guardas",
+      "from": "entrada",
+      "to": "escalera",
+      "label": "sin duplicado y dentro del tope",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "flujo-abierto",
+      "from": "escalera",
+      "to": "fsm",
+      "label": "flujo ya abierto",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "confirma",
+      "from": "fsm",
+      "to": "cita",
+      "label": "confirmación explícita",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "sin-regla",
+      "from": "escalera",
+      "to": "intencion",
+      "label": "ninguna regla coincide",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "intencion-agendar",
+      "from": "intencion",
+      "to": "fsm",
+      "label": "agendar",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "id": "intencion-pregunta",
+      "from": "intencion",
+      "to": "rag",
+      "label": "pregunta",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "id": "escape-humano",
+      "from": "escalera",
+      "to": "handoff",
+      "label": "pide una persona",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "sin-fuente",
+      "from": "rag",
+      "to": "handoff",
+      "label": "sin fuente confiable",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "programa-jobs",
+      "from": "cita",
+      "to": "recordatorios",
+      "label": "programa recordatorios",
+      "variant": "dashed",
+      "role": "async"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Lo determinista corre primero",
+      "items": [
+        "Escape a humano, flujo abierto, saludo y palabras clave se resuelven sin modelo",
+        "El clasificador es el último peldaño y aun así prueba prefijos antes de gastar tokens"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Nada se agenda sin confirmación",
+      "items": [
+        "La FSM guarda su estado en la conversación, así el flujo es retomable días después",
+        "El alta revalida el horario y choca contra una restricción única antes de crear"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Prefiere derivar antes que inventar",
+      "items": [
+        "Sin fuente por encima del umbral, la conversación pasa a recepción",
+        "El webhook procesa todo dentro del request, sin cola intermedia",
+        "La respuesta a un recordatorio vuelve a entrar por el peldaño de palabras clave"
+      ]
+    }
+  ]
+}
