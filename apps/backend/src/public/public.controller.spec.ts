@@ -115,6 +115,8 @@ describe('PublicController', () => {
   beforeEach(() => {
     prisma = {
       clinic: {
+        // `issueManageUrl` lee el locale para armar la URL de la web.
+        findUnique: jest.fn().mockResolvedValue({ locale: 'es' }),
         findFirst: jest.fn().mockResolvedValue({
           id: 'clinic-A',
           name: 'Clínica A',
@@ -148,16 +150,27 @@ describe('PublicController', () => {
           services: [{ id: 'svc-1' }],
         }),
       },
+      appointment: {
+        // `issueManageUrl` lee el phone del paciente para guardarlo en el token.
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ patient: { phone: '+584141234567' } }),
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
     };
     availability = {
       getSlots: jest.fn().mockResolvedValue([]),
     };
     scheduling = {
       createAppointment: jest.fn().mockResolvedValue({
-        id: 'appt-1',
-        startAt: new Date('2030-06-01T14:00:00Z'),
-        endAt: new Date('2030-06-01T14:30:00Z'),
-        status: 'PENDIENTE',
+        appointment: {
+          id: 'appt-1',
+          clinicId: 'clinic-1',
+          startAt: new Date('2030-06-01T14:00:00Z'),
+          endAt: new Date('2030-06-01T14:30:00Z'),
+          status: 'PENDIENTE',
+        },
+        patientCreated: true,
       }),
     };
     sessions = {
@@ -166,6 +179,11 @@ describe('PublicController', () => {
       consume: jest.fn().mockResolvedValue(null),
       resolve: jest.fn().mockResolvedValue(null),
       create: jest.fn(),
+      createManage: jest
+        .fn()
+        .mockResolvedValue({ token: 'mtok-abc', expiresInSeconds: 86400 }),
+      resolveManage: jest.fn().mockResolvedValue(null),
+      invalidateManage: jest.fn().mockResolvedValue(undefined),
     };
     controller = new PublicController(
       prisma as unknown as PrismaService,
@@ -173,6 +191,57 @@ describe('PublicController', () => {
       scheduling as unknown as SchedulingService,
       sessions as unknown as SchedulingSessionService,
     );
+  });
+
+  describe('POST :slug/appointments — manageUrl', () => {
+    it('devuelve manageUrl para que /gracias ofrezca cancelar o cambiar horario', async () => {
+      process.env.WEB_BASE_URL = 'https://showly.us';
+      const res: any = await controller.createAppointment('clinica-a', {
+        phone: '+584141234567',
+        name: 'Ana',
+        serviceId: 'svc-1',
+        professionalId: 'prof-1',
+        startAtISO: '2030-06-01T14:00:00.000Z',
+        consent: true,
+      } as any);
+
+      expect(res.manageUrl).toBe(
+        'https://showly.us/es/agendar/clinica-a/cita?t=mtok-abc',
+      );
+      delete process.env.WEB_BASE_URL;
+    });
+
+    it('si Redis está caído la cita se crea igual, solo sin manageUrl', async () => {
+      // Fail-open: perder el link de gestión no puede costar la cita.
+      sessions.createManage.mockRejectedValue(new Error('redis down'));
+
+      const res: any = await controller.createAppointment('clinica-a', {
+        phone: '+584141234567',
+        name: 'Ana',
+        serviceId: 'svc-1',
+        professionalId: 'prof-1',
+        startAtISO: '2030-06-01T14:00:00.000Z',
+        consent: true,
+      } as any);
+
+      expect(res.id).toBe('appt-1');
+      expect(res.manageUrl).toBeUndefined();
+    });
+
+    it('la respuesta pública nunca filtra patientCreated', async () => {
+      // Diría si ese teléfono ya era paciente de la clínica → oráculo para
+      // enumerar pacientes probando números.
+      const res: any = await controller.createAppointment('clinica-a', {
+        phone: '+584141234567',
+        name: 'Ana',
+        serviceId: 'svc-1',
+        professionalId: 'prof-1',
+        startAtISO: '2030-06-01T14:00:00.000Z',
+        consent: true,
+      } as any);
+
+      expect(res).not.toHaveProperty('patientCreated');
+    });
   });
 
   describe('GET :slug', () => {
@@ -772,5 +841,297 @@ describe('SlugValidationPipe', () => {
     expect(() => pipe.transform(long, { type: 'param' } as any)).toThrow(
       BadRequestException,
     );
+  });
+});
+
+/**
+ * Gestión de cita por link (ADR 0020). El token ES la autorización: no hay
+ * usuario autenticado, así que lo que se prueba acá es sobre todo que no haya
+ * forma de llegar a una cita ajena y que el estado se re-valide contra la DB.
+ */
+describe('PublicController — gestión de cita por link', () => {
+  let prisma: any;
+  let availability: any;
+  let scheduling: any;
+  let sessions: any;
+  let controller: PublicController;
+
+  const TOKEN = 'm'.repeat(32);
+  const future = () => new Date(Date.now() + 48 * 60 * 60 * 1000);
+
+  const SESSION = {
+    kind: 'manage' as const,
+    appointmentId: 'appt-1',
+    clinicId: 'clinic-A',
+    clinicSlug: 'clinica-a',
+    phone: '+584141234567',
+    createdAtISO: new Date().toISOString(),
+  };
+
+  function makeAppt(over: Record<string, unknown> = {}) {
+    return {
+      id: 'appt-1',
+      clinicId: 'clinic-A',
+      status: 'CONFIRMADA',
+      startAt: future(),
+      serviceId: 'svc-1',
+      professionalId: 'prof-1',
+      service: { id: 'svc-1', name: 'Consulta', durationMin: 30 },
+      professional: { id: 'prof-1', name: 'Dra. Ríos' },
+      patient: { name: 'Ana Pérez' },
+      clinic: {
+        name: 'Clínica A',
+        address: 'Av. X',
+        timezone: 'America/Caracas',
+        locale: 'es',
+      },
+      ...over,
+    };
+  }
+
+  beforeEach(() => {
+    process.env.WEB_BASE_URL = 'https://showly.us';
+    prisma = {
+      clinic: { findUnique: jest.fn().mockResolvedValue({ locale: 'es' }) },
+      appointment: {
+        findFirst: jest.fn().mockResolvedValue(makeAppt()),
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ patient: { phone: '+584141234567' } }),
+      },
+    };
+    availability = { getSlots: jest.fn() };
+    scheduling = {
+      cancelByPatient: jest
+        .fn()
+        .mockResolvedValue({ id: 'appt-1', status: 'CANCELADA' }),
+      rescheduleAppointment: jest.fn().mockResolvedValue({
+        id: 'appt-1',
+        clinicId: 'clinic-A',
+        serviceId: 'svc-1',
+        professionalId: 'prof-1',
+        status: 'CONFIRMADA',
+        startAt: new Date('2030-06-02T14:00:00Z'),
+      }),
+    };
+    sessions = {
+      resolveManage: jest.fn().mockResolvedValue(SESSION),
+      invalidateManage: jest.fn().mockResolvedValue(undefined),
+      createManage: jest
+        .fn()
+        .mockResolvedValue({ token: 'mtok-new', expiresInSeconds: 3600 }),
+    };
+    controller = new PublicController(
+      prisma as unknown as PrismaService,
+      availability as unknown as AvailabilityService,
+      scheduling as unknown as SchedulingService,
+      sessions as unknown as SchedulingSessionService,
+    );
+  });
+
+  afterEach(() => {
+    delete process.env.WEB_BASE_URL;
+  });
+
+  describe('GET manage/:token', () => {
+    it('devuelve la cita con canCancel/canReschedule y NO consume el token', async () => {
+      const res = await controller.getManagedAppointment('clinica-a', TOKEN);
+
+      expect(res.appointment).toMatchObject({
+        id: 'appt-1',
+        serviceName: 'Consulta',
+        professionalName: 'Dra. Ríos',
+        durationMin: 30,
+        status: 'CONFIRMADA',
+      });
+      expect(res.clinic.name).toBe('Clínica A');
+      expect(res.patient.name).toBe('Ana Pérez');
+      expect(res.canCancel).toBe(true);
+      expect(res.canReschedule).toBe(true);
+      // El paciente puede recargar la página cuantas veces quiera.
+      expect(sessions.invalidateManage).not.toHaveBeenCalled();
+    });
+
+    it('NO expone el teléfono del paciente', async () => {
+      // El link puede acabar reenviado por WhatsApp o en el historial del
+      // navegador; el nombre basta para que el paciente reconozca su cita.
+      const res = await controller.getManagedAppointment('clinica-a', TOKEN);
+
+      expect(JSON.stringify(res)).not.toContain('584141234567');
+      expect(res.patient).not.toHaveProperty('phone');
+    });
+
+    it('multi-tenant: la cita se busca por el clinicId DEL TOKEN, no por el slug', async () => {
+      await controller.getManagedAppointment('clinica-a', TOKEN);
+
+      expect(prisma.appointment.findFirst.mock.calls[0][0].where).toEqual({
+        id: 'appt-1',
+        clinicId: 'clinic-A',
+      });
+    });
+
+    it('token de otra clínica → 404 aunque el token sea válido', async () => {
+      sessions.resolveManage.mockResolvedValue({
+        ...SESSION,
+        clinicSlug: 'otra-clinica',
+      });
+
+      await expect(
+        controller.getManagedAppointment('clinica-a', TOKEN),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.appointment.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('token inexistente o expirado → 404 con el mismo mensaje que el resto', async () => {
+      // Mensajes distintos le dirían a quien prueba tokens si acertó el formato
+      // o la clínica.
+      sessions.resolveManage.mockResolvedValue(null);
+      const expirado = await controller
+        .getManagedAppointment('clinica-a', TOKEN)
+        .catch((e) => e);
+
+      sessions.resolveManage.mockResolvedValue(SESSION);
+      prisma.appointment.findFirst.mockResolvedValue(null);
+      const borrada = await controller
+        .getManagedAppointment('clinica-a', TOKEN)
+        .catch((e) => e);
+
+      expect(expirado).toBeInstanceOf(NotFoundException);
+      expect(borrada).toBeInstanceOf(NotFoundException);
+      expect(expirado.message).toBe(borrada.message);
+    });
+
+    it('cita pasada o terminal → canCancel/canReschedule en false', async () => {
+      prisma.appointment.findFirst.mockResolvedValue(
+        makeAppt({ status: 'ATENDIDA' }),
+      );
+      const atendida = await controller.getManagedAppointment('clinica-a', TOKEN);
+      expect(atendida.canCancel).toBe(false);
+      expect(atendida.canReschedule).toBe(false);
+
+      prisma.appointment.findFirst.mockResolvedValue(
+        makeAppt({ startAt: new Date(Date.now() - 3600_000) }),
+      );
+      const pasada = await controller.getManagedAppointment('clinica-a', TOKEN);
+      expect(pasada.canCancel).toBe(false);
+    });
+  });
+
+  describe('POST manage/:token/cancel', () => {
+    it('cancela y quema el token', async () => {
+      const res = await controller.cancelManagedAppointment('clinica-a', TOKEN);
+
+      expect(res).toEqual({ status: 'CANCELADA' });
+      expect(scheduling.cancelByPatient).toHaveBeenCalledWith({
+        clinicId: 'clinic-A',
+        appointmentId: 'appt-1',
+      });
+      expect(sessions.invalidateManage).toHaveBeenCalledWith(TOKEN);
+    });
+
+    it('token inválido → 404 sin llegar a tocar la cita', async () => {
+      sessions.resolveManage.mockResolvedValue(null);
+
+      await expect(
+        controller.cancelManagedAppointment('clinica-a', TOKEN),
+      ).rejects.toThrow(NotFoundException);
+      expect(scheduling.cancelByPatient).not.toHaveBeenCalled();
+    });
+
+    it('propaga el 409 del servicio cuando el estado ya no permite cancelar', async () => {
+      // La clínica pudo marcarla ATENDIDA entre que se pintó la página y el
+      // clic; el servicio re-valida contra la DB y manda.
+      scheduling.cancelByPatient.mockRejectedValue(
+        new ConflictException('esta cita ya no se puede cancelar'),
+      );
+
+      await expect(
+        controller.cancelManagedAppointment('clinica-a', TOKEN),
+      ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('POST manage/:token/reschedule', () => {
+    const body = { startAtISO: '2030-06-02T14:00:00.000Z' };
+
+    it('mueve la cita in-place y devuelve un manageUrl nuevo', async () => {
+      const res = await controller.rescheduleManagedAppointment(
+        'clinica-a',
+        TOKEN,
+        body as any,
+      );
+
+      expect(scheduling.rescheduleAppointment).toHaveBeenCalledWith({
+        clinicId: 'clinic-A',
+        appointmentId: 'appt-1',
+        startAtISO: body.startAtISO,
+      });
+      // Mismo id: no se crea una cita nueva ni queda una CANCELADA que
+      // ensuciaría el no-show rate.
+      expect(res.appointment.id).toBe('appt-1');
+      expect(res.appointment.status).toBe('CONFIRMADA');
+      expect(res.manageUrl).toBe(
+        'https://showly.us/es/agendar/clinica-a/cita?t=mtok-new',
+      );
+    });
+
+    it('invalida el token viejo: no quedan dos links vivos para la misma cita', async () => {
+      await controller.rescheduleManagedAppointment(
+        'clinica-a',
+        TOKEN,
+        body as any,
+      );
+      expect(sessions.invalidateManage).toHaveBeenCalledWith(TOKEN);
+    });
+
+    it('cita terminal → 409 sin llamar al servicio', async () => {
+      prisma.appointment.findFirst.mockResolvedValue(
+        makeAppt({ status: 'CANCELADA' }),
+      );
+
+      await expect(
+        controller.rescheduleManagedAppointment('clinica-a', TOKEN, body as any),
+      ).rejects.toThrow(ConflictException);
+      expect(scheduling.rescheduleAppointment).not.toHaveBeenCalled();
+    });
+
+    it('slot ocupado → 409 con mensaje para el paciente, en tuteo', async () => {
+      scheduling.rescheduleAppointment.mockRejectedValue(
+        new ConflictException('slot no disponible'),
+      );
+
+      const err = await controller
+        .rescheduleManagedAppointment('clinica-a', TOKEN, body as any)
+        .catch((e) => e);
+
+      expect(err).toBeInstanceOf(ConflictException);
+      expect(err.message).toBe('Ese horario ya no está disponible. Elige otro.');
+    });
+
+    it('token de otra clínica → 404 sin mover nada', async () => {
+      sessions.resolveManage.mockResolvedValue({
+        ...SESSION,
+        clinicSlug: 'otra-clinica',
+      });
+
+      await expect(
+        controller.rescheduleManagedAppointment('clinica-a', TOKEN, body as any),
+      ).rejects.toThrow(NotFoundException);
+      expect(scheduling.rescheduleAppointment).not.toHaveBeenCalled();
+    });
+
+    it('si no se puede emitir el token nuevo, la cita queda movida igual', async () => {
+      // Fail-open: lo que el paciente pidió ya está hecho.
+      sessions.createManage.mockRejectedValue(new Error('redis down'));
+
+      const res = await controller.rescheduleManagedAppointment(
+        'clinica-a',
+        TOKEN,
+        body as any,
+      );
+
+      expect(res.appointment.id).toBe('appt-1');
+      expect(res.manageUrl).toBeUndefined();
+    });
   });
 });

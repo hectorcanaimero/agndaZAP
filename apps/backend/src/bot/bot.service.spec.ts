@@ -166,10 +166,13 @@ describe('BotService — FSM de agendamiento', () => {
     };
     scheduling = {
       createAppointment: jest.fn().mockResolvedValue({
-        id: 'appt-new',
-        status: 'PENDIENTE',
-        startAt: tomorrow10.toJSDate(),
-        endAt: tomorrow1030.toJSDate(),
+        appointment: {
+          id: 'appt-new',
+          status: 'PENDIENTE',
+          startAt: tomorrow10.toJSDate(),
+          endAt: tomorrow1030.toJSDate(),
+        },
+        patientCreated: true,
       }),
     };
     // Default: create devuelve un token predecible para asserts de URL.

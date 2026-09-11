@@ -159,3 +159,129 @@ describe('SchedulingSessionService', () => {
     });
   });
 });
+
+/**
+ * Tokens de gestión de cita (ADR 0020). Espacio de claves distinto al de las
+ * sesiones de agendamiento y semántica distinta: no se consumen al leerlos.
+ */
+describe('SchedulingSessionService — tokens de gestión', () => {
+  let redis: ReturnType<typeof makeRedisMock>;
+  let service: SchedulingSessionService;
+
+  const BASE = {
+    appointmentId: 'appt-1',
+    clinicId: 'clinic-A',
+    clinicSlug: 'demo',
+    phone: '+584141234567',
+  };
+
+  const in7Days = () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  beforeEach(() => {
+    redis = makeRedisMock();
+    service = new SchedulingSessionService(redis as unknown as Redis);
+  });
+
+  it('createManage guarda bajo el prefijo sched:manage: y devuelve un token usable', async () => {
+    const { token } = await service.createManage(BASE, in7Days());
+
+    expect(token).toMatch(/^[A-Za-z0-9_-]{20,64}$/);
+    expect(redis._store.has(`sched:manage:${token}`)).toBe(true);
+
+    const resolved = await service.resolveManage(token);
+    expect(resolved).toMatchObject({ ...BASE, kind: 'manage' });
+  });
+
+  it('el TTL se deriva de startAt', async () => {
+    await service.createManage(BASE, in7Days());
+
+    const ttl = redis.set.mock.calls[0][3] as number;
+    // 7 días ± un minuto de holgura por el tiempo de ejecución.
+    expect(ttl).toBeGreaterThan(7 * 24 * 3600 - 60);
+    expect(ttl).toBeLessThanOrEqual(7 * 24 * 3600);
+  });
+
+  it('TTL con suelo de 30 min: una cita inminente igual da un link usable', async () => {
+    // Cita dentro de 5 minutos → sin suelo el token moriría antes de que el
+    // paciente abra el mensaje.
+    const { expiresInSeconds } = await service.createManage(
+      BASE,
+      new Date(Date.now() + 5 * 60 * 1000),
+    );
+    expect(expiresInSeconds).toBe(30 * 60);
+  });
+
+  it('TTL con techo de 30 días: una cita lejana no deja el token vivo meses', async () => {
+    const { expiresInSeconds } = await service.createManage(
+      BASE,
+      new Date(Date.now() + 200 * 24 * 60 * 60 * 1000),
+    );
+    expect(expiresInSeconds).toBe(30 * 24 * 60 * 60);
+  });
+
+  it('una cita ya pasada cae al suelo, no a un TTL negativo', async () => {
+    const { expiresInSeconds } = await service.createManage(
+      BASE,
+      new Date(Date.now() - 60 * 60 * 1000),
+    );
+    expect(expiresInSeconds).toBe(30 * 60);
+  });
+
+  it('resolveManage NO consume: el paciente puede recargar la página', async () => {
+    const { token } = await service.createManage(BASE, in7Days());
+
+    expect(await service.resolveManage(token)).not.toBeNull();
+    expect(await service.resolveManage(token)).not.toBeNull();
+    expect(redis._store.has(`sched:manage:${token}`)).toBe(true);
+  });
+
+  it('invalidateManage borra el token', async () => {
+    const { token } = await service.createManage(BASE, in7Days());
+    await service.invalidateManage(token);
+
+    expect(await service.resolveManage(token)).toBeNull();
+  });
+
+  it('invalidateManage no lanza si Redis falla (la cita ya cambió)', async () => {
+    const { token } = await service.createManage(BASE, in7Days());
+    redis.del.mockRejectedValueOnce(new Error('redis down'));
+
+    await expect(service.invalidateManage(token)).resolves.toBeUndefined();
+  });
+
+  it('un token de agendamiento NO sirve como token de gestión, ni al revés', async () => {
+    // Los dos espacios de claves están separados; si alguna vez se unificaran
+    // por error, el chequeo de `kind` sigue cortando.
+    const { token: schedToken } = await service.create({
+      conversationId: 'c-1',
+      clinicId: 'clinic-A',
+      clinicSlug: 'demo',
+      phone: '+584141234567',
+      lid: null,
+      name: null,
+    });
+    expect(await service.resolveManage(schedToken)).toBeNull();
+
+    const { token: manageToken } = await service.createManage(BASE, in7Days());
+    expect(await service.resolve(manageToken)).toBeNull();
+  });
+
+  it('un payload sin kind manage se rechaza aunque esté en la clave correcta', async () => {
+    redis._store.set(
+      'sched:manage:' + 'x'.repeat(32),
+      JSON.stringify({ appointmentId: 'appt-1', clinicSlug: 'demo' }),
+    );
+    expect(await service.resolveManage('x'.repeat(32))).toBeNull();
+  });
+
+  it('token con forma implausible ni siquiera toca Redis', async () => {
+    expect(await service.resolveManage('../../etc/passwd')).toBeNull();
+    expect(await service.resolveManage('')).toBeNull();
+    expect(redis.get).not.toHaveBeenCalled();
+  });
+
+  it('JSON corrupto degrada a null en vez de romper el endpoint', async () => {
+    redis._store.set('sched:manage:' + 'y'.repeat(32), '{no-json');
+    expect(await service.resolveManage('y'.repeat(32))).toBeNull();
+  });
+});
