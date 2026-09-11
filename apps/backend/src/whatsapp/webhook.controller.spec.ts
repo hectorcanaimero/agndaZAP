@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import type Redis from 'ioredis';
 import type { Queue } from 'bullmq';
 import { BOT_INBOUND_JOB } from '../bot/bot-inbound.queue';
@@ -21,7 +22,7 @@ describe('WebhookController', () => {
 
   let prisma: {
     clinic: { findUnique: jest.Mock; update: jest.Mock };
-    conversation: { upsert: jest.Mock };
+    conversation: { upsert: jest.Mock; update: jest.Mock };
     message: { create: jest.Mock };
   };
   let inbound: { add: jest.Mock };
@@ -104,6 +105,7 @@ describe('WebhookController', () => {
       },
       conversation: {
         upsert: jest.fn().mockResolvedValue({ id: 'convo-1', state: 'BOT' }),
+        update: jest.fn().mockResolvedValue({ id: 'convo-1' }),
       },
       message: { create: jest.fn().mockResolvedValue({ id: 'msg-1' }) },
     };
@@ -780,6 +782,187 @@ describe('WebhookController', () => {
           (c) => c[0].data.direction === 'IN',
         ),
       ).toHaveLength(1);
+    });
+
+    /**
+     * S2: un paciente que sólo manda notas de voz recibía un aviso cada 6 h y
+     * nadie lo atendía nunca, porque el hilo se quedaba en BOT y no entra en
+     * el filtro NEEDS_HUMAN del panel. Al segundo adjunto seguido lo pasamos
+     * a una persona.
+     */
+    describe('handoff tras dos adjuntos seguidos', () => {
+      beforeEach(() => {
+        // Redis de mentira pero con las semánticas que importan aquí: `incr`
+        // acumula y `set ... NX` falla si la clave ya existe. Sin lo segundo,
+        // el throttle de 6 h del aviso no se modela y los tests de racha
+        // mienten (el tercer adjunto "responde" cuando en producción calla).
+        const store = new Map<string, number | string>();
+        redis.incr.mockImplementation(async (key: unknown) => {
+          const k = String(key);
+          const next = Number(store.get(k) ?? 0) + 1;
+          store.set(k, next);
+          return next;
+        });
+        redis.set.mockImplementation(
+          async (key: unknown, value: unknown, ...rest: unknown[]) => {
+            const k = String(key);
+            if (rest.includes('NX') && store.has(k)) return null;
+            store.set(k, String(value));
+            return 'OK';
+          },
+        );
+        redis.del.mockImplementation(async (key: unknown) => {
+          const existed = store.delete(String(key));
+          return existed ? 1 : 0;
+        });
+      });
+
+      const audio = (id: string) =>
+        mediaEvent({ type: 'ptt', hasMedia: true }, id);
+
+      it('el handoff cuenta como derivación en el evento y en el contador', async () => {
+        // Es la única derivación que hoy alimenta la tasa del panel: el resto
+        // la cableará `bot.service.ts`. Sin esto, la clínica vería un 0%
+        // aunque el bot sí esté derivando pacientes.
+        const logSpy = jest
+          .spyOn(Logger.prototype, 'log')
+          .mockImplementation(() => undefined);
+        try {
+          await post(audio('a-1'));
+          await post(audio('a-2'));
+
+          const events = logSpy.mock.calls
+            .map((c) => c[0])
+            .filter((a) => typeof a === 'object' && a?.event === 'bot.turn');
+          expect(events.at(-1)).toMatchObject({
+            outcome: 'unsupported',
+            handoff: true,
+          });
+          expect(events.at(-2)).toMatchObject({ handoff: false });
+        } finally {
+          logSpy.mockRestore();
+        }
+      });
+
+      it('audio, audio → NEEDS_HUMAN, limpia la FSM y avisa del handoff', async () => {
+        await post(audio('a-1'));
+        await post(audio('a-2'));
+
+        expect(prisma.conversation.update).toHaveBeenCalledWith({
+          where: { id: 'convo-1' },
+          data: {
+            state: 'NEEDS_HUMAN',
+            flowStep: null,
+            flowData: Prisma.JsonNull,
+          },
+        });
+        expect(waha.sendText).toHaveBeenLastCalledWith(
+          'clinic-a',
+          FROM,
+          'Te paso con una persona del equipo para escucharte.',
+        );
+        expect(prisma.message.create).toHaveBeenCalledWith({
+          data: {
+            conversationId: 'convo-1',
+            direction: 'OUT',
+            body: 'Te paso con una persona del equipo para escucharte.',
+          },
+        });
+      });
+
+      it('audio, texto, audio → el texto rompe la racha: no hay handoff', async () => {
+        await post(audio('a-1'));
+        await post(messageEvent('t-1'));
+        await post(audio('a-2'));
+
+        expect(prisma.conversation.update).not.toHaveBeenCalled();
+        expect(waha.sendText).not.toHaveBeenCalledWith(
+          expect.anything(),
+          expect.anything(),
+          'Te paso con una persona del equipo para escucharte.',
+        );
+      });
+
+      it('un mensaje de texto borra el contador de adjuntos', async () => {
+        await post(messageEvent('t-1'));
+        expect(redis.del).toHaveBeenCalledWith(
+          `bot:media-count:clinic-A:${FROM}`,
+        );
+      });
+
+      it('el primer adjunto sigue recibiendo el aviso normal, no el handoff', async () => {
+        await post(audio('a-1'));
+        expect(prisma.conversation.update).not.toHaveBeenCalled();
+        expect(waha.sendText).toHaveBeenCalledWith('clinic-a', FROM, NOTICE_TEXT);
+      });
+
+      it('tras el handoff, el tercer adjunto no lo repite', async () => {
+        await post(audio('a-1'));
+        await post(audio('a-2'));
+        prisma.conversation.upsert.mockResolvedValue({
+          id: 'convo-1',
+          state: 'NEEDS_HUMAN',
+        });
+        waha.sendText.mockClear();
+        prisma.conversation.update.mockClear();
+
+        await post(audio('a-3'));
+        await post(audio('a-4'));
+
+        expect(prisma.conversation.update).not.toHaveBeenCalled();
+        expect(waha.sendText).not.toHaveBeenCalled();
+      });
+
+      it('state HUMAN: ni handoff ni contador, silencio total', async () => {
+        prisma.conversation.upsert.mockResolvedValue({
+          id: 'convo-1',
+          state: 'HUMAN',
+        });
+        await post(audio('a-1'));
+        await post(audio('a-2'));
+
+        expect(prisma.conversation.update).not.toHaveBeenCalled();
+        expect(waha.sendText).not.toHaveBeenCalled();
+        expect(redis.incr).not.toHaveBeenCalledWith(
+          `bot:media-count:clinic-A:${FROM}`,
+        );
+      });
+
+      it('el contador vive 24 h', async () => {
+        await post(audio('a-1'));
+        expect(redis.expire).toHaveBeenCalledWith(
+          `bot:media-count:clinic-A:${FROM}`,
+          86_400,
+        );
+      });
+
+      it('Redis caído en el contador → trata cada adjunto como el primero', async () => {
+        redis.incr.mockImplementation(async (key: unknown) => {
+          if (String(key).startsWith('bot:media-count:')) {
+            throw new Error('redis down');
+          }
+          return 1;
+        });
+        await post(audio('a-1'));
+        await post(audio('a-2'));
+
+        expect(prisma.conversation.update).not.toHaveBeenCalled();
+      });
+
+      it('no mezcla la racha de dos clínicas con el mismo chatId', async () => {
+        await post(audio('a-1'));
+        prisma.clinic.findUnique.mockResolvedValueOnce({
+          id: 'clinic-B',
+          status: 'ACTIVE',
+          wahaSession: 'clinic-b',
+        });
+        await post(audio('a-2'));
+
+        expect(prisma.conversation.update).not.toHaveBeenCalled();
+        expect(redis.incr).toHaveBeenCalledWith(
+          `bot:media-count:clinic-B:${FROM}`,
+        );
+      });
     });
 
     it('dos clínicas con el mismo chatId no comparten conversación ni throttle', async () => {
