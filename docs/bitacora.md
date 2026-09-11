@@ -953,3 +953,18 @@
   igual que `knowledge.service.ts`.
 - `buildConversationContext` pasa a devolver `string[]`: es lo que espera el clasificador, y el
   RAG lo une. Antes devolvía el string ya unido y habría hecho falta partirlo.
+
+## 2026-09-11 (noche) — S28: norma de test contra el redactor real de pino
+- `common/logger/testing/redaction-harness.ts` + `redaction-events.spec.ts`: todos los eventos
+  estructurados del backend (`bot.turn` y los siete `waha.*`) pasan por el redactor real de pino y
+  se comprueba que llegan enteros.
+- Sale del blocker de M9-a: el campo `reason` de `bot.turn` salía como `[REDACTED]` en producción
+  porque `nestjs-pino` vuelca el objeto en la raíz del entry, y ningún test lo veía porque espían el
+  logger de Nest, que corre antes de la redacción. Verde en CI, ciego en el destino.
+- El arnés trae sus propios tests negativos (un campo `name`, uno `reason`, uno anidado), porque un
+  test de seguridad que no falla cuando debe es una tranquilidad falsa.
+- El mensaje de fallo avisa de no renombrar a ciegas: si el campo está en `PII_REDACT_PATHS` es
+  porque ahí suele haber PII, así que la redacción podía estar tapando una fuga y renombrar sin
+  mirar la convierte en real. Es exactamente lo que pasó con `reason`.
+- Comprobado de paso que ninguno de los `waha.*` colisiona hoy. `name` sí está en la lista, por si
+  alguien lo usa como campo de evento.

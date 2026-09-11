@@ -60,8 +60,18 @@ Hay dos lecciones, y la segunda es la que vale:
    de etiquetas, no texto libre: para agrupar en un panel hace falta una
    etiqueta estable, y el detalle del error ya se loguea aparte, saneado.
 
-Queda un test en `pii-redactor.spec.ts` que recorre el evento entero contra el
-redactor real, para que el próximo campo que alguien añada se cace ahí.
+**Esto es ahora una norma del repo**, no un test suelto:
+`common/logger/testing/redaction-harness.ts` expone
+`expectEventSurvivesRedaction`, y `redaction-events.spec.ts` pasa por ahí todos
+los eventos estructurados del backend. Todo evento nuevo se añade a esa lista
+—cuesta una línea— con un ejemplar que tenga **todos** los campos rellenos,
+incluidos los opcionales: lo que no se pasa no se comprueba, y el campo que
+alguien añada mañana es justo el que va a colisionar.
+
+El mensaje de fallo del arnés insiste en lo segundo, que es lo que casi
+convierte el bug en fuga: antes de renombrar el campo, mirar **qué valor
+llevaba**. Si está en `PII_REDACT_PATHS` es porque ahí suele haber PII, así que
+la redacción podía estar tapando algo.
 
 ## Los contadores contaban reintentos
 
