@@ -11,7 +11,14 @@ import {
 import { createHash } from 'node:crypto';
 import type Redis from 'ioredis';
 import { Public } from '../auth/decorators/public.decorator';
-import { BotService } from '../bot/bot.service';
+import { Queue } from 'bullmq';
+import {
+  BOT_INBOUND_JOB,
+  BOT_INBOUND_QUEUE_TOKEN,
+  MAX_INBOUND_TEXT_CHARS,
+  type BotInboundJobData,
+} from '../bot/bot-inbound.queue';
+import { RequestContextService } from '../common/logger/request-context';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizeE164 } from '../common/phone.util';
 import { hashChatId, withinBotRateLimit } from '../bot/bot-rate-limit';
@@ -150,9 +157,10 @@ export class WebhookController {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly bot: BotService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly waha: WahaService,
+    @Inject(BOT_INBOUND_QUEUE_TOKEN) private readonly inbound: Queue,
+    private readonly ctx: RequestContextService,
   ) {}
 
   /**
@@ -170,6 +178,29 @@ export class WebhookController {
       .update(`${from}|${messageId}`)
       .digest('hex');
     return `waha:evt:${session}:${digest}`;
+  }
+
+  /**
+   * `jobId` del job de `bot-inbound`. **No puede llevar `:`**: BullMQ lo
+   * rechaza (`Custom Id cannot contain :`, `job.js` — sólo tolera exactamente
+   * tres segmentos, por compat con repeatables viejos, y eso está marcado para
+   * desaparecer). Con la clave de dedup tal cual, que tiene cuatro, el `add`
+   * lanzaba en TODOS los mensajes de texto: 500 al webhook, WAHA reintentando
+   * contra un fallo determinista y el paciente sin respuesta — con el health
+   * check en verde, porque el job nunca llegaba a existir.
+   *
+   * La `session` va dentro del hash, no de prefijo: el id tiene que seguir
+   * acotado al tenant o una clínica podría suprimir el mensaje de otra.
+   */
+  private dedupJobId(
+    session: string,
+    from: string,
+    messageId: string,
+  ): string {
+    const digest = createHash('sha256')
+      .update(`${session}|${from}|${messageId}`)
+      .digest('hex');
+    return `waha-evt-${digest}`;
   }
 
   /**
@@ -255,19 +286,25 @@ export class WebhookController {
   /**
    * Rate-limit del ADR 0007 aplicado al camino de los adjuntos.
    *
-   * `BotService.handleIncoming` lo aplica para los mensajes de texto, pero
-   * este camino no pasa por ahí: sin esto, un flood de stickers escribe en
-   * `Conversation` y `Message` sin cota (justo el ataque que motivó el ADR) y,
-   * con el token del webhook comprometido, saca un `sendText` por request
-   * variando `from`, saltándose el cap horario que protege el número.
+   * Lo aplican los DOS caminos del webhook, y por el mismo motivo: ninguno
+   * hace ya el trabajo caro dentro de la request. Los adjuntos escriben en
+   * `Conversation` y `Message` y mandan un `sendText`; los de texto encolan en
+   * Redis. Sin cota, un flood escribe sin límite en ambos casos (justo el
+   * ataque que motivó el ADR) y, con el token del webhook comprometido, saca
+   * un `sendText` por request variando `from`, saltándose el cap horario que
+   * protege el número de la clínica.
    *
    * Comparte claves y presupuesto con el bot — ver `bot/bot-rate-limit.ts`.
    */
-  private withinRateLimit(clinicId: string, chatId: string): Promise<boolean> {
+  private withinRateLimit(
+    clinicId: string,
+    chatId: string,
+    scope: 'bot' | 'media',
+  ): Promise<boolean> {
     return withinBotRateLimit(this.redis, this.logger, {
       clinicId,
       chatId,
-      scope: 'media',
+      scope,
     });
   }
 
@@ -465,6 +502,9 @@ export class WebhookController {
       const dedupKey = messageId
         ? this.dedupKey(session, from, messageId)
         : null;
+      const jobId = messageId
+        ? this.dedupJobId(session, from, messageId)
+        : null;
       if (dedupKey && !(await this.claimMessage(dedupKey))) {
         // Reintento de WAHA: ya lo procesamos. Sólo un prefijo del hash en el
         // log — nunca el id crudo (contiene el phone).
@@ -518,7 +558,7 @@ export class WebhookController {
       if (label) {
         // ADR 0007 antes de escribir nada: este camino no pasa por
         // `BotService.handleIncoming`, que es donde viven las dos capas.
-        if (!(await this.withinRateLimit(clinic.id, from))) {
+        if (!(await this.withinRateLimit(clinic.id, from, 'media'))) {
           return { ok: true };
         }
         try {
@@ -541,18 +581,52 @@ export class WebhookController {
         return { ok: true };
       }
 
+      // Rate-limit del ADR 0007 ANTES de encolar. Es imprescindible que esté
+      // aquí y no sólo dentro del bot: `handleIncoming` ahora corre en el
+      // worker, o sea DESPUÉS de escribir en Redis, así que sin esta cota
+      // cualquiera con el token del webhook podría llenar Redis a request por
+      // request — y con Redis lleno se caen también el dedup, los tokens de la
+      // página pública y la cola de recordatorios.
+      //
+      // OJO, deuda acordada: `handleIncoming` todavía vuelve a consumir
+      // presupuesto sobre LAS MISMAS claves, así que hasta que se le quite
+      // (bot.service.ts es de otra sesión) cada mensaje cuenta dos veces y los
+      // límites efectivos son la mitad: ~7/min por chat y 250/h por clínica.
+      // Es el lado seguro del error, pero hay que cerrarlo.
+      if (!(await this.withinRateLimit(clinic.id, from, 'bot'))) {
+        return { ok: true };
+      }
+
+      // Encolar y responder 200 al instante. Antes esperábamos a que el bot
+      // terminara —con el LLM de por medio, segundos— y WAHA reintentaba el
+      // webhook por timeout: el mismo mensaje acababa procesado dos veces.
+      //
+      // `jobId` = la clave de dedup. Es una red secundaria: mientras el job
+      // exista, BullMQ descarta el duplicado por su cuenta. No sustituye al
+      // `SET NX` de 24 h, porque el job se borra por edad (ver
+      // BOT_INBOUND_JOB_OPTIONS) y a partir de ahí el mismo id volvería a
+      // entrar.
+      const jobData: BotInboundJobData = {
+        clinicId: clinic.id,
+        chatId: from,
+        phone,
+        lid,
+        contactName,
+        // Truncado antes de que el texto entre en Redis, igual que el pie de
+        // foto: el body-parser admite 1 MB por request.
+        text: body.slice(0, MAX_INBOUND_TEXT_CHARS),
+        requestId: this.ctx.get('requestId'),
+      };
       try {
-        await this.bot.handleIncoming({
-          clinicId: clinic.id,
-          chatId: from,
-          phone,
-          lid,
-          contactName,
-          text: body,
-        });
+        await this.inbound.add(
+          BOT_INBOUND_JOB,
+          jobData,
+          jobId ? { jobId } : {},
+        );
       } catch (e) {
-        // Liberamos la marca de dedup y relanzamos: WAHA reintenta y el
-        // segundo intento sí se procesa. Sin esto el mensaje se perdía.
+        // Encolar es lo único que puede fallar aquí, y si falla el mensaje se
+        // pierde: soltamos el dedup y relanzamos para que WAHA reintente.
+        // A partir de que el job existe, los reintentos son de BullMQ.
         if (dedupKey) await this.releaseMessage(dedupKey);
         throw e;
       }

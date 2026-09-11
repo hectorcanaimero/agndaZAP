@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BotInboundQueueModule } from '../bot/bot-inbound.queue';
 import { PublicModule } from '../public/public.module';
 import { HealthController } from './health.controller';
 
@@ -9,7 +10,7 @@ import { HealthController } from './health.controller';
  * conexión extra.
  */
 @Module({
-  imports: [PublicModule],
+  imports: [PublicModule, BotInboundQueueModule],
   controllers: [HealthController],
 })
 export class HealthModule {}

@@ -133,6 +133,34 @@ export class SchedulingService {
       );
     }
 
+    // 1.5) Conversación de origen. Se valida el tenant como todo lo demás: hoy
+    // el `conversationId` llega desde un token que ya comprobó el slug, así que
+    // no es alcanzable desde fuera — pero persistirlo a ciegas es exactamente
+    // la forma que tenía el bug de `Feedback` antes de S4, y de aquel también
+    // se decía que no era alcanzable hasta que alguien miró el `include`.
+    //
+    // Una cita atada a la conversación de otra clínica dejaría que ese chat
+    // viera y gestionara la cita de un paciente ajeno: `findUpcomingAppointment`
+    // resuelve por `appointment.conversationId` (ver S5).
+    //
+    // Falla en vez de ignorar el id en silencio: si esto se dispara hay datos
+    // inconsistentes, y una cita creada a medias —sin el enlace al chat del que
+    // depende todo el flujo BOT_WEB— es peor que un error visible.
+    if (source === 'BOT_WEB' && conversationId) {
+      const convo = await this.prisma.conversation.findFirst({
+        where: { id: conversationId, clinicId },
+        select: { id: true },
+      });
+      if (!convo) {
+        this.logger.error(
+          `conversationId cross-tenant descartado clinicId=${clinicId} convoId=${conversationId}`,
+        );
+        throw new BadRequestException(
+          'la conversación no pertenece a esta clínica',
+        );
+      }
+    }
+
     // 2) Parseamos startAt en la TZ de la clínica y calculamos endAt con Luxon.
     // Nunca usamos `new Date(iso)` naïve — respetamos la zona de la clínica.
     const zone = clinic.timezone;

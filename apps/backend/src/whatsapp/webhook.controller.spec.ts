@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 import type Redis from 'ioredis';
-import { BotService } from '../bot/bot.service';
+import type { Queue } from 'bullmq';
+import { BOT_INBOUND_JOB } from '../bot/bot-inbound.queue';
+import { RequestContextService } from '../common/logger/request-context';
 import { PrismaService } from '../prisma/prisma.service';
 import { WahaService } from './waha.service';
 import { WahaWebhookBody, WebhookController } from './webhook.controller';
@@ -22,7 +24,7 @@ describe('WebhookController', () => {
     conversation: { upsert: jest.Mock };
     message: { create: jest.Mock };
   };
-  let bot: { handleIncoming: jest.Mock };
+  let inbound: { add: jest.Mock };
   let redis: jest.Mocked<Pick<Redis, 'set' | 'del' | 'incr' | 'expire'>>;
   let waha: { sendText: jest.Mock };
   let controller: WebhookController;
@@ -104,7 +106,7 @@ describe('WebhookController', () => {
       },
       message: { create: jest.fn().mockResolvedValue({ id: 'msg-1' }) },
     };
-    bot = { handleIncoming: jest.fn().mockResolvedValue(undefined) };
+    inbound = { add: jest.fn().mockResolvedValue({ id: 'job-1' }) };
     redis = {
       set: jest.fn().mockResolvedValue('OK'),
       del: jest.fn().mockResolvedValue(1),
@@ -117,9 +119,10 @@ describe('WebhookController', () => {
     waha = { sendText: jest.fn().mockResolvedValue(undefined) };
     controller = new WebhookController(
       prisma as unknown as PrismaService,
-      bot as unknown as BotService,
       redis as unknown as Redis,
       waha as unknown as WahaService,
+      inbound as unknown as Queue,
+      new RequestContextService(),
     );
   });
 
@@ -140,16 +143,16 @@ describe('WebhookController', () => {
     const key = redis.set.mock.calls[0][0] as string;
     expect(key).not.toContain(PHONE);
     expect(key).not.toContain('3EB0ABCDEF');
-    expect(bot.handleIncoming).toHaveBeenCalledTimes(1);
+    expect(inbound.add).toHaveBeenCalledTimes(1);
   });
 
-  it('segundo evento con el mismo id NO llama a bot.handleIncoming y no loguea PHI', async () => {
+  it('segundo evento con el mismo id NO encola y no loguea PHI', async () => {
     const debugSpy = jest.spyOn(Logger.prototype, 'debug');
     redis.set.mockResolvedValueOnce('OK').mockResolvedValueOnce(null);
     await post(messageEvent(MSG_ID));
     const result = await post(messageEvent(MSG_ID));
     expect(result).toEqual({ ok: true });
-    expect(bot.handleIncoming).toHaveBeenCalledTimes(1);
+    expect(inbound.add).toHaveBeenCalledTimes(1);
     for (const call of debugSpy.mock.calls) {
       const msg = String(call[0]);
       expect(msg).not.toContain(PHONE);
@@ -157,58 +160,62 @@ describe('WebhookController', () => {
     }
   });
 
-  it('bot lanza → libera la clave y relanza; el reintento sí se procesa', async () => {
-    bot.handleIncoming.mockRejectedValueOnce(new Error('bot down'));
-    await expect(post(messageEvent(MSG_ID))).rejects.toThrow('bot down');
+  it('encolar falla → libera la clave y relanza; el reintento sí se procesa', async () => {
+    inbound.add.mockRejectedValueOnce(new Error('queue down'));
+    await expect(post(messageEvent(MSG_ID))).rejects.toThrow('queue down');
     expect(redis.del).toHaveBeenCalledWith(expectedKey(FROM, MSG_ID));
 
     // Reintento de WAHA: la clave ya no existe → SET NX vuelve a dar OK.
     await post(messageEvent(MSG_ID));
-    expect(bot.handleIncoming).toHaveBeenCalledTimes(2);
+    expect(inbound.add).toHaveBeenCalledTimes(2);
   });
 
-  it('bot lanza y Redis falla el DEL → igual relanza (best-effort)', async () => {
-    bot.handleIncoming.mockRejectedValueOnce(new Error('bot down'));
+  it('encolar falla y Redis falla el DEL → igual relanza (best-effort)', async () => {
+    inbound.add.mockRejectedValueOnce(new Error('queue down'));
     redis.del.mockRejectedValueOnce(new Error('redis down'));
-    await expect(post(messageEvent(MSG_ID))).rejects.toThrow('bot down');
+    await expect(post(messageEvent(MSG_ID))).rejects.toThrow('queue down');
   });
 
   it('sin payload.id procesa normal y no toca Redis', async () => {
     await post(messageEvent(undefined));
     expect(redis.set).not.toHaveBeenCalled();
-    expect(bot.handleIncoming).toHaveBeenCalledTimes(1);
+    expect(inbound.add).toHaveBeenCalledTimes(1);
   });
 
   it('Redis lanza → fail-open: procesa igual', async () => {
     redis.set.mockRejectedValueOnce(new Error('redis down'));
     await post(messageEvent('msg-2'));
-    expect(bot.handleIncoming).toHaveBeenCalledTimes(1);
+    expect(inbound.add).toHaveBeenCalledTimes(1);
   });
 
   it('normaliza el phone de <phone>@c.us a E.164 con "+"', async () => {
     await post(messageEvent('msg-3', '584141234567@c.us'));
-    expect(bot.handleIncoming).toHaveBeenCalledWith(
+    expect(inbound.add).toHaveBeenCalledWith(
+      BOT_INBOUND_JOB,
       expect.objectContaining({
         clinicId: 'clinic-A',
         chatId: '584141234567@c.us',
         phone: '+584141234567',
         lid: null,
       }),
+      expect.anything(),
     );
   });
 
   it('@lid: phone null y lid con el id pelado', async () => {
     await post(messageEvent('msg-4', '123456789012345@lid'));
-    expect(bot.handleIncoming).toHaveBeenCalledWith(
+    expect(inbound.add).toHaveBeenCalledWith(
+      BOT_INBOUND_JOB,
       expect.objectContaining({ phone: null, lid: '123456789012345' }),
+      expect.anything(),
     );
   });
 
-  it('clínica SUSPENDED: message → { ok: true } sin llamar al bot ni marcar dedup', async () => {
+  it('clínica SUSPENDED: message → { ok: true } sin encolar ni marcar dedup', async () => {
     prisma.clinic.findUnique.mockResolvedValueOnce({ id: 'clinic-A', status: 'SUSPENDED' });
     const result = await post(messageEvent(MSG_ID));
     expect(result).toEqual({ ok: true });
-    expect(bot.handleIncoming).not.toHaveBeenCalled();
+    expect(inbound.add).not.toHaveBeenCalled();
     expect(redis.set).not.toHaveBeenCalled();
   });
 
@@ -224,7 +231,121 @@ describe('WebhookController', () => {
   it('session desconocida → { ok: true } sin procesar', async () => {
     prisma.clinic.findUnique.mockResolvedValueOnce(null);
     await post(messageEvent('msg-5'));
-    expect(bot.handleIncoming).not.toHaveBeenCalled();
+    expect(inbound.add).not.toHaveBeenCalled();
+  });
+
+  /**
+   * B10: el webhook encola y responde 200 al instante. Antes esperaba a que el
+   * bot terminara —con el LLM de por medio, segundos— y WAHA reintentaba el
+   * webhook por timeout, procesando el mismo mensaje dos veces.
+   */
+  describe('cola bot-inbound (B10)', () => {
+    it('encola el mensaje con el nombre de job correcto y el payload completo', async () => {
+      await post(messageEvent(MSG_ID));
+
+      expect(inbound.add).toHaveBeenCalledTimes(1);
+      const [name, data] = inbound.add.mock.calls[0];
+      expect(name).toBe(BOT_INBOUND_JOB);
+      expect(data).toMatchObject({
+        clinicId: 'clinic-A',
+        chatId: FROM,
+        phone: `+${PHONE}`,
+        lid: null,
+        text: 'hola',
+      });
+    });
+
+    /**
+     * BullMQ RECHAZA un jobId con `:` (`Custom Id cannot contain :`, salvo el
+     * caso de exactamente 3 segmentos que mantiene por compat y está marcado
+     * para desaparecer). La clave de dedup tiene cuatro, así que usarla tal
+     * cual hacía que `add` lanzara en TODOS los mensajes de texto: 500 al
+     * webhook, WAHA reintentando contra un fallo determinista, y el paciente
+     * sin respuesta. No se detectó antes porque la Queue está mockeada.
+     */
+    it('el jobId no lleva `:` — BullMQ lo rechazaría', async () => {
+      await post(messageEvent(MSG_ID));
+      const [, , opts] = inbound.add.mock.calls[0];
+      expect(opts.jobId).toBeDefined();
+      expect(opts.jobId).not.toContain(':');
+      expect(opts.jobId).toMatch(/^waha-evt-[0-9a-f]{64}$/);
+    });
+
+    it('el jobId está acotado al tenant: dos clínicas no se suprimen mensajes', async () => {
+      await post(messageEvent(MSG_ID));
+      const first = inbound.add.mock.calls[0][2].jobId;
+
+      inbound.add.mockClear();
+      await post({
+        event: 'message',
+        session: 'clinic-b',
+        payload: { id: MSG_ID, from: FROM, body: 'hola', fromMe: false },
+      });
+      const second = inbound.add.mock.calls[0][2].jobId;
+
+      expect(second).not.toBe(first);
+    });
+
+    it('trunca el texto antes de que entre en Redis', async () => {
+      await post({
+        event: 'message',
+        session: 'clinic-a',
+        payload: { id: 'long-1', from: FROM, fromMe: false, body: 'a'.repeat(9000) },
+      });
+      const [, data] = inbound.add.mock.calls[0];
+      expect(data.text).toHaveLength(4000);
+    });
+
+    describe('rate-limit antes de encolar (ADR 0007)', () => {
+      it('pasado el tope por chat NO encola: sin esto se llena Redis', async () => {
+        redis.incr.mockResolvedValueOnce(16);
+        await post(messageEvent(MSG_ID));
+        expect(inbound.add).not.toHaveBeenCalled();
+      });
+
+      it('abierto el circuit breaker por clínica tampoco encola', async () => {
+        redis.incr.mockResolvedValueOnce(1).mockResolvedValueOnce(501);
+        await post(messageEvent(MSG_ID));
+        expect(inbound.add).not.toHaveBeenCalled();
+      });
+
+      it('Redis caído: fail-open, el mensaje se encola igual', async () => {
+        // La cota protege de un flood; quedarse sin bot por una caída de Redis
+        // es peor que el flood. Con la cola, además, descartar acá sería
+        // perder el mensaje del paciente sin dejar rastro.
+        redis.incr.mockRejectedValue(new Error('redis down'));
+
+        await post(messageEvent(MSG_ID));
+
+        expect(inbound.add).toHaveBeenCalled();
+      });
+
+      it('la cota se consulta ANTES del add, no después', async () => {
+        const order: string[] = [];
+        redis.incr.mockImplementation(async () => {
+          order.push('rate-limit');
+          return 1;
+        });
+        inbound.add.mockImplementation(async () => {
+          order.push('add');
+          return { id: 'job-1' };
+        });
+        await post(messageEvent(MSG_ID));
+        expect(order[0]).toBe('rate-limit');
+        expect(order[order.length - 1]).toBe('add');
+      });
+    });
+
+    it('sin payload.id encola sin jobId (no hay clave de dedup que usar)', async () => {
+      await post(messageEvent(undefined));
+      const [, , opts] = inbound.add.mock.calls[0];
+      expect(opts).toEqual({});
+    });
+
+    it('responde 200 sin esperar al bot', async () => {
+      const result = await post(messageEvent(MSG_ID));
+      expect(result).toEqual({ ok: true });
+    });
   });
 
   /**
@@ -236,7 +357,7 @@ describe('WebhookController', () => {
     it('audio: no llama al bot, registra [audio] y responde una vez', async () => {
       await post(mediaEvent({ type: 'ptt', hasMedia: true }));
 
-      expect(bot.handleIncoming).not.toHaveBeenCalled();
+      expect(inbound.add).not.toHaveBeenCalled();
       expect(prisma.conversation.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { clinicId_chatId: { clinicId: 'clinic-A', chatId: FROM } },
@@ -319,7 +440,7 @@ describe('WebhookController', () => {
       await post(
         mediaEvent({ type: 'image', hasMedia: true, body: 'quiero una cita' }),
       );
-      expect(bot.handleIncoming).not.toHaveBeenCalled();
+      expect(inbound.add).not.toHaveBeenCalled();
       expect(prisma.message.create).toHaveBeenCalledWith({
         data: {
           conversationId: 'convo-1',
@@ -354,7 +475,7 @@ describe('WebhookController', () => {
 
     it('body vacío sin type ni hasMedia → [mensaje sin texto], sin bot', async () => {
       await post(mediaEvent({ body: '   ' }));
-      expect(bot.handleIncoming).not.toHaveBeenCalled();
+      expect(inbound.add).not.toHaveBeenCalled();
       expect(prisma.message.create).toHaveBeenCalledWith({
         data: {
           conversationId: 'convo-1',
@@ -366,7 +487,7 @@ describe('WebhookController', () => {
 
     it('el type puede venir dentro de _data', async () => {
       await post(mediaEvent({ _data: { type: 'ptt' } }));
-      expect(bot.handleIncoming).not.toHaveBeenCalled();
+      expect(inbound.add).not.toHaveBeenCalled();
       expect(prisma.message.create).toHaveBeenCalledWith({
         data: { conversationId: 'convo-1', direction: 'IN', body: '[audio]' },
       });
@@ -374,14 +495,14 @@ describe('WebhookController', () => {
 
     it('texto normal sigue igual: va al bot y no registra ni responde aquí', async () => {
       await post(messageEvent(MSG_ID));
-      expect(bot.handleIncoming).toHaveBeenCalledTimes(1);
+      expect(inbound.add).toHaveBeenCalledTimes(1);
       expect(prisma.conversation.upsert).not.toHaveBeenCalled();
       expect(waha.sendText).not.toHaveBeenCalled();
     });
 
     it('type=chat explícito sigue yendo al bot', async () => {
       await post(mediaEvent({ type: 'chat', body: 'hola', hasMedia: false }));
-      expect(bot.handleIncoming).toHaveBeenCalledTimes(1);
+      expect(inbound.add).toHaveBeenCalledTimes(1);
       expect(waha.sendText).not.toHaveBeenCalled();
     });
 
@@ -491,7 +612,7 @@ describe('WebhookController', () => {
         await post(
           mediaEvent({ type: 'chat', hasMedia: true, body: 'quiero cita el martes' }),
         );
-        expect(bot.handleIncoming).toHaveBeenCalledTimes(1);
+        expect(inbound.add).toHaveBeenCalledTimes(1);
         expect(waha.sendText).not.toHaveBeenCalled();
       });
 
@@ -501,7 +622,7 @@ describe('WebhookController', () => {
           await post(mediaEvent({ type }));
           expect(prisma.conversation.upsert).not.toHaveBeenCalled();
           expect(waha.sendText).not.toHaveBeenCalled();
-          expect(bot.handleIncoming).not.toHaveBeenCalled();
+          expect(inbound.add).not.toHaveBeenCalled();
         },
       );
 
