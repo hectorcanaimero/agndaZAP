@@ -201,7 +201,7 @@ URL web: `{WEB_BASE_URL}/{locale}/agendar/{slug}/cita?t={token}`.
 |---|---|
 | `GET /appointments/manage/:token` | `{ appointment: { id, serviceId, serviceName, professionalId, professionalName, startAtISO, durationMin, status }, clinic: { name, address, timezone, locale }, patient: { name }, canCancel, canReschedule }`. 404 si token inválido/expirado o slug no coincide. |
 | `POST /appointments/manage/:token/cancel` | `{ status: 'CANCELADA' }`. 409 si el estado no permite cancelar. Cancela recordatorios. |
-| `POST /appointments/manage/:token/reschedule` body `{ startAtISO }` | `{ appointment: {…nueva…}, manageUrl }`. Transacción: crea la nueva cita (misma clínica, servicio, profesional, paciente; `source` heredado; `conversationId` heredado), cancela la vieja, cancela recordatorios viejos y programa los nuevos. 409 si el slot se ocupó. Emite token nuevo. |
+| `POST /appointments/manage/:token/reschedule` body `{ startAtISO }` | `{ appointment: {…misma cita, mismo id, nuevo startAt…}, manageUrl }`. **Mueve la cita in-place** reutilizando `SchedulingService.rescheduleAppointment` (misma semántica que el panel): reprograma recordatorios, no cambia de estado. 409 si el slot se ocupó. Emite token nuevo (TTL atado al nuevo `startAt`). Decidido 2026-09-11: crear+cancelar inflaba `CANCELADA` y diluía el no-show rate. La traza de reagendamientos (`rescheduleCount`) va como ítem aparte con migración (S6). |
 | Disponibilidad | La web reutiliza `GET /availability?serviceId&professionalId` existente. |
 
 Reglas: `canCancel = canReschedule = status ∈ {PENDIENTE, CONFIRMADA, EN_RIESGO} && startAt > now`.
@@ -249,10 +249,12 @@ prefiltro determinista. `maxTokens` 40.
    `reminders.processor.ts`. `RESCHEDULE` deja de cancelar recordatorios (B5).
 6. **B5** reagendar por chat: `REPROGRAMAR` con cita → FSM desde `ASK_SLOT` con
    `serviceId/professionalId` de la cita y `rescheduleOf: appointmentId` en `flowData`; en
-   `CONFIRM` usa `SchedulingService.reschedule` de M2-a.
+   `CONFIRM` usa `SchedulingService.rescheduleAppointment` (in-place, mismo id).
 7. **M3-b** cablear `AGRADECER` ("¡Con gusto! Aquí estoy si necesitas algo más.", sin LLM) y
    `CONSULTA_CITA` (responde desde `findUpcomingAppointment` con link de gestión) y pasar
    `context` al clasificador.
 
 ## Después (P2 y P3)
+- **S6** `Appointment.rescheduleCount Int @default(0)` (+ `lastRescheduledAt`), incrementado por `rescheduleAppointment` desde cualquier origen; señal de riesgo de no-show para dashboard y `check-risk`. Migración Prisma, PR aparte.
+
 M4, M5, M6, M7, B7 (bot) · B10, M8, M9 · M10 audio. Se reparten cuando P1 esté mergeado.
