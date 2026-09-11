@@ -77,6 +77,24 @@ Clínica inexistente o no `ACTIVE` → 404 en las tres.
 - `GET /api/public/scheduling/session/:token` → hidrata el form desde el token:
   `{ clinicSlug, name, phone, phoneEditable }`. 404 si no existe o venció (TTL 30 min).
 
+**Gestión de cita por link** (ADR 0020) — el paciente cancela o mueve su cita sin escribir.
+Token de tipo `manage` (distinto del de agendamiento): NO se consume al leerlo, TTL hasta
+`startAt` (suelo 30 min, techo 30 días), se invalida al cancelar y al reagendar.
+`canCancel = canReschedule = status ∈ {PENDIENTE, CONFIRMADA, EN_RIESGO} && startAt > now`.
+Rate-limit 10/min. Token inválido, expirado, de otra clínica o cita inexistente → **el mismo
+404**, para no confirmarle nada a quien pruebe tokens.
+- `GET /api/public/clinics/:slug/appointments/manage/:token` →
+  `{ appointment: { id, serviceId, serviceName, professionalId, professionalName, startAtISO,
+  durationMin, status }, clinic: { name, address, timezone, locale }, patient: { name },
+  canCancel, canReschedule }`. Del paciente solo sale el nombre: nunca el teléfono.
+- `POST /api/public/clinics/:slug/appointments/manage/:token/cancel` → `{ status: 'CANCELADA' }`.
+  Cancela los recordatorios. Idempotente. 409 si el estado ya no lo permite.
+- `POST /api/public/clinics/:slug/appointments/manage/:token/reschedule` body `{ startAtISO }`
+  → `{ appointment: {…}, manageUrl }`. **Mueve la cita in-place (mismo `id`)**: crear una
+  nueva y cancelar la vieja dejaría una fila `CANCELADA` por reagendamiento y el no-show rate
+  se calcula sobre `ATENDIDA + NO_SHOW + CANCELADA`. 409 si el slot se ocupó. La web reutiliza
+  el `GET /availability` de arriba para ofrecer horarios.
+
 ### Invitaciones (público)
 - `GET /api/public/invitations/:token` → valida la invitación (existe, no expirada, no aceptada).
 - `POST /api/public/invitations/:token/accept` → fija password y activa la cuenta (204).
@@ -123,6 +141,10 @@ Clínica inexistente o no `ACTIVE` → 404 en las tres.
     ni `wahaSession`/`autoConfirm`.
 - `GET /api/public/clinics/:slug/availability?serviceId&professionalId&from&days` → `Slot[]`.
 - `POST /api/public/clinics/:slug/appointments` → crea cita `source=PUBLIC` (honeypot + consent).
+  Devuelve `{ id, startAt, endAt, status, manageUrl? }`. `manageUrl` es el link de gestión
+  (ADR 0020) para que `/gracias` ofrezca cancelar o cambiar horario; se omite si no se pudo
+  emitir el token (fail-open: perder el link no puede costar la cita). La respuesta **nunca**
+  incluye `patientCreated`: diría si ese teléfono ya era paciente de la clínica.
 
 ### Dashboard
 - `GET /api/dashboard/metrics` → no-show rate, citas por estado, confirmaciones, tendencia.

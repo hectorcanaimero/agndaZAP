@@ -65,3 +65,83 @@ describe('RateLimit guard — clave por scope + slug + ip', () => {
     ).rejects.toMatchObject({ status: 429 });
   });
 });
+
+/**
+ * Cubo por token (ADR 0020). El `GET manage` lo consume un server component por
+ * SSR: si el cubo fuera por IP, la que llega es la del servidor Next y la
+ * comparten todos los pacientes de la clínica.
+ */
+describe('RateLimit — dimensión por token', () => {
+  function makeCtx(params: Record<string, string>, ip = '10.0.0.5') {
+    return {
+      switchToHttp: () => ({
+        getRequest: () => ({ params, ip, headers: {} }),
+        getResponse: () => ({ setHeader: jest.fn() }),
+      }),
+    } as any;
+  }
+
+  function makeRedis(count = 1) {
+    const incr = jest.fn();
+    const pipeline = {
+      incr,
+      expire: jest.fn(),
+      exec: jest.fn().mockResolvedValue([[null, count]]),
+    };
+    return {
+      redis: { pipeline: jest.fn(() => pipeline) } as any,
+      keyOf: () => incr.mock.calls[0]?.[0] as string,
+    };
+  }
+
+  it('dos pacientes distintos detrás de la MISMA IP no comparten cubo', async () => {
+    // Es el caso real del SSR: misma IP (el servidor Next), tokens distintos.
+    const a = makeRedis();
+    const b = makeRedis();
+    const Guard = RateLimit(30, 'manage-read', { by: 'token' });
+
+    await new (Guard as any)(a.redis).canActivate(
+      makeCtx({ slug: 'demo', token: 'a'.repeat(32) }),
+    );
+    await new (Guard as any)(b.redis).canActivate(
+      makeCtx({ slug: 'demo', token: 'b'.repeat(32) }),
+    );
+
+    expect(a.keyOf()).not.toBe(b.keyOf());
+  });
+
+  it('el token NO va en claro en la clave de Redis', async () => {
+    // Una clave de Redis acaba en slowlog, en dumps y en MONITOR; el token es
+    // una credencial que permite ver y cancelar la cita.
+    const { redis, keyOf } = makeRedis();
+    const Guard = RateLimit(30, 'manage-read', { by: 'token' });
+    const token = 'SuperSecretToken123456789012';
+
+    await new (Guard as any)(redis).canActivate(
+      makeCtx({ slug: 'demo', token }),
+    );
+
+    expect(keyOf()).not.toContain(token);
+    expect(keyOf()).toContain('manage-read:demo');
+  });
+
+  it('sin token en la ruta cae a la IP en vez de a un cubo compartido', async () => {
+    const { redis, keyOf } = makeRedis();
+    const Guard = RateLimit(30, 'manage-read', { by: 'token' });
+
+    await new (Guard as any)(redis).canActivate(makeCtx({ slug: 'demo' }));
+
+    expect(keyOf()).toContain('10.0.0.5');
+  });
+
+  it('por defecto (sin opciones) sigue siendo por IP', async () => {
+    const { redis, keyOf } = makeRedis();
+    const Guard = RateLimit(10, 'manage-write');
+
+    await new (Guard as any)(redis).canActivate(
+      makeCtx({ slug: 'demo', token: 'c'.repeat(32) }),
+    );
+
+    expect(keyOf()).toContain('10.0.0.5');
+  });
+});

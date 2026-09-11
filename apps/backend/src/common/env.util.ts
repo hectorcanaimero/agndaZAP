@@ -18,6 +18,12 @@ export const REQUIRED_PROD_ENV = [
   'JWT_SECRET',
   // Sin Sentry quedamos ciegos frente a errores en producción.
   'SENTRY_DSN',
+  // Los links que mandamos a pacientes (agendamiento por WhatsApp y gestión de
+  // cita, ADR 0018 y 0020) se arman con esta base. Sin ella caían al default
+  // `http://localhost:3000` y salían rotos hacia afuera; ahora además viajan en
+  // el cuerpo de una respuesta pública. Mejor no arrancar que mandar links
+  // muertos a pacientes reales.
+  'WEB_BASE_URL',
 ] as const;
 
 /** Prefijos de los placeholders del repo (`.env.example`, defaults de dev). */

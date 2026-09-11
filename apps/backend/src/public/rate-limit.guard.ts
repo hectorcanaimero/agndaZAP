@@ -9,6 +9,7 @@ import {
   mixin,
   Type,
 } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import Redis from 'ioredis';
 import { extractIp, MinimalRequest } from '../common/extract-ip';
 
@@ -61,9 +62,30 @@ export const REDIS_CLIENT = Symbol('REDIS_CLIENT');
  * - Detrás de Cloudflare/nginx/ALB → setear `TRUST_PROXY=true`. Sólo entonces
  *   confiamos en el header y tomamos la primera IP (la del cliente original).
  */
+/**
+ * Opciones de `RateLimit`.
+ *
+ * `by: 'token'` cambia la dimensión del cubo: en vez de la IP usa el parámetro
+ * `:token` de la ruta (hasheado). Existe para los endpoints que un **server
+ * component** consume por SSR: ahí la IP que ve el guard es la del servidor
+ * Next, compartida por TODOS los pacientes de la clínica, así que un cubo por
+ * IP se agota en cuanto sale una tanda de recordatorios y devuelve 429 a
+ * pacientes legítimos que solo querían ver su cita.
+ *
+ * Limitar por token es aceptable en un endpoint de LECTURA cuyo token tiene
+ * ~192 bits de entropía: no es iterable, así que el cubo no está para frenar
+ * fuerza bruta sino para que nadie martillee una misma cita. En los endpoints
+ * de ESCRITURA, que sí salen del navegador del paciente, el cubo por IP es el
+ * correcto y se mantiene.
+ */
+export interface RateLimitOptions {
+  by?: 'ip' | 'token';
+}
+
 export function RateLimit(
   limit: number,
   scope?: string,
+  options: RateLimitOptions = {},
 ): Type<CanActivate> {
   @Injectable()
   class RateLimitGuardMixin implements CanActivate {
@@ -91,7 +113,20 @@ export function RateLimit(
       // sprint 2). Ahora cada endpoint tiene su propio bucket por slug e IP.
       const slug = req.params?.slug as string | undefined;
       const key1 = [scope, slug].filter(Boolean).join(':') || 'default';
-      const ip = extractIp(req, this.trustProxy);
+
+      // Dimensión del cubo. Con `by: 'token'` el token va HASHEADO: es una
+      // credencial, y una clave de Redis (que acaba en logs de slowlog, en
+      // dumps y en `MONITOR`) no es sitio para ella.
+      let dimension: string;
+      if (options.by === 'token') {
+        const token = req.params?.token as string | undefined;
+        dimension = token
+          ? `t:${createHash('sha256').update(token).digest('hex').slice(0, 16)}`
+          : `ip:${extractIp(req, this.trustProxy)}`;
+      } else {
+        dimension = extractIp(req, this.trustProxy);
+      }
+      const ip = dimension;
 
       // Bucket de 60s. Dos requests dentro del mismo minuto caen a la misma
       // clave; al pasar a otro minuto entramos a un bucket nuevo (con TTL fresco).

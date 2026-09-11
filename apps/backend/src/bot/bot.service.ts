@@ -1142,7 +1142,7 @@ export class BotService {
     }
 
     try {
-      const appt = await this.scheduling.createAppointment({
+      const { appointment: appt } = await this.scheduling.createAppointment({
         clinicId: clinic.id,
         // Solo pasamos `name` si lo recolectamos en ASK_NAME. Si el paciente ya
         // existía con nombre, no lo mandamos → el upsert respeta el valor previo.
