@@ -79,6 +79,11 @@ describe('SchedulingService.createAppointment', () => {
       professional: {
         findFirst: jest.fn().mockResolvedValue(makeProfessional()),
       },
+      conversation: {
+        // Por defecto la conversación SÍ es de esta clínica. Los tests de
+        // cross-tenant la ponen a null.
+        findFirst: jest.fn().mockResolvedValue({ id: 'convo-1' }),
+      },
       patient: {
         // Por defecto el paciente NO existe → camino `create` y
         // `patientCreated: true`. Los tests que necesitan uno preexistente
@@ -255,6 +260,96 @@ describe('SchedulingService.createAppointment', () => {
     expect(appt.id).toBe('appt-existing');
     expect(prisma.appointment.create).not.toHaveBeenCalled();
     expect(reminders.scheduleForAppointment).not.toHaveBeenCalled();
+  });
+
+  // ── S22: el conversationId también se valida contra el tenant ──
+  it('BOT_WEB con conversación de OTRA clínica → 400, y no crea la cita', async () => {
+    // Una cita atada a la conversación de otra clínica dejaría que ese chat
+    // viera y gestionara la cita de un paciente ajeno: `findUpcomingAppointment`
+    // resuelve por `appointment.conversationId`.
+    prisma.conversation.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.createAppointment({
+        clinicId: 'clinic-A',
+        patient: { phone: '+584141234567', name: 'Ana' },
+        serviceId: 'svc-1',
+        professionalId: 'prof-1',
+        startAtISO,
+        source: 'BOT_WEB',
+        conversationId: 'convo-de-otra-clinica',
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(prisma.appointment.create).not.toHaveBeenCalled();
+  });
+
+  it('la conversación se busca SIEMPRE acotada por clinicId', async () => {
+    await service.createAppointment({
+      clinicId: 'clinic-A',
+      patient: { phone: '+584141234567', name: 'Ana' },
+      serviceId: 'svc-1',
+      professionalId: 'prof-1',
+      startAtISO,
+      source: 'BOT_WEB',
+      conversationId: 'convo-1',
+    });
+
+    expect(prisma.conversation.findFirst).toHaveBeenCalledWith({
+      where: { id: 'convo-1', clinicId: 'clinic-A' },
+      select: { id: true },
+    });
+  });
+
+  it('BOT_WEB con conversación válida: la ata a la cita', async () => {
+    await service.createAppointment({
+      clinicId: 'clinic-A',
+      patient: { phone: '+584141234567', name: 'Ana' },
+      serviceId: 'svc-1',
+      professionalId: 'prof-1',
+      startAtISO,
+      source: 'BOT_WEB',
+      conversationId: 'convo-1',
+    });
+
+    expect(prisma.appointment.create.mock.calls[0][0].data.conversationId).toBe(
+      'convo-1',
+    );
+  });
+
+  it.each(['PUBLIC', 'BOT'])(
+    'source %s ignora el conversationId sin consultar nada',
+    async (source) => {
+      // Comportamiento previo que no cambia: fuera de BOT_WEB el id se descarta
+      // en silencio para no crear FKs espurias si un caller lo pasa por error.
+      await service.createAppointment({
+        clinicId: 'clinic-A',
+        patient: { phone: '+584141234567', name: 'Ana' },
+        serviceId: 'svc-1',
+        professionalId: 'prof-1',
+        startAtISO,
+        source: source as 'PUBLIC' | 'BOT',
+        conversationId: 'convo-1',
+      });
+
+      expect(prisma.conversation.findFirst).not.toHaveBeenCalled();
+      expect(
+        prisma.appointment.create.mock.calls[0][0].data.conversationId,
+      ).toBeNull();
+    },
+  );
+
+  it('BOT_WEB sin conversationId no consulta ni ata nada', async () => {
+    await service.createAppointment({
+      clinicId: 'clinic-A',
+      patient: { phone: '+584141234567', name: 'Ana' },
+      serviceId: 'svc-1',
+      professionalId: 'prof-1',
+      startAtISO,
+      source: 'BOT_WEB',
+    });
+
+    expect(prisma.conversation.findFirst).not.toHaveBeenCalled();
   });
 
   it('marca consent=true cuando el paciente lo confirma en el input', async () => {
