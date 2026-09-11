@@ -59,6 +59,16 @@ atiende la bandeja necesita ver que entró un audio, o el hilo queda con un
 hueco inexplicable. Lo que `HUMAN` corta es el aviso automático. Mismo orden
 que en `BotService.handleIncoming` (upsert primero, corte por `HUMAN` después).
 
+> **Regla común con B9** (PR #44, follow-ups), por si alguien compara los dos y
+> le parece que se contradicen: con `HUMAN` **no sale nada automático hacia el
+> paciente, y en la bandeja se registra exactamente lo que ocurrió de verdad**.
+> Aquí el paciente sí mandó algo, así que el `Message IN` va: hay un evento real
+> que el operador tiene que ver. En B9 lo que se suprime es un mensaje
+> *saliente* que el sistema iba a generar solo, y ahí no se registra nada —
+> guardar un `OUT` que nunca se envió sería peor, porque el operador vería en el
+> hilo un mensaje que el paciente jamás recibió. Lo que queda en B9 es una línea
+> de log para poder explicarlo después.
+
 **Throttle fail-closed, al revés que el dedup.** El aviso "solo leo texto" sale
 una vez cada 6 h por conversación (`SET NX EX 21600` sobre
 `bot:media-notice:{clinicId}:{chatId}`). Si Redis no responde, **no** se
