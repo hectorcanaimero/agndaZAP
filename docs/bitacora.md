@@ -823,3 +823,23 @@
 - El bot pasa a distinguir los dos 409 de `rescheduleAppointment` por **tipo**
   (`RescheduleLimitExceededException`, S25) en vez de por el texto del mensaje. Los tests también:
   reescribir el copy ya no puede romper la lógica en silencio.
+
+## 2026-09-11 — M7: el handoff deja de mentir y ya no es un callejón sin salida
+- **Expectativa real**: "Enseguida te atiende una persona" a las 22:00 de un sábado es mentira, y
+  una que el paciente descubre esperando. Fuera del horario de `BusinessHour` el bot dice cuándo
+  responden, con el mismo texto que el bloque de hechos del RAG. Sin horario cargado, mensaje
+  genérico: no prometemos un horario que nadie configuró.
+- **Retorno automático**: `NEEDS_HUMAN` silenciaba al bot hasta que alguien liberara la
+  conversación desde el panel. Una derivación un viernes a las 21:00 se quedaba muda hasta el
+  lunes. Nueva cola `handoff-timeout`: a las 4 h, si nadie la tomó, avisa al paciente y devuelve
+  el control al bot, que al menos puede agendar.
+- El worker es **no-op si el estado ya no es `NEEDS_HUMAN`**, así que liberar desde el panel no
+  necesita cancelar el job: el estado en DB es la única fuente de verdad y un job tardío no puede
+  pisar una conversación que ya está en manos de una persona.
+- El estado va también en el `where` del update, para no pisar a quien la tomó entre la lectura y
+  la escritura.
+- Se devuelve el control **antes** de mandar el aviso: si el `sendText` falla, la conversación no
+  puede quedarse muda para siempre por un error de red.
+- El formateo del horario se extrae a `common/business-hours.util.ts`, compartido con
+  `ClinicFactsService`. Dos redacciones distintas del mismo horario en la misma conversación
+  serían peor que no darlo.
