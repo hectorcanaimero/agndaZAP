@@ -413,7 +413,11 @@ export class AppointmentsController {
         'consent es obligatorio al crear cita desde el panel',
       );
     }
-    return this.scheduling.createAppointment({
+    // Desestructuramos: `createAppointment` devuelve `{ appointment,
+    // patientCreated }` y `patientCreated` es de uso interno (lo consume el
+    // bot). Devolverlo acá cambiaría el contrato de esta API y filtraría si el
+    // teléfono ya era paciente de la clínica.
+    const { appointment } = await this.scheduling.createAppointment({
       clinicId: scope.clinicId,
       patient: {
         phone: normalizedPhone,
@@ -429,6 +433,7 @@ export class AppointmentsController {
       // pública (creación explícita, sin dedupe). Documentado en el CRUD MD.
       source: 'PUBLIC',
     });
+    return appointment;
   }
 
   /**

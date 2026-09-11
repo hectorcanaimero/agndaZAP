@@ -116,9 +116,27 @@ sin exponer el identificador real.
   hasta post-piloto (agrega complejidad de multi-tenant config).
 - Si el cap por chat molesta a pacientes reales, subir a 20 pero NO a 30 —
   arriba de eso el vector económico se pone caro.
-- Ambos caps son constantes de clase en `BotService`:
-  - `PER_CHAT_LIMIT = 15`
-  - `PER_CLINIC_HOURLY_LIMIT = 500`
+- Ambos caps viven en `apps/backend/src/bot/bot-rate-limit.ts`:
+  - `BOT_PER_CHAT_LIMIT = 15`
+  - `BOT_PER_CLINIC_HOURLY_LIMIT = 500`
+
+## Implementación (actualizado 2026-09-11)
+
+La lógica está en un único módulo, `bot/bot-rate-limit.ts`, y la consumen los dos
+caminos de entrada:
+
+- `BotService.handleIncoming` → `scope: 'bot'` (mensajes de texto).
+- `WebhookController.withinRateLimit` → `scope: 'media'` (adjuntos, que no pasan
+  por el bot).
+
+Las **claves de Redis y los límites son los mismos** para ambos: el presupuesto es
+compartido y cada mensaje entrante se cuenta una sola vez. `scope` solo etiqueta el
+log, para poder distinguir en observabilidad qué camino disparó el corte.
+
+Antes el bloque estaba duplicado en los dos archivos, con el riesgo de que alguien
+ajustara un cap en un sitio y no en el otro. El hash del `chatId` en logs quedó
+unificado en 12 hex (antes el bot usaba 8 y el webhook 12, así que las dos mitades
+de una misma conversación no se correlacionaban con un grep).
 
 ## Métricas a monitorear (post-piloto)
 

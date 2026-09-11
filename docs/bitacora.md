@@ -1,5 +1,13 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-11 — M2-a: gestión de cita por link (rama `feat/cita-gestion-por-link-api`)
+- **Qué**: backend para que el paciente vea, cancele o mueva su cita desde `/agendar/{slug}/cita?t={token}`, sin escribir por WhatsApp. Token `manage` en Redis (no se consume al leerlo, TTL derivado de `startAt`), `SchedulingService.cancelByPatient`, tres endpoints públicos con rate-limit y `manageUrl` en la respuesta de creación. Ver [[adr/0020-gestion-cita-por-link]].
+- **Decisión que cambió el contrato**: el plan pedía que reagendar creara una cita nueva y cancelara la vieja. Se descartó porque el no-show rate se calcula sobre `ATENDIDA + NO_SHOW + CANCELADA`: cada reagendamiento habría inflado el denominador y **diluido hacia abajo la métrica estrella del producto**, justo cuando la feature funcionara bien. Se mueve in-place reusando `rescheduleAppointment`. La traza de reagendamientos va aparte como S6 (`rescheduleCount`), sin tocar el enum de estados.
+- **Segunda desviación del contrato**: el rate-limit iba a ser por token+ip. Se dejó por `scope:slug:ip` porque limitar por token lo vuelve inútil — cada token probado estrenaría su propio cupo, que es lo que necesita quien quiere iterar.
+- **Cambio de firma**: `createAppointment` pasa a devolver `{ appointment, patientCreated }` (lo consume la sesión A en S5). Los tres callers actualizados. `patientCreated` **no sale nunca** al borde público: diría si un teléfono ya es paciente de la clínica, o sea un oráculo para enumerar pacientes. El dato se calcula con `create` + captura de P2002 en vez de deducirlo del `findUnique`, que mentiría bajo concurrencia.
+- **Tests**: 980 backend verdes, `tsc --noEmit` limpio. Cobertura nueva en `scheduling-session.service.spec.ts` (TTL, suelo/techo, aislamiento entre los dos tipos de token), `scheduling.service.spec.ts` (cancelación, idempotencia, estados terminales, carrera del patientCreated) y `public.controller.spec.ts` (los tres endpoints, multi-tenant, no filtrar teléfono ni `patientCreated`).
+- De paso: `Elegí otro` → `Elige otro` en el 409 del endpoint público, por [[notas/2026-09-10-tono-espanol-neutro]].
+
 ## 2026-09-11 — B9: el follow-up de satisfacción perdía el score (rama `fix/follow-up-upsert-conversation`)
 - **Bug** (ítem B9 de [[analisis/2026-09-11-chatbot-analisis-tecnico]], ya anotado como deuda el 2026-09-09: "follow-up sin Conversation"): `send-follow-up` mandaba el prompt "1-5" por WhatsApp pero solo marcaba `flowStep=AWAITING_NPS_SCORE` dentro de un `if (convo)`. Un paciente que agendó por la página pública y nunca escribió por WhatsApp no tiene `Conversation`, así que el prompt salía igual y su "5" entraba al bot sin `flowStep`: caía al clasificador LLM, el score se perdía y el paciente recibía un fallback sin sentido. Silencioso — no había error en logs.
 - **Fix**: la conversación se resuelve siempre. Primero `findFirst` por `(clinicId, phone)`; si no hay, `upsert` por la clave única `(clinicId, chatId)` con el id canónico `<digitos>@c.us`. Luego `flowStep` y `Message OUT` se escriben sin condicional.
@@ -605,3 +613,12 @@
   que la web ya contempla: reagendar devuelve la cita a `PENDIENTE` (limpia `confirmedAt`) y hay un
   tope de reagendamientos **del paciente**, cuyo `canReschedule` actualizado viene en la respuesta
   del POST — sin usarlo, quien gastaba su último cambio seguía viendo el botón.
+## 2026-09-11 — M4: navegación de horarios en la FSM
+- "0. Ver más horarios" avanza la ventana 7 días (`flowData.slotWindowCount`), con tope de 4
+  ventanas y después el link tokenizado. Sin resetear la FSM en ningún caso.
+- "Cualquier profesional" como última opción de `ASK_PROFESSIONAL`: mezcla los horarios de todos
+  y fija el `professionalId` al elegir el slot (`offeredProfessionalIds`, paralelo a `offeredSlots`).
+- Preferencia del mismo mensaje ("1, por la tarde", "el martes") filtra antes de mostrar; si queda
+  vacía lo dice y muestra todo.
+- Tras dos respuestas seguidas sin entender, ofrece el form web sin resetear la FSM.
+- Detalle y gotchas en [[notas/2026-09-11-fsm-navegacion-horarios]].

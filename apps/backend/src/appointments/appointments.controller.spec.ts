@@ -82,8 +82,8 @@ describe('AppointmentsController', () => {
     };
     scheduling = {
       createAppointment: jest.fn().mockResolvedValue({
-        id: 'appt-new',
-        status: 'PENDIENTE',
+        appointment: { id: 'appt-new', status: 'PENDIENTE' },
+        patientCreated: true,
       }),
       rescheduleAppointment: jest.fn().mockResolvedValue({
         id: 'appt-1',

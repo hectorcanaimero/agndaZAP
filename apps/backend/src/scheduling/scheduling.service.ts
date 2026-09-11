@@ -8,6 +8,7 @@ import {
 import {
   Appointment,
   AppointmentSource as PrismaAppointmentSource,
+  AppointmentStatus,
   Prisma,
 } from '@prisma/client';
 import { DateTime } from 'luxon';
@@ -58,7 +59,35 @@ export class SchedulingService {
     private readonly reminders: RemindersService,
   ) {}
 
-  async createAppointment(input: CreateAppointmentInput): Promise<Appointment> {
+  /**
+   * Estados desde los que el paciente puede cancelar o mover su cita.
+   * `ATENDIDA`, `CANCELADA` y `NO_SHOW` son terminales: ya pasó algo con esa
+   * cita y cambiarla falsearía el histórico.
+   */
+  static readonly PATIENT_MUTABLE_STATUSES: ReadonlyArray<AppointmentStatus> = [
+    'PENDIENTE',
+    'CONFIRMADA',
+    'EN_RIESGO',
+  ];
+
+  /**
+   * ¿El paciente puede todavía cancelar/mover esta cita? Regla única para que
+   * el `canCancel`/`canReschedule` que ve la web y la validación del servidor
+   * no puedan divergir.
+   */
+  static isPatientMutable(
+    appt: Pick<Appointment, 'status' | 'startAt'>,
+    now: Date = new Date(),
+  ): boolean {
+    return (
+      SchedulingService.PATIENT_MUTABLE_STATUSES.includes(appt.status) &&
+      appt.startAt.getTime() > now.getTime()
+    );
+  }
+
+  async createAppointment(
+    input: CreateAppointmentInput,
+  ): Promise<{ appointment: Appointment; patientCreated: boolean }> {
     const {
       clinicId,
       patient,
@@ -128,43 +157,99 @@ export class SchedulingService {
       throw new ConflictException('slot ya no está disponible');
     }
 
-    // 4) Idempotencia del bot: si el paciente ya tiene una cita futura activa
+    // 4) ¿Ya existe el paciente? Lo leemos para dos cosas:
+    //  - la idempotencia del bot (abajo),
+    //  - `patientCreated`, que informa al caller si el `Patient` nació en ESTA
+    //    llamada. Lo consume el bot para decidir si puede ligar la Conversation
+    //    al Patient: ligar a un paciente preexistente dejaría que un chat `@lid`
+    //    acabara viendo las citas de otra persona con el mismo teléfono.
+    const existingPatient = await this.prisma.patient.findUnique({
+      where: { clinicId_phone: { clinicId, phone: patient.phone } },
+      select: { id: true },
+    });
+
+    // Idempotencia del bot: si el paciente ya tiene una cita futura activa
     // para este servicio, la devolvemos en vez de crear duplicado. Regla solo
     // para BOT — el endpoint público es explícito y no debería auto-deduplicar.
-    if (source === 'BOT') {
-      const existingPatient = await this.prisma.patient.findUnique({
-        where: { clinicId_phone: { clinicId, phone: patient.phone } },
+    if (source === 'BOT' && existingPatient) {
+      const existingAppt = await this.prisma.appointment.findFirst({
+        where: {
+          clinicId,
+          patientId: existingPatient.id,
+          serviceId,
+          status: { in: ['PENDIENTE', 'CONFIRMADA', 'EN_RIESGO'] },
+          startAt: { gte: DateTime.now().toJSDate() },
+        },
+        orderBy: { startAt: 'asc' },
       });
-      if (existingPatient) {
-        const existingAppt = await this.prisma.appointment.findFirst({
-          where: {
-            clinicId,
-            patientId: existingPatient.id,
-            serviceId,
-            status: { in: ['PENDIENTE', 'CONFIRMADA', 'EN_RIESGO'] },
-            startAt: { gte: DateTime.now().toJSDate() },
-          },
-          orderBy: { startAt: 'asc' },
-        });
-        if (existingAppt) return existingAppt;
+      if (existingAppt) {
+        // OJO si algún día esta dedupe se extiende a `PUBLIC`/`BOT_WEB`:
+        // `public.controller.ts` emite un `manageUrl` sobre lo que devuelva
+        // este método. Devolver una cita preexistente a un caller público
+        // significaría entregarle a cualquiera que escriba el teléfono de otra
+        // persona un link de gestión sobre LA CITA DE ESA PERSONA. Hoy no pasa
+        // porque el endpoint público solo usa PUBLIC y BOT_WEB.
+        return { appointment: existingAppt, patientCreated: false };
       }
     }
 
-    // 5) Upsert del paciente por (clinicId, phone). Consent solo se prende: no
-    // pisamos un true previo. Si el nombre viene y no había, lo guardamos.
-    const patientRow = await this.prisma.patient.upsert({
-      where: { clinicId_phone: { clinicId, phone: patient.phone } },
-      create: {
-        clinicId,
-        phone: patient.phone,
-        name: patient.name ?? null,
-        consent: patient.consent ?? false,
-      },
-      update: {
-        ...(patient.name ? { name: patient.name } : {}),
-        ...(patient.consent === true ? { consent: true } : {}),
-      },
-    });
+    // 5) Alta o actualización del paciente por (clinicId, phone). Consent solo
+    // se prende: no pisamos un true previo. Si el nombre viene y no había, lo
+    // guardamos.
+    //
+    // No usamos `upsert` porque necesitamos saber con certeza si insertamos:
+    // un upsert no lo distingue, y deducirlo del `findUnique` de arriba sería
+    // mentira bajo concurrencia (dos requests del mismo teléfono a la vez
+    // reportarían ambas `patientCreated: true`). Con `create` + captura del
+    // P2002 el dato es exacto: solo una de las dos gana el INSERT.
+    const patientUpdate = {
+      ...(patient.name ? { name: patient.name } : {}),
+      ...(patient.consent === true ? { consent: true } : {}),
+    };
+    let patientRow: { id: string };
+    let patientCreated = false;
+    if (existingPatient) {
+      patientRow = await this.prisma.patient.update({
+        where: { clinicId_phone: { clinicId, phone: patient.phone } },
+        data: patientUpdate,
+        select: { id: true },
+      });
+    } else {
+      try {
+        patientRow = await this.prisma.patient.create({
+          data: {
+            clinicId,
+            phone: patient.phone,
+            name: patient.name ?? null,
+            consent: patient.consent ?? false,
+          },
+          select: { id: true },
+        });
+        patientCreated = true;
+      } catch (e) {
+        // Comprobamos también QUÉ constraint saltó: si mañana `Patient` gana
+        // otro único (email, documento), un P2002 de ese otro mandaría a un
+        // `update` por `clinicId_phone` que no encontraría fila y moriría con
+        // P2025, enmascarando el error real.
+        const target = (e as Prisma.PrismaClientKnownRequestError)?.meta
+          ?.target;
+        const isPhoneConflict =
+          e instanceof Prisma.PrismaClientKnownRequestError &&
+          e.code === 'P2002' &&
+          (target === undefined ||
+            String(target).includes('phone'));
+        if (!isPhoneConflict) {
+          throw e;
+        }
+        // Carrera: otra request creó el paciente entre el findUnique y este
+        // insert. No lo creamos nosotros → `patientCreated` se queda en false.
+        patientRow = await this.prisma.patient.update({
+          where: { clinicId_phone: { clinicId, phone: patient.phone } },
+          data: patientUpdate,
+          select: { id: true },
+        });
+      }
+    }
 
     const initialStatus = clinic.autoConfirm ? 'CONFIRMADA' : 'PENDIENTE';
 
@@ -216,7 +301,75 @@ export class SchedulingService {
       );
     }
 
-    return appointment;
+    return { appointment, patientCreated };
+  }
+
+  /**
+   * Cancelación iniciada por el paciente desde el link de gestión (ADR 0020).
+   *
+   * Separada de la cancelación del panel a propósito: acá no hay usuario
+   * autenticado, la autorización la da el token, y por eso el estado se
+   * re-valida contra la DB en vez de confiar en lo que la web haya mostrado —
+   * entre que se pintó la página y se pulsó el botón, la clínica pudo marcar
+   * la cita como ATENDIDA o el horario pudo pasar.
+   *
+   * Idempotente: si la cita ya estaba CANCELADA devuelve la fila tal cual, sin
+   * tocar recordatorios ni `canceledAt`. Un doble click no es un error.
+   *
+   * @throws NotFoundException si la cita no existe o no es de esta clínica.
+   * @throws ConflictException si el estado ya no permite cancelar.
+   */
+  async cancelByPatient(input: {
+    clinicId: string;
+    appointmentId: string;
+  }): Promise<Appointment> {
+    const { clinicId, appointmentId } = input;
+
+    // La condición va DENTRO del UPDATE, no en un `findFirst` previo: entre la
+    // lectura y la escritura la recepcionista puede marcar la cita ATENDIDA
+    // desde el panel, y un update incondicional la pisaría. Eso dejaría una
+    // transición ATENDIDA → CANCELADA que `ALLOWED_TRANSITIONS` declara
+    // imposible, con el `outcome` colgando y el no-show rate contaminado.
+    const { count } = await this.prisma.appointment.updateMany({
+      where: {
+        id: appointmentId,
+        clinicId,
+        status: { in: [...SchedulingService.PATIENT_MUTABLE_STATUSES] },
+        startAt: { gt: new Date() },
+      },
+      data: { status: 'CANCELADA', canceledAt: new Date() },
+    });
+
+    if (count === 0) {
+      // No se canceló: hay que distinguir por qué. Esta lectura ya no es una
+      // carrera — la escritura no ocurrió.
+      const appt = await this.prisma.appointment.findFirst({
+        where: { id: appointmentId, clinicId },
+      });
+      if (!appt) throw new NotFoundException('cita no encontrada');
+      // Doble click o reintento: ya estaba cancelada. No es un error.
+      if (appt.status === 'CANCELADA') return appt;
+      throw new ConflictException('esta cita ya no se puede cancelar');
+    }
+
+    const updated = await this.prisma.appointment.findFirstOrThrow({
+      where: { id: appointmentId, clinicId },
+    });
+
+    // Los recordatorios de una cita cancelada solo pueden hacer daño: el
+    // paciente recibiría un "confirma tu cita" de algo que ya canceló.
+    // Fail-open igual que en el alta: la cancelación ya está persistida y es
+    // lo que importa; un recordatorio huérfano se detecta por el log.
+    try {
+      await this.reminders.cancelForAppointment(appointmentId);
+    } catch (e) {
+      this.logger.error(
+        `No se pudieron cancelar recordatorios de ${appointmentId}: ${e}`,
+      );
+    }
+
+    this.logger.log(`appointment canceled by patient apptId=${appointmentId}`);
+    return updated;
   }
 
   /**
