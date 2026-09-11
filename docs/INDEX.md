@@ -77,6 +77,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[notas/2026-09-11-source-map-stack-overflow|2026-09-11 — ts-jest: mockear `Math.random` rompe el reporte de fallos con un RangeError opaco]]
 - [[notas/2026-09-11-conversation-chatid-canonico|2026-09-11 — `Conversation.chatId`: formato canónico y por qué no se puede hacer upsert a ciegas]]
 - [[notas/2026-09-11-waha-mensajes-sin-texto|2026-09-11 — WAHA: mensajes sin texto (audio, imagen, sticker) y cómo detectarlos]]
+- [[notas/2026-09-11-gestion-cita-por-link-web|2026-09-11 — Gestión de cita por link: decisiones de la web (M2-b)]]
 
 ## Análisis
 - [[analisis/2026-09-11-chatbot-analisis-tecnico|2026-09-11 — Análisis técnico del asistente de WhatsApp]] — premisas, bugs (B1-B10), mejoras (M1-M10), seguimiento (S1-S5) y checklist por prioridad
