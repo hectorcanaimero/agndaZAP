@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { WahaService } from '../whatsapp/waha.service';
 import { REMINDERS_QUEUE } from './reminders.service';
 import { SchedulingSessionService } from '../scheduling/scheduling-session.service';
+import { botCopy } from '../bot/bot.messages';
 
 /**
  * Procesa los jobs de la cola de recordatorios.
@@ -136,14 +137,17 @@ export function createRemindersWorker(
         }
       }
 
+      // Copy en el idioma de la clínica (B7): hasta ahora `locale` solo
+      // cambiaba el formato de la fecha, así que una clínica `pt` recibía el
+      // recordatorio en español con la fecha en portugués.
+      const copy = botCopy(appt.clinic.locale);
       const text =
-        `Hola${appt.patient.name ? ' ' + appt.patient.name : ''}, reservaste una cita ` +
-        `de ${appt.service.name} en ${appt.clinic.name} para el ${when}. ¿Confirmas que vas?\n\n` +
-        `Responde *SÍ* para confirmar, *REAGENDAR* para cambiarla o *CANCELAR* si no puedes ir, ` +
-        `así liberamos el turno para otro paciente.` +
-        (manageUrl
-          ? `\n\nTambién puedes cambiarla o cancelarla aquí:\n${manageUrl}`
-          : '');
+        copy.reminder(
+          appt.patient.name ?? '',
+          appt.service.name,
+          appt.clinic.name,
+          when,
+        ) + (manageUrl ? copy.reminderManageLine(manageUrl) : '');
 
       await waha.sendText(appt.clinic.wahaSession, appt.patient.phone, text);
 

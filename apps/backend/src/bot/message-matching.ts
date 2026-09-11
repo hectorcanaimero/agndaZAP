@@ -8,6 +8,15 @@
  *
  * Todo lo que reciba un `normalized` espera texto ya pasado por
  * `normalizeText` (minúsculas, sin tildes, sin puntuación, espacios simples).
+ *
+ * **Las palabras clave son es + pt a la vez, no por idioma de la clínica**
+ * (B7). Entender de más no hace daño —un paciente de una clínica `pt` que
+ * escriba "sí" quiere decir que sí— y evita que el matching dependa de un
+ * campo que puede estar mal configurado. Lo que SÍ depende del idioma es lo
+ * que el bot RESPONDE: eso vive en `bot.messages.ts`.
+ *
+ * Como `normalizeText` quita las tildes, el portugués entra sin acentos:
+ * `não`→`nao`, `olá`→`ola`, `terça`→`terca`.
  */
 
 export type ReminderReplyAction = 'YES' | 'CANCEL' | 'RESCHEDULE';
@@ -20,6 +29,15 @@ export type ReminderReplyAction = 'YES' | 'CANCEL' | 'RESCHEDULE';
  * greedy no corte a la mitad.
  */
 const GREETING_PHRASES = [
+  // pt
+  'muito bom dia',
+  'bom dia',
+  'boa tarde',
+  'boa noite',
+  'tudo bem',
+  'tudo bom',
+  'como vai',
+  // es
   'muy buenos dias',
   'muy buenas tardes',
   'muy buenas noches',
@@ -38,7 +56,7 @@ const GREETING_PHRASES = [
 
 /** Saludos de una sola palabra (texto ya normalizado). */
 const GREETING_TOKEN_RE =
-  /^(hola+|holis|buenas|buenos|saludos|hey|hi|hello|ola|oi)$/u;
+  /^(hola+|holis|buenas|buenos|saludos|hey|hi|hello|ola+|oi+|oie|alo)$/u;
 
 /**
  * Palabras que indican que el paciente está pidiendo algo concreto, no
@@ -47,7 +65,7 @@ const GREETING_TOKEN_RE =
  * fraseo corto es el más común en WhatsApp (B1).
  */
 const CONTENT_RE =
-  /\b(agendar|agenda|agendo|agendame|reservar|reserva|turno|turnos|cita|citas|consulta|consultas|cupo|precio|precios|cuesta|cuestan|costo|cobran|valor|tarifa|horario|horarios|hora|horas|atienden|atiende|abren|abre|cierran|cierra|direccion|ubicacion|donde|cuando|cuanto|cuanta|cuantos|necesito|quiero|quisiera|puedo|podria|podrian|tienen|hay|disponible|disponibilidad|cancelar|reagendar|reprogramar|cambiar|mover|informacion|info|duele|dolor|urgencia|emergencia|presupuesto|pago|pagar|seguro)\b/u;
+  /\b(agendar|agenda|agendo|agendame|marcar|remarcar|reservar|reserva|turno|turnos|cita|citas|consulta|consultas|cupo|vaga|precio|precios|preco|precos|cuesta|cuestan|custa|costo|cobran|cobram|valor|tarifa|horario|horarios|hora|horas|atienden|atiende|atendem|atende|abren|abre|abrem|cierran|cierra|fecham|direccion|ubicacion|endereco|donde|onde|cuando|quando|cuanto|cuanta|cuantos|quanto|quantos|necesito|preciso|quiero|quero|quisiera|queria|puedo|posso|podria|podrian|poderia|tienen|tem|teem|hay|disponible|disponivel|disponibilidad|disponibilidade|cancelar|reagendar|reprogramar|cambiar|mudar|mover|informacion|informacao|info|duele|doi|dolor|dor|urgencia|emergencia|presupuesto|orcamento|pago|pagar|seguro|convenio)\b/u;
 
 /**
  * Palabras que delatan que el mensaje pide OTRA cosa, aunque empiece con un
@@ -56,7 +74,7 @@ const CONTENT_RE =
  * "sí, confirmo mi cita" es una confirmación legítima.
  */
 const OTHER_INTENT_RE =
-  /\b(agendar|agenda|agendo|reservar|reserva|turno|turnos|cupo|cancelar|anular|reagendar|reprogramar|cambiar|mover|precio|precios|cuesta|costo|cobran|horario|horarios|direccion|ubicacion|donde|cuando|cuanto|humano|persona|duele|dolor)\b/u;
+  /\b(agendar|agenda|agendo|marcar|reservar|reserva|turno|turnos|cupo|vaga|cancelar|anular|reagendar|reprogramar|remarcar|cambiar|mudar|mover|precio|precios|preco|precos|cuesta|custa|costo|cobran|cobram|horario|horarios|direccion|ubicacion|endereco|donde|onde|cuando|quando|cuanto|quanto|humano|persona|pessoa|duele|doi|dolor|dor)\b/u;
 
 /**
  * Cierre de cortesía. Whitelist estricta y anclada a propósito: preferimos no
@@ -68,7 +86,7 @@ const OTHER_INTENT_RE =
  * cuadrático si alguien llamara a esta función con texto crudo.
  */
 const CLOSING_RE =
-  /^(ok|okay|okey|listo|perfecto|excelente|genial|buenisimo|vale|dale|bueno|de acuerdo)? ?(muchas|muchisimas|mil)? ?gracias( (de nuevo|por (todo|la info|la informacion|tu ayuda|su ayuda)))?$/u;
+  /^(ok|okay|okey|listo|pronto|perfecto|perfeito|excelente|genial|otimo|buenisimo|vale|dale|bueno|beleza|blz|ta bom|de acuerdo)? ?(muchas|muchisimas|mil|muito|muitissimo)? ?(gracias|obrigad[oa]|valeu)( (de nuevo|de novo|por (todo|tudo|la info|la informacion|tu ayuda|su ayuda|a ajuda|sua ajuda)))?$/u;
 
 /**
  * Frases que sí son un pedido explícito de hablar con un humano.
@@ -79,7 +97,11 @@ const CLOSING_RE =
  */
 const HUMAN_ESCAPE_PHRASES = [
   'hablar con',
-  'falar com', // pt
+  'falar com',
+  'quero uma pessoa',
+  'preciso de uma pessoa',
+  'uma pessoa por favor',
+  'atendimento humano', // pt
   'quiero una persona',
   'necesito una persona',
   'una persona por favor',
@@ -224,13 +246,32 @@ export function isCourtesyClosing(normalized: string): boolean {
 export function parseReminderReply(
   normalized: string,
 ): ReminderReplyAction | null {
-  if (startsWithAny(normalized, ['si', 'confirmo', 'confirmar', 'ok', 'dale'])) {
+  if (
+    startsWithAny(normalized, [
+      'si',
+      'sim',
+      'confirmo',
+      'confirmar',
+      'ok',
+      'dale',
+      'beleza',
+      'blz',
+    ])
+  ) {
     return 'YES';
   }
-  if (startsWithAny(normalized, ['cancelar', 'cancela', 'cancelo', 'anular'])) {
+  if (
+    startsWithAny(normalized, [
+      'cancelar',
+      'cancela',
+      'cancelo',
+      'anular',
+      'desmarcar',
+    ])
+  ) {
     return 'CANCEL';
   }
-  if (startsWithAny(normalized, ['reagendar', 'reprogramar'])) {
+  if (startsWithAny(normalized, ['reagendar', 'reprogramar', 'remarcar'])) {
     return 'RESCHEDULE';
   }
   return null;
@@ -242,7 +283,7 @@ export function parseReminderReply(
  * `confirmo` / `confirmar` son verbos explícitos y pasan siempre.
  */
 export function isAmbiguousYes(normalized: string): boolean {
-  return startsWithAny(normalized, ['si', 'ok', 'dale']);
+  return startsWithAny(normalized, ['si', 'sim', 'ok', 'dale', 'beleza', 'blz']);
 }
 
 /** Aborta la FSM en curso. */
@@ -251,8 +292,11 @@ export function isFlowAbort(normalized: string): boolean {
     'cancelar',
     'cancela',
     'cancelo',
+    'desmarcar',
     'abortar',
     'salir',
+    'sair',
+    'parar',
   ]);
 }
 
@@ -294,6 +338,12 @@ const WEEKDAYS: Record<string, number> = {
   viernes: 5,
   sabado: 6,
   domingo: 7,
+  // pt — `segunda`/`terca` sin el "-feira", que es como se escribe en un chat.
+  segunda: 1,
+  terca: 2,
+  quarta: 3,
+  quinta: 4,
+  sexta: 5,
 };
 
 /**
@@ -306,14 +356,16 @@ const WEEKDAYS: Record<string, number> = {
 export function parseSlotPreference(normalized: string): SlotPreference | null {
   const pref: SlotPreference = {};
 
-  const morningPhrase = /\b(por|en|de|a) la manana\b|\bde manana\b|\btemprano\b/u;
-  const afternoonPhrase = /\b(por|en|de|a) la tarde\b|\bde tarde\b|\btarde\b/u;
+  const morningPhrase =
+    /\b(por|en|de|a) la manana\b|\bde manana\b|\btemprano\b|\bde manha\b|\bpela manha\b|\bcedo\b/u;
+  const afternoonPhrase =
+    /\b(por|en|de|a) la tarde\b|\bde tarde\b|\bde tarde\b|\ba tarde\b|\btarde\b/u;
   if (morningPhrase.test(normalized)) pref.period = 'manana';
   else if (afternoonPhrase.test(normalized)) pref.period = 'tarde';
 
-  if (!pref.period && /\bmanana\b/u.test(normalized)) {
+  if (!pref.period && /\bmanana\b|\bamanha\b/u.test(normalized)) {
     pref.relativeDay = 'manana';
-  } else if (/\bhoy\b/u.test(normalized)) {
+  } else if (/\bhoy\b|\bhoje\b/u.test(normalized)) {
     pref.relativeDay = 'hoy';
   } else if (pref.period === 'manana' && /\bmanana manana\b/u.test(normalized)) {
     pref.relativeDay = 'manana';
@@ -336,7 +388,7 @@ export function parseSlotPreference(normalized: string): SlotPreference | null {
  * profesional" — que es justo la palabra que usa la gente.
  */
 const ANY_CHOICE_RE =
-  /\b(cualquier|cualquiera|el que sea|la que sea|quien sea|me da igual|da igual|indiferente|sin preferencia|no tengo preferencia|el primero|lo antes posible)\b/u;
+  /\b(cualquier|cualquiera|qualquer|el que sea|la que sea|quien sea|o que for|tanto faz|me da igual|da igual|indiferente|sin preferencia|no tengo preferencia|sem preferencia|el primero|o primeiro|lo antes posible|o quanto antes)\b/u;
 
 export function isNoPreferenceChoice(normalized: string): boolean {
   return ANY_CHOICE_RE.test(normalized);

@@ -877,3 +877,18 @@
 - El formateo del horario se extrae a `common/business-hours.util.ts`, compartido con
   `ClinicFactsService`. Dos redacciones distintas del mismo horario en la misma conversación
   serían peor que no darlo.
+
+## 2026-09-11 — B7: el bot habla el idioma de la clínica
+- Todo el copy del bot y de los dos processors sale ahora de `bot/bot.messages.ts`, un
+  `Record<BotLocale, BotCopy>`. **Si falta una clave en `pt`, no compila** — la única forma de que
+  no vuelva a quedar a medias.
+- Antes `clinic.locale` solo cambiaba el formato de las fechas: una clínica `pt` recibía un bot en
+  español con las fechas en portugués.
+- **El matching es es + pt a la vez, no por idioma.** Entender de más no hace daño, y si el
+  `locale` está mal configurado el bot responde en el idioma equivocado (recuperable) en vez de
+  dejar de entender a sus pacientes (no recuperable).
+- El acoplamiento que importa: el copy pt dice "Responda *SIM*" y el parser tiene que entender
+  `sim`. Traducir el mensaje sin traducir las palabras clave haría que el paciente hiciera
+  exactamente lo que le pedimos y el bot no lo entendiera. Hay un test que fija esa correspondencia.
+- El override por tenant gana sobre el idioma: no traducimos lo que escribió un operador.
+- Detalle en [[notas/2026-09-11-bot-copy-es-pt]].

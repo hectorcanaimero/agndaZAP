@@ -14,7 +14,8 @@ import { REDIS_CLIENT } from '../public/rate-limit.guard';
 // Timeout individual por check en ms. Si un servicio cuelga más que esto,
 // se marca como false y NO bloquea la respuesta. Elegido 3s: menor al
 // interval de BetterStack (3 min) y suficiente para redes lentas del piloto.
-const CHECK_TIMEOUT_MS = 3000;
+/** Exportado para que el test del timeout no lo duplique y se desincronice. */
+export const CHECK_TIMEOUT_MS = 3000;
 
 // En prod NO exponemos el mensaje de error en el response — es un endpoint
 // público y un atacante podría inferir versiones o timing de servicios
