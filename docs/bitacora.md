@@ -735,3 +735,19 @@
   y lo vea ausente podría "restaurarlo" de buena fe.
 - La cobertura se muda al spec del webhook, que además gana el fail-open del camino de texto.
 - ADR 0007 actualizado.
+
+## 2026-09-11 — B5: reagendar por chat
+- `REAGENDAR` con cita deja la FSM en `ASK_SLOT` con el mismo servicio y profesional y
+  `rescheduleOf` en `flowData`; al confirmar, `rescheduleAppointment` mueve la cita **in-place**
+  (mismo id). El link de gestión queda como alternativa en el mismo mensaje.
+- Crear+cancelar habría inflado `CANCELADA` y diluido el no-show rate, que es la métrica del
+  producto. Ver la tabla de M2 en el plan del P1.
+- Dos bugs que los tests no cubrían y salieron al escribirlos:
+  - los dos re-ofrecimientos de horarios (`reofferSlotsAfterConflict` y `…AfterExpired`) perdían
+    `rescheduleOf`, así que tras un choque de horario la FSM creaba una cita nueva y el paciente
+    acababa con **dos**: la vieja sin mover y otra recién creada;
+  - el tope de movimientos del paciente llega como `ConflictException`, **el mismo tipo** que el
+    slot ocupado. Sin distinguirlos, alcanzar el tope re-ofrecía horarios en bucle infinito. Se
+    distingue por el mensaje, que no es ideal: si el service expone un error tipado, cambiarlo.
+- El tope por chat es el mismo que en el borde público (3): el canal no debe cambiar cuántas veces
+  puede moverla.

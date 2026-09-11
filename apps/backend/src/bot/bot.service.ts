@@ -81,6 +81,13 @@ interface FlowData {
   offeredProfessionalIds?: string[];
   /** Respuestas seguidas que no pudimos interpretar en el paso actual. */
   invalidCount?: number;
+  /**
+   * Id de la cita que se está MOVIENDO (B5). Con esto puesto, `CONFIRM` no
+   * crea una cita nueva: llama a `rescheduleAppointment`, que la mueve in-place
+   * conservando el id. Crear+cancelar inflaba `CANCELADA` y diluía el no-show
+   * rate — ver la tabla de M2 en el plan del P1.
+   */
+  rescheduleOf?: string;
 }
 
 type FlowConfirmAction = ReminderReplyAction | 'NO';
@@ -269,6 +276,13 @@ export class BotService {
 
   /** `id` sintético de la opción "Cualquier profesional" en ASK_PROFESSIONAL. */
   private static readonly ANY_PROFESSIONAL = '__any__';
+
+  /**
+   * Tope de veces que el paciente puede mover su cita. Mismo número que en el
+   * borde público (`PublicController.MAX_PATIENT_RESCHEDULES`): el canal no
+   * debería cambiar cuántas veces puede moverla.
+   */
+  private static readonly MAX_PATIENT_RESCHEDULES = 3;
 
   /**
    * Elige una variante al azar de un array. `Math.random` es suficiente:
@@ -1018,7 +1032,14 @@ export class BotService {
     data: FlowData,
     serviceId: string,
     professionalIds: string[],
-    opts: { windowCount?: number; preference?: SlotPreference | null } = {},
+    opts: {
+      windowCount?: number;
+      preference?: SlotPreference | null;
+      /** Encabezado propio (reagendado: el contexto no es "vamos bien"). */
+      intro?: string;
+      /** Línea extra al final, p. ej. el link de gestión como alternativa. */
+      footer?: string;
+    } = {},
   ): Promise<void> {
     const windowCount = opts.windowCount ?? 0;
     const anyProfessional = professionalIds.length > 1;
@@ -1089,7 +1110,7 @@ export class BotService {
       ? 'No me quedan horarios con esa preferencia, pero sí estos:'
       : windowCount > 0
         ? 'Estos son los horarios de la semana siguiente:'
-        : 'Vamos bien. Estos son los próximos horarios disponibles:';
+        : (opts.intro ?? 'Vamos bien. Estos son los próximos horarios disponibles:');
     const more =
       windowCount + 1 < BotService.MAX_SLOT_WINDOWS
         ? '\n0. Ver más horarios'
@@ -1098,7 +1119,7 @@ export class BotService {
       clinic.wahaSession,
       convo.chatId,
       convo.id,
-      `${intro}\n\n${labels.join('\n')}${more}\n\nResponde con el número del horario que prefieras.`,
+      `${intro}\n\n${labels.join('\n')}${more}\n\nResponde con el número del horario que prefieras.${opts.footer ?? ''}`,
     );
   }
 
@@ -1483,19 +1504,34 @@ export class BotService {
     }
 
     try {
-      const { appointment: appt } = await this.scheduling.createAppointment({
-        clinicId: clinic.id,
-        // Solo pasamos `name` si lo recolectamos en ASK_NAME. Si el paciente ya
-        // existía con nombre, no lo mandamos → el upsert respeta el valor previo.
-        patient: {
-          phone: convo.phone,
-          ...(data.patientName ? { name: data.patientName } : {}),
-        },
-        serviceId: data.serviceId,
-        professionalId: data.professionalId,
-        startAtISO: data.startAtISO,
-        source: 'BOT',
-      });
+      // B5: con `rescheduleOf` la cita se MUEVE, no se crea otra. Mismo id,
+      // mismo paciente; `rescheduleAppointment` reprograma los recordatorios y
+      // lleva el contador de movimientos. Crear+cancelar inflaría `CANCELADA` y
+      // diluiría el no-show rate.
+      const appt = data.rescheduleOf
+        ? await this.scheduling.rescheduleAppointment({
+            clinicId: clinic.id,
+            appointmentId: data.rescheduleOf,
+            startAtISO: data.startAtISO,
+            byPatient: true,
+            maxPatientReschedules: BotService.MAX_PATIENT_RESCHEDULES,
+          })
+        : (
+            await this.scheduling.createAppointment({
+              clinicId: clinic.id,
+              // Solo pasamos `name` si lo recolectamos en ASK_NAME. Si el
+              // paciente ya existía con nombre, no lo mandamos → el upsert
+              // respeta el valor previo.
+              patient: {
+                phone: convo.phone,
+                ...(data.patientName ? { name: data.patientName } : {}),
+              },
+              serviceId: data.serviceId,
+              professionalId: data.professionalId,
+              startAtISO: data.startAtISO,
+              source: 'BOT',
+            })
+          ).appointment;
 
       // S5: la cita nació de este chat y el teléfono es el de WAHA, así que
       // la conversación queda ligada al paciente. A partir de acá el
@@ -1522,7 +1558,11 @@ export class BotService {
 
       const when = this.formatWhen(data.startAtISO, clinic);
       const address = clinic.address ? `\nDirección: ${clinic.address}` : '';
-      const status = appt.status === 'CONFIRMADA' ? 'confirmada' : 'agendada';
+      const status = data.rescheduleOf
+        ? 'movida'
+        : appt.status === 'CONFIRMADA'
+          ? 'confirmada'
+          : 'agendada';
       // Link de gestión en el cierre: el paciente lo tiene a mano desde el
       // primer momento, sin tener que volver a escribir (M2-c).
       const manageUrl = await this.manageLink(clinic, appt);
@@ -1542,6 +1582,33 @@ export class BotService {
       );
     } catch (e) {
       if (e instanceof ConflictException) {
+        // `rescheduleAppointment` usa el MISMO tipo de excepción para dos cosas
+        // distintas: el slot ocupado y el tope de movimientos del paciente.
+        // Re-ofrecer horarios ante el tope sería un bucle infinito — el
+        // paciente elegiría otro y volvería a fallar igual.
+        //
+        // El discriminante es el mensaje, que no es ideal; si algún día el
+        // service expone un error tipado, hay que cambiarlo por eso.
+        if (/tope de reagendamientos/i.test((e as Error).message)) {
+          await this.resetFlow(convo.id);
+          const link = data.rescheduleOf
+            ? await this.manageLink(clinic, {
+                id: data.rescheduleOf,
+                clinicId: clinic.id,
+                startAt: new Date(data.startAtISO!),
+              })
+            : null;
+          await this.markNeedsHuman(convo.id);
+          await this.reply(
+            clinic.wahaSession,
+            convo.chatId,
+            convo.id,
+            `Ya moviste esta cita varias veces, así que prefiero que lo veas con una persona del equipo para no liarlo más. Te derivo con recepción.${
+              link ? `\n\nMientras tanto, aquí tienes el detalle de tu cita:\n${link}` : ''
+            }`,
+          );
+          return;
+        }
         // El slot se ocupó entre ASK_SLOT y CONFIRM. En vez de resetear la FSM,
         // re-listamos horarios y volvemos a ASK_SLOT — reduce fricción y evita
         // que el paciente tenga que arrancar de cero.
@@ -1618,12 +1685,17 @@ export class BotService {
 
     const offeredSlots = slots.map((s) => s.startAt.toISOString());
     const labels = slots.map((s, i) => `${i + 1}. ${this.slotLabel(s, clinic)}`);
-    // Preservamos serviceId, professionalId y patientName; descartamos el
-    // startAtISO viejo (ese era el que se acababa de ocupar).
+    // Preservamos serviceId, professionalId, patientName y `rescheduleOf`;
+    // descartamos el startAtISO viejo (ese era el que se acababa de ocupar).
+    //
+    // `rescheduleOf` es crítico: sin él, tras un choque de horario la FSM
+    // seguiría como si fuera una cita nueva y el paciente acabaría con DOS
+    // —la vieja sin mover y otra recién creada— en vez de con la suya movida.
     const nextData: FlowData = {
       serviceId: data.serviceId,
       professionalId: data.professionalId,
       ...(data.patientName ? { patientName: data.patientName } : {}),
+      ...(data.rescheduleOf ? { rescheduleOf: data.rescheduleOf } : {}),
       offeredSlots,
     };
     await this.prisma.conversation.update({
@@ -1684,10 +1756,13 @@ export class BotService {
 
     const offeredSlots = slots.map((s) => s.startAt.toISOString());
     const labels = slots.map((s, i) => `${i + 1}. ${this.slotLabel(s, clinic)}`);
+    // `rescheduleOf` viaja con el flujo: si no, tras un slot caducado la FSM
+    // crearía una cita nueva en vez de mover la que el paciente quería mover.
     const nextData: FlowData = {
       serviceId: data.serviceId,
       professionalId: data.professionalId,
       ...(data.patientName ? { patientName: data.patientName } : {}),
+      ...(data.rescheduleOf ? { rescheduleOf: data.rescheduleOf } : {}),
       offeredSlots,
     };
     await this.prisma.conversation.update({
@@ -1826,26 +1901,55 @@ export class BotService {
       return;
     }
 
-    // Reagendar por link: el paciente elige el horario nuevo en la web y la
-    // cita se mueve in-place. Ya NO cancelamos los recordatorios: la cita sigue
-    // en pie mientras no la mueva, y apagarlos aquí la dejaba sin red justo
-    // cuando más riesgo de no-show tiene (M2-c / B5).
+    // Reagendar por chat (B5): le ofrecemos los horarios del MISMO servicio y
+    // profesional aquí mismo, y el link de gestión como alternativa para quien
+    // prefiera ver un calendario. La cita se mueve in-place en CONFIRM.
+    //
+    // NO cancelamos los recordatorios: la cita sigue en pie mientras no la
+    // mueva, y apagarlos aquí la dejaba sin red justo cuando más riesgo de
+    // no-show tiene (M2-c).
     const link = await this.manageLink(clinic, appt);
-    if (!link) {
-      await this.markNeedsHuman(convo.id);
+    const footer = link
+      ? `\n\nO elígelo con calma aquí: ${link}`
+      : '';
+
+    if (!appt.serviceId || !appt.professionalId) {
+      // Cita sin servicio o profesional resolubles: no podemos listar horarios
+      // comparables, así que el link (o recepción) es el único camino honesto.
+      if (!link) {
+        await this.markNeedsHuman(convo.id);
+        await this.reply(
+          clinic.wahaSession,
+          convo.chatId,
+          convo.id,
+          'Te derivo con recepción para reagendar esa cita. No voy a moverla hasta que confirmes el nuevo horario.',
+        );
+        return;
+      }
       await this.reply(
         clinic.wahaSession,
         convo.chatId,
         convo.id,
-        'Te derivo con recepción para reagendar esa cita. No voy a moverla hasta que confirmes el nuevo horario.',
+        `Puedes elegir el horario nuevo aquí:\n\n${link}\n\nTu cita actual sigue en pie hasta que la cambies.`,
       );
       return;
     }
-    await this.reply(
-      clinic.wahaSession,
-      convo.chatId,
-      convo.id,
-      `Puedes elegir el horario nuevo aquí:\n\n${link}\n\nTu cita actual sigue en pie hasta que la cambies. Si prefieres cancelarla, responde *CANCELAR*.`,
+
+    await this.advanceToSlot(
+      clinic,
+      convo,
+      {
+        serviceId: appt.serviceId,
+        professionalId: appt.professionalId,
+        rescheduleOf: appt.id,
+      },
+      appt.serviceId,
+      [appt.professionalId],
+      {
+        intro:
+          'Te muestro los horarios libres para mover tu cita. La actual sigue en pie hasta que elijas:',
+        footer,
+      },
     );
   }
 
