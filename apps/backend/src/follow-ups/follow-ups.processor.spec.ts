@@ -79,6 +79,7 @@ describe('FollowUpsProcessor (createFollowUpsWorker)', () => {
       feedback: { findUnique: jest.fn().mockResolvedValue(null) },
       conversation: {
         findFirst: jest.fn().mockResolvedValue({ id: 'convo-1', clinicId: 'clinic-A' }),
+        upsert: jest.fn().mockResolvedValue({ id: 'convo-nueva', clinicId: 'clinic-A' }),
         update: jest.fn().mockResolvedValue({}),
       },
       message: { create: jest.fn().mockResolvedValue({}) },
@@ -125,15 +126,23 @@ describe('FollowUpsProcessor (createFollowUpsWorker)', () => {
       expect(text).toMatch(/\*1\*/);
       expect(text).toMatch(/\*5\*/);
 
-      // Multi-tenant: la conversación se busca por clinicId + phone.
+      // Multi-tenant: la conversación se busca siempre dentro de la clínica.
+      // `orderBy updatedAt desc` desempata si hay más de una fila del paciente
+      // (una @lid y una @c.us): sin él el score se perdería a ratos.
       expect(prisma.conversation.findFirst).toHaveBeenCalledWith({
-        where: { clinicId: 'clinic-A', phone: PATIENT_PHONE },
+        where: {
+          clinicId: 'clinic-A',
+          OR: [{ patientId: 'pat-1' }, { phone: PATIENT_PHONE }],
+        },
+        orderBy: { updatedAt: 'desc' },
       });
       expect(prisma.conversation.update).toHaveBeenCalledWith({
         where: { id: 'convo-1' },
         data: {
           flowStep: 'AWAITING_NPS_SCORE',
           flowData: { feedbackAppointmentId: 'appt-1' },
+          // La conversación no tenía patientId: la ligamos al paciente.
+          patientId: 'pat-1',
         },
       });
       // Trazabilidad: el prompt queda persistido como mensaje OUT.
@@ -184,20 +193,177 @@ describe('FollowUpsProcessor (createFollowUpsWorker)', () => {
       expect(prisma.feedback.findUnique).not.toHaveBeenCalled();
     });
 
-    it('sin conversación previa: envía el prompt pero no puede armar la sub-FSM (comportamiento actual)', async () => {
-      // Caso: paciente que agendó por la página pública y nunca chateó con el
-      // bot. Hoy el prompt sale igual; la respuesta "5" caerá al LLM porque no
-      // hay Conversation con flowStep. Documentado como hallazgo en el PR.
+    // ── B9: sin Conversation previa, el prompt dejaba la sub-FSM sin armar ──
+    // Caso real: paciente que agendó por la página pública y nunca escribió por
+    // WhatsApp. Antes salía el prompt pero no había fila que marcar, así que su
+    // "5" caía al clasificador LLM y el score se perdía.
+    it('sin conversación previa: la crea con el chatId canónico y arma la sub-FSM', async () => {
       prisma.conversation.findFirst.mockResolvedValue(null);
 
       await process(makeJob('send-follow-up', { appointmentId: 'appt-1' }));
 
       expect(waha.sendText).toHaveBeenCalledTimes(1);
+
+      // Upsert por la clave única (clinicId, chatId) — tolera la carrera con un
+      // mensaje entrante. El chatId es el mismo que usará WAHA al entregar la
+      // respuesta: dígitos sin `+` y sufijo @c.us.
+      expect(prisma.conversation.upsert).toHaveBeenCalledWith({
+        where: {
+          clinicId_chatId: { clinicId: 'clinic-A', chatId: '584141234567@c.us' },
+        },
+        create: {
+          clinicId: 'clinic-A',
+          chatId: '584141234567@c.us',
+          phone: PATIENT_PHONE,
+          patientId: 'pat-1',
+          state: 'BOT',
+          flowStep: 'AWAITING_NPS_SCORE',
+          flowData: { feedbackAppointmentId: 'appt-1' },
+        },
+        update: {
+          phone: PATIENT_PHONE,
+          flowStep: 'AWAITING_NPS_SCORE',
+          flowData: { feedbackAppointmentId: 'appt-1' },
+        },
+      });
+
+      // El flowStep va DENTRO del upsert: una update posterior dejaría una
+      // ventana en la que el bot podría arrancar la FSM de agendamiento y se
+      // la pisaríamos.
       expect(prisma.conversation.update).not.toHaveBeenCalled();
-      expect(prisma.message.create).not.toHaveBeenCalled();
+      expect(prisma.message.create).toHaveBeenCalledWith({
+        data: {
+          conversationId: 'convo-nueva',
+          direction: 'OUT',
+          body: waha.sendText.mock.calls[0][2],
+        },
+      });
     });
 
-    it('si WAHA falla: propaga el error (retry BullMQ) y no marca la conversación', async () => {
+    it('con conversación previa: la reusa y NO crea otra (aunque su chatId sea @lid)', async () => {
+      // El paciente ya chateó desde un LID: su chatId no se puede derivar del
+      // teléfono. Si hiciéramos upsert por chatId derivado tendríamos dos hilos
+      // para el mismo paciente y el bot perdería el contexto.
+      prisma.conversation.findFirst.mockResolvedValue({
+        id: 'convo-lid',
+        clinicId: 'clinic-A',
+        chatId: '99887766554433@lid',
+        state: 'BOT',
+        patientId: 'pat-1',
+      });
+
+      await process(makeJob('send-follow-up', { appointmentId: 'appt-1' }));
+
+      expect(prisma.conversation.upsert).not.toHaveBeenCalled();
+      expect(prisma.conversation.update).toHaveBeenCalledWith({
+        where: { id: 'convo-lid' },
+        data: {
+          flowStep: 'AWAITING_NPS_SCORE',
+          flowData: { feedbackAppointmentId: 'appt-1' },
+          // Ya tenía patientId: no lo pisamos.
+        },
+      });
+      expect(prisma.message.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ conversationId: 'convo-lid' }),
+        }),
+      );
+    });
+
+    it('conversación tomada por un humano: no manda el prompt ni arma la sub-FSM', async () => {
+      // Si un operador está atendiendo el chat, el prompt automático se metería
+      // en medio de la charla. Y armar la sub-FSM no serviría: handleIncoming
+      // corta en seco con state HUMAN, así que el score se perdería igual y el
+      // flowStep quedaría colgado hasta el release() del operador.
+      prisma.conversation.findFirst.mockResolvedValue({
+        id: 'convo-humana',
+        clinicId: 'clinic-A',
+        state: 'HUMAN',
+        patientId: 'pat-1',
+      });
+
+      await process(makeJob('send-follow-up', { appointmentId: 'appt-1' }));
+
+      expect(waha.sendText).not.toHaveBeenCalled();
+      expect(prisma.conversation.update).not.toHaveBeenCalled();
+      expect(prisma.conversation.upsert).not.toHaveBeenCalled();
+      expect(prisma.message.create).not.toHaveBeenCalled();
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.stringMatching(/atendida por humano/),
+      );
+    });
+
+    it('fila legacy con el phone sin "+": el upsert la corrige en vez de duplicarla', async () => {
+      // Conversación creada antes de normalizar a E.164: findFirst por phone no
+      // la encuentra, pero el upsert sí da con ella por (clinicId, chatId) y la
+      // rama `update` deja el phone canónico.
+      prisma.conversation.findFirst.mockResolvedValue(null);
+      prisma.conversation.upsert.mockResolvedValue({
+        id: 'convo-legacy',
+        clinicId: 'clinic-A',
+      });
+
+      await process(makeJob('send-follow-up', { appointmentId: 'appt-1' }));
+
+      const { update } = prisma.conversation.upsert.mock.calls[0][0];
+      expect(update).toEqual({
+        phone: PATIENT_PHONE,
+        flowStep: 'AWAITING_NPS_SCORE',
+        flowData: { feedbackAppointmentId: 'appt-1' },
+      });
+      expect(prisma.message.create).toHaveBeenCalledWith({
+        data: {
+          conversationId: 'convo-legacy',
+          direction: 'OUT',
+          body: waha.sendText.mock.calls[0][2],
+        },
+      });
+    });
+
+    it('si falla el marcado DESPUÉS de enviar: no relanza (la cola no reintenta) y reporta', async () => {
+      // El prompt ya salió por WhatsApp. Relanzar no lo desenvía y, sin
+      // `attempts` en la cola, tampoco hay reintento: solo perderíamos la
+      // traza. Se registra y se reporta a Sentry.
+      global.process.env.SENTRY_ENABLED = 'true';
+      global.process.env.SENTRY_DSN = 'https://x@sentry.io/1';
+      prisma.conversation.findFirst.mockResolvedValue(null);
+      prisma.conversation.upsert.mockRejectedValue(new Error('P2002'));
+
+      await expect(
+        process(makeJob('send-follow-up', { appointmentId: 'appt-1' })),
+      ).resolves.toBeUndefined();
+
+      expect(waha.sendText).toHaveBeenCalledTimes(1);
+      expect(Sentry.captureException).toHaveBeenCalledWith(
+        expect.any(Error),
+        expect.objectContaining({
+          tags: expect.objectContaining({ stage: 'arm-nps-fsm' }),
+        }),
+      );
+    });
+
+    it('el prompt está en tuteo LATAM neutro, sin voseo', async () => {
+      await process(makeJob('send-follow-up', { appointmentId: 'appt-1' }));
+
+      const text = waha.sendText.mock.calls[0][2];
+      expect(text).toContain('Responde con un número');
+      expect(text).not.toMatch(/Respondé/);
+    });
+
+    it('multi-tenant: busca y crea la conversación siempre dentro de la clínica de la cita', async () => {
+      prisma.conversation.findFirst.mockResolvedValue(null);
+
+      await process(makeJob('send-follow-up', { appointmentId: 'appt-1' }));
+
+      expect(prisma.conversation.findFirst.mock.calls[0][0].where.clinicId).toBe(
+        'clinic-A',
+      );
+      const upsertArg = prisma.conversation.upsert.mock.calls[0][0];
+      expect(upsertArg.where.clinicId_chatId.clinicId).toBe('clinic-A');
+      expect(upsertArg.create.clinicId).toBe('clinic-A');
+    });
+
+    it('si WAHA falla: propaga el error y no marca la conversación', async () => {
       waha.sendText.mockRejectedValue(new Error('WAHA 503'));
 
       await expect(

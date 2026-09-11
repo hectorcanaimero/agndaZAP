@@ -7,6 +7,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[SPEC|SPEC]] — contratos, reglas y escenarios Gherkin
 - [[ARCHITECTURE|Arquitectura]] — componentes, flujos, estados
 - [[arquitetura-runtime|Arquitetura Runtime (PT-BR)]] — diagrama interactivo archify + explicación en portugués
+- [[flujo-bot|Flujo del asistente de WhatsApp]] — diagrama archify del pipeline del bot, de webhook a respuesta
 - [[../README|README]] — cómo correrlo y estado
 
 ## Piloto (operación y deploy)
@@ -36,6 +37,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[adr/0016-admin-audit-impersonation-trail|0016 — Trail estructurado de mutations bajo impersonation]]
 - [[adr/0017-webhook-hmac-cookie-hardening|0017 — HMAC del webhook WAHA + hardening de cookies]]
 - [[adr/0018-scheduling-link-wa|0018 — Link de agendamiento por WhatsApp (bot → web con token efímero)]]
+- [[adr/0019-rag-hechos-de-bd|0019 — Hechos de BD como fuente del RAG (sin embeddings)]]
 
 ## Specs de sprint (implementación)
 - [[specs/2026-08-18-observabilidad-pino-axiom-sentry|2026-08-18 — Spec Observabilidad (Pino + Axiom + Sentry) — Sprint 40 clínicas día 1-2]]
@@ -44,6 +46,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[specs/2026-08-21-hmac-webhook-cookies|2026-08-21 — Spec HMAC webhook + hardening cookies — Sprint día 5]]
 
 ## Planes de implementación
+- [[plans/2026-09-11-p0-bot-reparto|2026-09-11 — P0 del bot: reparto entre sesiones]]
 - [[plans/2026-08-18-observabilidad-plan|2026-08-18 — Plan Observabilidad (16h, 21 tasks, 2 días)]]
 
 ## Notas y descubrimientos
@@ -72,6 +75,11 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[notas/2026-09-10-rag-umbral-distancia|2026-09-10 — RAG: umbral de distancia 0.5 → 0.65, calibrado con preguntas reales]]
 - [[notas/2026-09-11-bot-matching-saludo-si-persona|2026-09-11 — Bot: saludo recortado, `sí` con contexto de recordatorio, `persona` no deriva]]
 - [[notas/2026-09-11-source-map-stack-overflow|2026-09-11 — ts-jest: mockear `Math.random` rompe el reporte de fallos con un RangeError opaco]]
+- [[notas/2026-09-11-conversation-chatid-canonico|2026-09-11 — `Conversation.chatId`: formato canónico y por qué no se puede hacer upsert a ciegas]]
+- [[notas/2026-09-11-waha-mensajes-sin-texto|2026-09-11 — WAHA: mensajes sin texto (audio, imagen, sticker) y cómo detectarlos]]
+
+## Análisis
+- [[analisis/2026-09-11-chatbot-analisis-tecnico|2026-09-11 — Análisis técnico del asistente de WhatsApp]] — premisas, bugs (B1-B10), mejoras (M1-M10), seguimiento (S1-S5) y checklist por prioridad
 
 ## Flujo de trabajo
 - [[skills-y-flujo|Skills, agentes y flujo de trabajo]]
