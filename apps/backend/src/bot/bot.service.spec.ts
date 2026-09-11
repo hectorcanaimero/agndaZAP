@@ -1136,21 +1136,11 @@ describe('BotService — FSM de agendamiento', () => {
     });
 
     async function pedirHumano() {
-  // ── B7: una clínica pt recibe el bot en portugués ──
-  describe('copy por idioma de la clínica (B7)', () => {
-    beforeEach(() => {
-      prisma.clinic.findUniqueOrThrow.mockResolvedValue(
-        makeClinic({ locale: 'pt', name: 'Clínica Sorriso' }),
-      );
-    });
-
-    async function say(text: string) {
       await bot.handleIncoming({
         clinicId: 'clinic-A',
         chatId: convoState.chatId,
         phone: convoState.phone,
         text: 'humano',
-        text,
       });
       return waha.sendText.mock.calls.at(-1)![2] as string;
     }
@@ -1222,6 +1212,27 @@ describe('BotService — FSM de agendamiento', () => {
 
       expect(convoState.state).toBe('NEEDS_HUMAN');
       expect(msg).toBeTruthy();
+    });
+  });
+
+  // ── B7: una clínica pt recibe el bot en portugués ──
+  describe('copy por idioma de la clínica (B7)', () => {
+    beforeEach(() => {
+      prisma.clinic.findUniqueOrThrow.mockResolvedValue(
+        makeClinic({ locale: 'pt', name: 'Clínica Sorriso' }),
+      );
+    });
+
+    async function say(text: string) {
+      await bot.handleIncoming({
+        clinicId: 'clinic-A',
+        chatId: convoState.chatId,
+        phone: convoState.phone,
+        text,
+      });
+      return waha.sendText.mock.calls.at(-1)![2] as string;
+    }
+
     function conCitaProxima() {
       prisma.patient.findUnique.mockResolvedValue({
         id: 'pat-1',
