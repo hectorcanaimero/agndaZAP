@@ -1,5 +1,27 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-11 — S18: tests de integración contra Redis real en CI (rama `ci/tests-integracion-redis`)
+- **El motivo concreto**: escribiendo los tests unitarios del índice de tokens (S13), mi mock de `del` solo borraba claves de tipo string, así que el test de "borra también el índice" pasaba **sin que el índice —un SET— se borrara**. El `DEL` real borra la clave sea del tipo que sea. El mock confirmaba lo que yo creía en vez de lo que Redis hace.
+- **Qué se prueba**: lo que un mock no puede demostrar — atomicidad de `SET NX` (dedup del webhook) y de `INCR` (rate-limit) bajo concurrencia real, semántica de expiración, mezcla de tipos de clave, y el dedup por `jobId` de BullMQ.
+- **El test de BullMQ fija un comportamiento que ya nos mordió**: un `add` con un `jobId` existente es un **no-op silencioso** — no lanza, no reemplaza, no avisa, y el job conserva el delay viejo. Es la razón de que el `check-risk` pudiera quedarse rancio y de que ahora lleve `startAtMs`.
+- **Job de CI separado** del `backend`: los unitarios siguen corriendo en segundos y sin servicios, que es lo que hace que se ejecuten a menudo. El de integración levanta `redis:7-alpine` con healthcheck.
+- Los de integración se llaman `*.int-spec.ts` **con guion**, para que el `testRegex` de los unitarios no los capture.
+- **Pendiente**: los tests de la cola `bot-inbound` en sí, cuando #65 esté en main. La semántica de la que depende ya queda cubierta.
+- **Tests**: 1163 unitarios + 21 de integración, verdes.
+## 2026-09-11 — S25: error tipado para el tope de reagendamientos (rama `fix/reschedule-limit-error-tipado`)
+- **Deuda propia**: al implementar el tope en S6 dejé que el controller distinguiera los dos 409 de `rescheduleAppointment` con `e.message.includes('tope de reagendamientos')`. Funcionaba y era frágil por definición — este repo reescribe copy a menudo, por tono o por traducción, y cualquiera de esas pasadas rompía la lógica sin fallar en compilación ni en los tests del emisor.
+- **Arreglo**: `SchedulingConflictException` con `code` en el cuerpo, y dos subclases — `RescheduleLimitExceededException` (`RESCHEDULE_LIMIT`) y `SlotTakenException` (`SLOT_TAKEN`). Siguen siendo `ConflictException`, así que el status y todo el manejo existente no cambian: quien no mire el `code` se comporta igual que antes.
+- **Por qué importa el caso**: los dos 409 piden respuestas **opuestas** — "el horario se ocupó" invita a elegir otro, "ya cambiaste demasiadas veces" invita a llamar a la clínica. Confundirlos manda al paciente al sitio equivocado.
+- **Tests**: 1168 verdes, incluido uno que reescribe el mensaje por completo y comprueba que la distinción sobrevive.
+
+## 2026-09-11 — S13: los links de gestión mueren con la cita (rama `fix/invalidar-tokens-gestion`)
+- **El problema**: solo se podía quemar el token que el paciente acababa de usar. Se emiten varios por cita (respuesta del POST, recordatorios, mensajes del bot), así que los demás sobrevivían apuntando a una cita ya cancelada y seguían mostrando nombre, servicio, profesional y horario hasta agotar su TTL de 30 días. No permitían mutar nada, pero era PII expuesta sin motivo.
+- **Arreglo**: índice `sched:manage:appt:{id}` en Redis e `invalidateAllForAppointment`, llamado desde el panel (al pasar a estado terminal) y desde la cancelación por link.
+- **Solo en estados terminales, no al reagendar** — discrepé aquí con el plan y se aceptó: tras un reagendamiento la cita sigue viva y el token sigue apuntando a la cita correcta mostrando el horario nuevo. Invalidarlo rompería un link que funciona justo después de que la clínica le moviera la cita al paciente, sin ninguna ganancia de seguridad.
+- **El TTL del índice es el techo (30 días), no el del último token**: si heredara uno más corto, el índice moriría antes que un token más antiguo y lo dejaría huérfano — justo lo que esto viene a evitar.
+- Todo best-effort: si Redis falla, ni la emisión del link ni la cancelación se caen. Perder la capacidad de revocar antes del TTL es malo; no poder mandarle el link al paciente, o revertirle una cancelación ya hecha, es peor.
+- **Tests**: 1038 verdes.
+
 ## 2026-09-11 — S22: validar el tenant del `conversationId` al crear cita (rama `fix/appointment-conversation-tenant`)
 - Salió del barrido de [[adr/0022-fk-compuestas-multi-tenant|S8]]: era el único de los diez pares `clinicId` + FK **sin ninguna validación**. `createAppointment` persistía `conversationId` con `source === 'BOT_WEB'` sin comprobar que la conversación fuera de la misma clínica.
 - **Por qué importa aunque hoy no sea alcanzable**: `findUpcomingAppointment` resuelve por `appointment.conversationId` (S5), así que una cita atada a la conversación de otra clínica dejaría que ese chat viera y gestionara la cita de un paciente ajeno. Hoy el id llega de un token que ya valida el slug — exactamente lo que se decía de `Feedback` antes de S4, hasta que alguien miró el `include`.
@@ -767,3 +789,14 @@
   sobre el volumen), el día va en la zona de la clínica y no en UTC, y se miran los errores de
   `pipeline.exec()`, que no rechaza por comandos sueltos. Detalle en
   [[notas/2026-09-11-evento-bot-turn]].
+## 2026-09-11 — S23: una lectura de `Conversation` para las dos guardas
+- La guarda de **persona** (¿este chat tiene derecho a esta cita?) se muda del
+  `public.controller.ts` a `SchedulingService.createAppointment`, junto a la de **tenant**
+  (¿la conversación es de esta clínica?). Una sola lectura sirve a las dos.
+- No es solo ahorrar una query: dentro del service `patientCreated` ya es un hecho, así que
+  desaparece la ventana de carrera que tenía comprobarlo antes de crear con un `findFirst` extra.
+- Las dos quedan comentadas como distintas y no intercambiables: una falla duro, la otra descarta
+  el enlace y sigue. El riesgo que motivó el ítem era que alguien viera dos lecturas iguales y
+  borrara "la repetida", quedándose sin uno de los dos controles.
+- Efecto lateral: la regla aplica ahora a **todos** los callers de `createAppointment`, no solo al
+  endpoint público.

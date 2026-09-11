@@ -223,15 +223,32 @@ export function ManageAppointmentClient({
     setPendingSlot(null);
 
     if (!res.ok) {
-      setError(
-        res.status === 409
-          ? t('reschedule.slotTaken')
-          : messageForStatus(res.status),
-      );
+      // Los dos 409 posibles piden respuestas OPUESTAS, así que no se pueden
+      // tratar igual: con el slot ocupado hay que devolver al paciente al
+      // selector, y con el cupo agotado hay que quitárselo — insistir con otro
+      // horario no lleva a ningún lado, y decirle "ese horario ya no está
+      // disponible" sería además falso.
+      //
+      // Se distingue por `code` y no por el texto: el copy se reescribe por
+      // tono y por traducción. Si el backend no lo manda (anterior a #73), el
+      // 409 se sigue leyendo como slot ocupado, que es el caso frecuente.
+      const limitReached = res.status === 409 && res.code === 'RESCHEDULE_LIMIT';
+
+      if (limitReached) {
+        setError(t('reschedule.limitReached'));
+        setData((prev) => ({ ...prev, canReschedule: false }));
+        setMode('view');
+      } else {
+        setError(
+          res.status === 409
+            ? t('reschedule.slotTaken')
+            : messageForStatus(res.status),
+        );
+        // El slot se ocupó mientras elegía: recargamos la disponibilidad para
+        // no dejarle a la vista un horario que ya no existe.
+        if (res.status === 409) void slotsQuery.refetch();
+      }
       if (res.status === 404) setLinkLost(true);
-      // El slot se ocupó mientras elegía: recargamos la disponibilidad para no
-      // dejarle a la vista un horario que ya no existe.
-      if (res.status === 409) void slotsQuery.refetch();
       focusFeedback();
       return;
     }

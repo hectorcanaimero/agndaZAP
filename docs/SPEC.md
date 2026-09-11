@@ -91,7 +91,10 @@ Rate-limit 10/min. Token inválido, expirado, de otra clínica o cita inexistent
   Cancela los recordatorios. Idempotente. 409 si el estado ya no lo permite.
   Marca `Appointment.canceledByPatient` y **avisa a recepción** (ver abajo).
 - `POST /api/public/clinics/:slug/appointments/manage/:token/reschedule` body `{ startAtISO }`
-  → `{ appointment: {…}, manageUrl }`. **Mueve la cita in-place (mismo `id`)**: crear una
+  → `{ appointment: {…}, manageUrl }`. Los dos 409 posibles llevan `code` en el cuerpo para
+  que el cliente ramifique sin mirar el texto: `RESCHEDULE_LIMIT` (agotó su cupo → derivar a la
+  clínica) y `SLOT_TAKEN` (el horario se ocupó → ofrecer otro). Piden respuestas opuestas, así
+  que confundirlos manda al paciente al sitio equivocado. **Mueve la cita in-place (mismo `id`)**: crear una
   nueva y cancelar la vieja dejaría una fila `CANCELADA` por reagendamiento y el no-show rate
   se calcula sobre `ATENDIDA + NO_SHOW + CANCELADA`. 409 si el slot se ocupó. La web reutiliza
   el `GET /availability` de arriba para ofrecer horarios.

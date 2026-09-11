@@ -65,6 +65,56 @@ jobs:
         working-directory: apps/backend
         run: pnpm test
 
+  # ──────────────────── BACKEND (integración) ────────────────────
+  # Los unitarios usan mocks de Redis, y los mocks se desvían de Redis: un mock
+  # de `del` que solo borraba claves string dejó pasar un test del índice de
+  # tokens, cuando el DEL real borra la clave sea del tipo que sea. Este job
+  # ejercita contra un Redis de verdad lo que un mock no puede demostrar —
+  # atomicidad de SET NX e INCR, expiración, tipos de clave y el dedup por
+  # `jobId` de BullMQ.
+  #
+  # Separado del job `backend` a propósito: los unitarios deben seguir corriendo
+  # en segundos y sin servicios, que es lo que hace que se ejecuten a menudo.
+  backend-integration:
+    name: Backend — tests de integración (Redis)
+    runs-on: ubuntu-latest
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        # Sin el healthcheck, los tests pueden arrancar antes de que Redis
+        # acepte conexiones y fallar con un ECONNREFUSED que parece un bug.
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies (frozen)
+        run: pnpm install --frozen-lockfile
+
+      - name: Prisma generate
+        working-directory: apps/backend
+        run: pnpm exec prisma generate
+
+      - name: Integration tests
+        working-directory: apps/backend
+        env:
+          REDIS_URL: redis://127.0.0.1:6379
+        run: pnpm test:int
+
   # ─────────────────────────── WEB ───────────────────────────
   # tsc + i18n validation + `next build`. El build se agregó en el sprint 0
   # (2026-09-09): un error de tipos en un componente sin importar rompió el

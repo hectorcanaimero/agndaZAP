@@ -133,11 +133,15 @@ enum de estados; lo que S6 **sí** hace es devolver la cita a `PENDIENTE` y limp
   cambio, pero cualquier caller nuevo tiene que recordar no filtrar `patientCreated`.
 - Falta la traza de reagendamientos (S6) y el cableado del bot (M2-c), que mandará este link
   ante `REPROGRAMAR` y `CANCELAR`.
-- **Tokens huérfanos**: si la clínica cancela o marca la cita `ATENDIDA` desde el panel, los
-  tokens vivos no se invalidan y siguen mostrando nombre, servicio y profesional hasta que
-  caducan. No permiten mutar (`isPatientMutable` corta), pero es lectura de PII sin motivo.
-  Arreglarlo bien exige un índice `appointmentId → tokens` para poder quemarlos todos; queda
-  como seguimiento.
+- ~~Tokens huérfanos~~ **resuelto en S13**: un índice `sched:manage:appt:{id}` guarda los
+  tokens vivos de cada cita y se queman todos cuando la cita pasa a un estado terminal
+  (`CANCELADA`, `NO_SHOW`, `ATENDIDA`), venga del panel o del propio link.
+
+  **Solo en estados terminales, no al reagendar.** Tras un reagendamiento desde el panel la
+  cita sigue viva y el token sigue apuntando a la cita correcta, mostrando el horario nuevo:
+  invalidarlo rompería un link que funciona, justo después de que la clínica le haya movido la
+  cita al paciente, y sin ninguna ganancia de seguridad — el token sigue siendo suyo y la cita
+  también.
 - ~~Sin tope de reagendamientos~~ **resuelto en S6**: `rescheduleCount` acota a 3 los
   movimientos por link, y el 409 deriva a la clínica en vez de dejar al paciente sin salida.
 - `WEB_BASE_URL` pasa a ser obligatoria en producción: ahora los links no solo los manda el

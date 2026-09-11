@@ -8,6 +8,7 @@ import { FollowUpsService } from '../follow-ups/follow-ups.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RemindersService } from '../reminders/reminders.service';
 import { AvailabilityService } from '../scheduling/availability.service';
+import { SchedulingSessionService } from '../scheduling/scheduling-session.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { AppointmentsController } from './appointments.controller';
 
@@ -27,6 +28,7 @@ describe('AppointmentsController', () => {
   let followUps: Deep<FollowUpsService>;
   let scheduling: Deep<SchedulingService>;
   let availability: Deep<AvailabilityService>;
+  let sessions: Deep<SchedulingSessionService>;
   let controller: AppointmentsController;
 
   const adminA: AuthUser = {
@@ -95,11 +97,15 @@ describe('AppointmentsController', () => {
     availability = {
       getSlots: jest.fn().mockResolvedValue([]),
     };
+    // Al pasar la cita a un estado terminal se queman los links de gestión
+    // vivos (S13).
+    sessions = { invalidateAllForAppointment: jest.fn().mockResolvedValue(0) };
     controller = new AppointmentsController(
       prisma as unknown as PrismaService,
       reminders as unknown as RemindersService,
       followUps as unknown as FollowUpsService,
       scheduling as unknown as SchedulingService,
+      sessions as unknown as SchedulingSessionService,
       availability as unknown as AvailabilityService,
       {
         info: jest.fn(),
@@ -211,6 +217,51 @@ describe('AppointmentsController', () => {
       });
       await controller.patchStatus(adminA, 'appt-1', { status: 'CANCELADA' });
       expect(reminders.cancelForAppointment).toHaveBeenCalledWith('appt-1');
+    });
+
+    // ── S13: los links de gestión mueren con la cita ──
+    it('CANCELADA desde el panel quema los links de gestión vivos', async () => {
+      // Si no, siguen mostrando nombre, servicio, profesional y horario del
+      // paciente durante los hasta 30 días que vive el token. No permiten
+      // mutar nada, pero es PII expuesta sin motivo.
+      await controller.patchStatus(adminA, 'appt-1', { status: 'CANCELADA' });
+
+      expect(sessions.invalidateAllForAppointment).toHaveBeenCalledWith('appt-1');
+    });
+
+    it.each(['NO_SHOW', 'ATENDIDA'])(
+      '%s también es terminal: quema los links',
+      async (status) => {
+        prisma.appointment.findFirst.mockResolvedValueOnce({
+          id: 'appt-1',
+          clinicId: 'clinic-A',
+          status: 'CONFIRMADA',
+        });
+
+        await controller.patchStatus(adminA, 'appt-1', { status } as any);
+
+        expect(sessions.invalidateAllForAppointment).toHaveBeenCalledWith('appt-1');
+      },
+    );
+
+    it('CONFIRMADA NO quema los links: la cita sigue siendo gestionable', async () => {
+      await controller.patchStatus(adminA, 'appt-1', { status: 'CONFIRMADA' });
+
+      expect(sessions.invalidateAllForAppointment).not.toHaveBeenCalled();
+    });
+
+    it('si falla quemar los links, el cambio de estado NO se revierte', async () => {
+      // Fail-open como el resto de side effects: la fuente de verdad es la DB
+      // y el estado ya está guardado.
+      sessions.invalidateAllForAppointment.mockRejectedValue(
+        new Error('redis down'),
+      );
+
+      const result = await controller.patchStatus(adminA, 'appt-1', {
+        status: 'CANCELADA',
+      });
+
+      expect(result.status).toBe('CANCELADA');
     });
 
     it('CONFIRMADA → NO_SHOW: outcome=no_show + cancela reminders', async () => {

@@ -11,6 +11,10 @@ import { SchedulingSessionService } from '../scheduling/scheduling-session.servi
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePublicAppointmentDto } from './dto/create-public-appointment.dto';
+import {
+  RescheduleLimitExceededException,
+  SlotTakenException,
+} from '../scheduling/scheduling.errors';
 import { PublicController } from './public.controller';
 import { extractIp, RateLimit, REDIS_CLIENT } from './rate-limit.guard';
 import { SlugValidationPipe } from './slug.pipe';
@@ -497,62 +501,12 @@ describe('PublicController', () => {
         );
       });
 
-      it('conversación @lid declarando el teléfono de un paciente YA existente: NO ata la cita', async () => {
-        // Secuestro de agenda: sin este filtro, ese chat resolvería la cita de
-        // la víctima por `conversationId` y el bot le saludaría con su nombre.
-        withSession();
-        prisma.conversation.findFirst.mockResolvedValue({ id: 'conv-1', phone: null });
-        prisma.patient.findFirst.mockResolvedValue({ id: 'pat-victima' });
-
-        await controller.createAppointment('clinica-a', {
-          ...dto,
-          token: validToken,
-        });
-
-        expect(scheduling.createAppointment).toHaveBeenCalledWith(
-          expect.objectContaining({ conversationId: undefined }),
-        );
-      });
-
-      it('teléfono verificado por WAHA que coincide con el del form: ata la cita', async () => {
-        withSession();
-        prisma.conversation.findFirst.mockResolvedValue({
-          id: 'conv-1',
-          phone: '+584141234567',
-        });
-
-        await controller.createAppointment('clinica-a', {
-          ...dto,
-          phone: '+584141234567',
-          token: validToken,
-        });
-
-        expect(scheduling.createAppointment).toHaveBeenCalledWith(
-          expect.objectContaining({ conversationId: 'conv-1' }),
-        );
-      });
-
-      it('teléfono verificado distinto al del form: NO ata la cita, pero la crea igual', async () => {
-        withSession();
-        prisma.conversation.findFirst.mockResolvedValue({
-          id: 'conv-1',
-          phone: '+584149999999',
-        });
-
-        const res: any = await controller.createAppointment('clinica-a', {
-          ...dto,
-          phone: '+584141234567',
-          token: validToken,
-        });
-
-        expect(scheduling.createAppointment).toHaveBeenCalledWith(
-          expect.objectContaining({ conversationId: undefined }),
-        );
-        // El paciente no paga por una discrepancia nuestra.
-        expect(res.id).toBe('appt-1');
-      });
-
-      it('la conversación se busca acotada al tenant', async () => {
+      it('el controller pasa el conversationId y deja la decisión al service', async () => {
+        // Quién puede quedarse con la cita se decide en
+        // `SchedulingService.createAppointment`, donde una sola lectura de
+        // `Conversation` sirve a la guarda de tenant y a la de persona, y
+        // `patientCreated` ya es un hecho (S23). Los casos están en
+        // `scheduling.service.spec.ts`.
         withSession();
 
         await controller.createAppointment('clinica-a', {
@@ -560,17 +514,22 @@ describe('PublicController', () => {
           token: validToken,
         });
 
-        expect(prisma.conversation.findFirst).toHaveBeenCalledWith(
+        expect(scheduling.createAppointment).toHaveBeenCalledWith(
           expect.objectContaining({
-            where: { id: 'conv-1', clinicId: 'clinic-A' },
+            source: 'BOT_WEB',
+            conversationId: 'conv-1',
           }),
         );
+        // El endpoint ya no lee la conversación: esa lectura se unificó.
+        expect(prisma.conversation.findFirst).not.toHaveBeenCalled();
       });
 
-      it('sin token no se consulta la conversación', async () => {
+      it('sin token no se manda conversationId', async () => {
         await controller.createAppointment('clinica-a', { ...dto });
 
-        expect(prisma.conversation.findFirst).not.toHaveBeenCalled();
+        expect(scheduling.createAppointment).toHaveBeenCalledWith(
+          expect.objectContaining({ source: 'PUBLIC', conversationId: undefined }),
+        );
       });
 
       it('token inválido/expirado → 400 y NO crea cita', async () => {
@@ -1059,6 +1018,9 @@ describe('PublicController — gestión de cita por link', () => {
     sessions = {
       resolveManage: jest.fn().mockResolvedValue(SESSION),
       invalidateManage: jest.fn().mockResolvedValue(undefined),
+      // Al cancelar se queman TODOS los links vivos de la cita, no solo el
+      // que se acaba de usar (S13).
+      invalidateAllForAppointment: jest.fn().mockResolvedValue(2),
       createManage: jest
         .fn()
         .mockResolvedValue({ token: 'mtok-new', expiresInSeconds: 3600 }),
@@ -1205,7 +1167,9 @@ describe('PublicController — gestión de cita por link', () => {
         clinicId: 'clinic-A',
         appointmentId: 'appt-1',
       });
-      expect(sessions.invalidateManage).toHaveBeenCalledWith(TOKEN);
+      expect(sessions.invalidateAllForAppointment).toHaveBeenCalledWith(
+        'appt-1',
+      );
     });
 
     it('avisa a recepción: sin esto la cancelación solo se ve si alguien refresca el panel', async () => {
@@ -1316,14 +1280,17 @@ describe('PublicController — gestión de cita por link', () => {
 
     it('tope alcanzado → 409 que deriva a la clínica, distinto del de slot ocupado', async () => {
       scheduling.rescheduleAppointment.mockRejectedValue(
-        new ConflictException('tope de reagendamientos alcanzado'),
+        new RescheduleLimitExceededException(),
       );
 
       const err = await controller
         .rescheduleManagedAppointment('clinica-a', TOKEN, body as any)
         .catch((e) => e);
 
-      expect(err).toBeInstanceOf(ConflictException);
+      expect(err).toBeInstanceOf(RescheduleLimitExceededException);
+      // Lo que el cliente debe mirar es el código, no el texto: el copy cambia
+      // con cada pasada de tono o de traducción.
+      expect(err.getResponse()).toMatchObject({ code: 'RESCHEDULE_LIMIT' });
       expect(err.message).toContain('Escríbele a la clínica');
     });
 
@@ -1397,14 +1364,15 @@ describe('PublicController — gestión de cita por link', () => {
 
     it('slot ocupado → 409 con mensaje para el paciente, en tuteo', async () => {
       scheduling.rescheduleAppointment.mockRejectedValue(
-        new ConflictException('slot no disponible'),
+        new SlotTakenException('slot no disponible'),
       );
 
       const err = await controller
         .rescheduleManagedAppointment('clinica-a', TOKEN, body as any)
         .catch((e) => e);
 
-      expect(err).toBeInstanceOf(ConflictException);
+      expect(err).toBeInstanceOf(SlotTakenException);
+      expect(err.getResponse()).toMatchObject({ code: 'SLOT_TAKEN' });
       expect(err.message).toBe('Ese horario ya no está disponible. Elige otro.');
     });
 
