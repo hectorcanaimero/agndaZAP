@@ -8,6 +8,7 @@ import {
 import {
   Appointment,
   AppointmentSource as PrismaAppointmentSource,
+  AppointmentStatus,
   Prisma,
 } from '@prisma/client';
 import { DateTime } from 'luxon';
@@ -63,11 +64,11 @@ export class SchedulingService {
    * `ATENDIDA`, `CANCELADA` y `NO_SHOW` son terminales: ya pasó algo con esa
    * cita y cambiarla falsearía el histórico.
    */
-  static readonly PATIENT_MUTABLE_STATUSES = [
+  static readonly PATIENT_MUTABLE_STATUSES: ReadonlyArray<AppointmentStatus> = [
     'PENDIENTE',
     'CONFIRMADA',
     'EN_RIESGO',
-  ] as const;
+  ];
 
   /**
    * ¿El paciente puede todavía cancelar/mover esta cita? Regla única para que
@@ -79,9 +80,8 @@ export class SchedulingService {
     now: Date = new Date(),
   ): boolean {
     return (
-      (SchedulingService.PATIENT_MUTABLE_STATUSES as readonly string[]).includes(
-        appt.status,
-      ) && appt.startAt.getTime() > now.getTime()
+      SchedulingService.PATIENT_MUTABLE_STATUSES.includes(appt.status) &&
+      appt.startAt.getTime() > now.getTime()
     );
   }
 
@@ -183,6 +183,12 @@ export class SchedulingService {
         orderBy: { startAt: 'asc' },
       });
       if (existingAppt) {
+        // OJO si algún día esta dedupe se extiende a `PUBLIC`/`BOT_WEB`:
+        // `public.controller.ts` emite un `manageUrl` sobre lo que devuelva
+        // este método. Devolver una cita preexistente a un caller público
+        // significaría entregarle a cualquiera que escriba el teléfono de otra
+        // persona un link de gestión sobre LA CITA DE ESA PERSONA. Hoy no pasa
+        // porque el endpoint público solo usa PUBLIC y BOT_WEB.
         return { appointment: existingAppt, patientCreated: false };
       }
     }
@@ -221,12 +227,18 @@ export class SchedulingService {
         });
         patientCreated = true;
       } catch (e) {
-        if (
-          !(
-            e instanceof Prisma.PrismaClientKnownRequestError &&
-            e.code === 'P2002'
-          )
-        ) {
+        // Comprobamos también QUÉ constraint saltó: si mañana `Patient` gana
+        // otro único (email, documento), un P2002 de ese otro mandaría a un
+        // `update` por `clinicId_phone` que no encontraría fila y moriría con
+        // P2025, enmascarando el error real.
+        const target = (e as Prisma.PrismaClientKnownRequestError)?.meta
+          ?.target;
+        const isPhoneConflict =
+          e instanceof Prisma.PrismaClientKnownRequestError &&
+          e.code === 'P2002' &&
+          (target === undefined ||
+            String(target).includes('phone'));
+        if (!isPhoneConflict) {
           throw e;
         }
         // Carrera: otra request creó el paciente entre el findUnique y este
@@ -313,20 +325,35 @@ export class SchedulingService {
   }): Promise<Appointment> {
     const { clinicId, appointmentId } = input;
 
-    const appt = await this.prisma.appointment.findFirst({
-      where: { id: appointmentId, clinicId },
+    // La condición va DENTRO del UPDATE, no en un `findFirst` previo: entre la
+    // lectura y la escritura la recepcionista puede marcar la cita ATENDIDA
+    // desde el panel, y un update incondicional la pisaría. Eso dejaría una
+    // transición ATENDIDA → CANCELADA que `ALLOWED_TRANSITIONS` declara
+    // imposible, con el `outcome` colgando y el no-show rate contaminado.
+    const { count } = await this.prisma.appointment.updateMany({
+      where: {
+        id: appointmentId,
+        clinicId,
+        status: { in: [...SchedulingService.PATIENT_MUTABLE_STATUSES] },
+        startAt: { gt: new Date() },
+      },
+      data: { status: 'CANCELADA', canceledAt: new Date() },
     });
-    if (!appt) throw new NotFoundException('cita no encontrada');
 
-    if (appt.status === 'CANCELADA') return appt;
-
-    if (!SchedulingService.isPatientMutable(appt)) {
+    if (count === 0) {
+      // No se canceló: hay que distinguir por qué. Esta lectura ya no es una
+      // carrera — la escritura no ocurrió.
+      const appt = await this.prisma.appointment.findFirst({
+        where: { id: appointmentId, clinicId },
+      });
+      if (!appt) throw new NotFoundException('cita no encontrada');
+      // Doble click o reintento: ya estaba cancelada. No es un error.
+      if (appt.status === 'CANCELADA') return appt;
       throw new ConflictException('esta cita ya no se puede cancelar');
     }
 
-    const updated = await this.prisma.appointment.update({
-      where: { id: appointmentId },
-      data: { status: 'CANCELADA', canceledAt: new Date() },
+    const updated = await this.prisma.appointment.findFirstOrThrow({
+      where: { id: appointmentId, clinicId },
     });
 
     // Los recordatorios de una cita cancelada solo pueden hacer daño: el

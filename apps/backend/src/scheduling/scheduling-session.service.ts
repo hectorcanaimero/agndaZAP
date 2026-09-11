@@ -40,15 +40,17 @@ export interface SchedulingSessionData {
  * el endpoint compara contra el `:slug` de la URL y corta cualquier reuso
  * cruzado entre clínicas.
  *
- * `phone` es informativo (trazabilidad del chat de origen); NO se devuelve al
- * front ni se usa para autorizar: el token ES la autorización.
+ * Deliberadamente NO guarda el teléfono del paciente. La sesión de agendamiento
+ * sí lo lleva porque lo necesita para pre-rellenar el formulario; acá no lo
+ * consume nadie, y sería PII de salud viviendo en Redis hasta 30 días, en una
+ * clave por token emitido, sin ningún propósito. Para atar la cita al chat ya
+ * está `Appointment.conversationId`.
  */
 export interface ManageSessionData {
   kind: 'manage';
   appointmentId: string;
   clinicId: string;
   clinicSlug: string;
-  phone: string | null;
   createdAtISO: string;
 }
 

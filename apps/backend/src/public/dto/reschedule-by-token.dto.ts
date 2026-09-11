@@ -1,4 +1,4 @@
-import { IsISO8601 } from 'class-validator';
+import { IsISO8601, Matches } from 'class-validator';
 
 /**
  * DTO de `POST /public/clinics/:slug/appointments/manage/:token/reschedule`.
@@ -17,5 +17,11 @@ export class RescheduleByTokenDto {
     { strict: true },
     { message: 'startAtISO debe ser una fecha ISO 8601 válida' },
   )
+  // `@IsISO8601` acepta `2030-06-02` a secas, y eso se parsea como medianoche
+  // en la TZ de la clínica: no matchea ningún slot y el paciente vería "ese
+  // horario ya no está disponible" cuando lo correcto es un 400 por formato.
+  @Matches(/T\d{2}:\d{2}/, {
+    message: 'startAtISO debe incluir la hora (ej: 2030-06-02T14:00:00Z)',
+  })
   startAtISO!: string;
 }

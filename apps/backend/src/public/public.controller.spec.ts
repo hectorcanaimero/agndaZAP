@@ -967,6 +967,9 @@ describe('PublicController — gestión de cita por link', () => {
       expect(prisma.appointment.findFirst.mock.calls[0][0].where).toEqual({
         id: 'appt-1',
         clinicId: 'clinic-A',
+        // Una clínica suspendida o archivada deja de servir datos de pacientes
+        // y de aceptar cambios, igual que en los otros endpoints públicos.
+        clinic: { status: 'ACTIVE' },
       });
     });
 
@@ -999,6 +1002,27 @@ describe('PublicController — gestión de cita por link', () => {
       expect(expirado).toBeInstanceOf(NotFoundException);
       expect(borrada).toBeInstanceOf(NotFoundException);
       expect(expirado.message).toBe(borrada.message);
+    });
+
+    it('clínica suspendida o archivada → 404: deja de servir datos de pacientes', async () => {
+      // El where lleva `clinic: { status: 'ACTIVE' }`, así que el findFirst no
+      // encuentra nada aunque el token siga vivo sus 30 días.
+      prisma.appointment.findFirst.mockResolvedValue(null);
+
+      await expect(
+        controller.getManagedAppointment('clinica-a', TOKEN),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('el token guardado NO lleva el teléfono del paciente', async () => {
+      // PII de salud viviendo hasta 30 días en Redis sin que nadie la consuma.
+      await controller.rescheduleManagedAppointment('clinica-a', TOKEN, {
+        startAtISO: '2030-06-02T14:00:00.000Z',
+      } as any);
+
+      const payload = sessions.createManage.mock.calls[0][0];
+      expect(payload).not.toHaveProperty('phone');
+      expect(JSON.stringify(payload)).not.toContain('584141234567');
     });
 
     it('cita pasada o terminal → canCancel/canReschedule en false', async () => {
@@ -1120,8 +1144,10 @@ describe('PublicController — gestión de cita por link', () => {
       expect(scheduling.rescheduleAppointment).not.toHaveBeenCalled();
     });
 
-    it('si no se puede emitir el token nuevo, la cita queda movida igual', async () => {
-      // Fail-open: lo que el paciente pidió ya está hecho.
+    it('si no se puede emitir el token nuevo, la cita queda movida y el viejo SIGUE VIVO', async () => {
+      // Fail-open: lo que el paciente pidió ya está hecho. Pero el token viejo
+      // no se quema hasta que el nuevo existe — si no, un fallo de Redis
+      // dejaría al paciente sin ningún link para volver a su cita.
       sessions.createManage.mockRejectedValue(new Error('redis down'));
 
       const res = await controller.rescheduleManagedAppointment(
@@ -1132,6 +1158,18 @@ describe('PublicController — gestión de cita por link', () => {
 
       expect(res.appointment.id).toBe('appt-1');
       expect(res.manageUrl).toBeUndefined();
+      expect(sessions.invalidateManage).not.toHaveBeenCalled();
+    });
+
+    it('cita pasada pero PENDIENTE → 409 en el controller', async () => {
+      prisma.appointment.findFirst.mockResolvedValue(
+        makeAppt({ status: 'PENDIENTE', startAt: new Date(Date.now() - 3600_000) }),
+      );
+
+      await expect(
+        controller.rescheduleManagedAppointment('clinica-a', TOKEN, body as any),
+      ).rejects.toThrow(ConflictException);
+      expect(scheduling.rescheduleAppointment).not.toHaveBeenCalled();
     });
   });
 });

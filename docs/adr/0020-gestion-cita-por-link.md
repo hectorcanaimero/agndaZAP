@@ -87,7 +87,26 @@ no tocan el enum de estados ni, por tanto, las métricas.
   acertó el formato o la clínica.
 - **El rate-limit va por `scope:slug:ip`, no por token+ip** como decía el contrato original.
   Limitar por token lo haría inútil para su único propósito: cada token probado estrenaría su
-  propio cupo, que es precisamente lo que necesita quien quiere iterar.
+  propio cupo, que es precisamente lo que necesita quien quiere iterar. Lectura y escritura
+  usan scopes distintos (`manage-read` 30/min, `manage-write` 10/min): con un bucket
+  compartido, recargar la página unas cuantas veces agotaba el cupo de cancelar — y cancelar
+  es justo la acción que queremos hacer más fácil que no aparecer.
+- **El token se redacta de los logs.** Viaja en el path, y `pino-http` ata el objeto `req` a
+  cada log del request, así que sin redactar la credencial acabaría en Axiom (un tercero), en
+  `docker logs` y en los access logs, donde cualquiera con acceso podría replayearla. El
+  serializer de `logger.config.ts` borra el token del path y corta la query entera.
+- **Los endpoints exigen `Clinic.status = ACTIVE`**, como los otros tres endpoints públicos.
+  Sin eso una clínica suspendida por impago o archivada al terminar el contrato habría seguido
+  sirviendo datos de pacientes y aceptando cambios durante los 30 días de vida del token.
+- **El token NO guarda el teléfono del paciente.** La sesión de agendamiento sí lo lleva
+  porque lo necesita para pre-rellenar el formulario; acá no lo consumía nadie y era PII de
+  salud viviendo en Redis hasta 30 días, en una clave por token emitido.
+- **Cancelar usa un `updateMany` con la condición dentro del `WHERE`.** Un `findFirst` seguido
+  de `update` deja una ventana en la que la recepcionista puede marcar la cita `ATENDIDA` desde
+  el panel: el update la pisaría, produciendo una transición `ATENDIDA → CANCELADA` que
+  `ALLOWED_TRANSITIONS` declara imposible y contaminando el no-show rate.
+- **Al reagendar se emite el token nuevo antes de quemar el viejo.** Al revés, un fallo de
+  Redis dejaría al paciente sin ningún link para volver a su cita.
 - **Del paciente solo sale el nombre.** El link puede acabar reenviado por WhatsApp o en el
   historial del navegador; el nombre basta para que reconozca su cita, el teléfono no aporta
   nada y sí es PII de salud ([[adr/0004-pii-y-compliance]]).
@@ -112,6 +131,17 @@ no tocan el enum de estados ni, por tanto, las métricas.
   cambio, pero cualquier caller nuevo tiene que recordar no filtrar `patientCreated`.
 - Falta la traza de reagendamientos (S6) y el cableado del bot (M2-c), que mandará este link
   ante `REPROGRAMAR` y `CANCELAR`.
+- **Tokens huérfanos**: si la clínica cancela o marca la cita `ATENDIDA` desde el panel, los
+  tokens vivos no se invalidan y siguen mostrando nombre, servicio y profesional hasta que
+  caducan. No permiten mutar (`isPatientMutable` corta), pero es lectura de PII sin motivo.
+  Arreglarlo bien exige un índice `appointmentId → tokens` para poder quemarlos todos; queda
+  como seguimiento.
+- **Sin tope de reagendamientos**: quien tenga el link puede mover la cita indefinidamente
+  dentro del rate-limit, y cada movimiento recalcula disponibilidad y reencola recordatorios.
+  El tope natural es `rescheduleCount` de S6; hasta entonces solo lo acota el rate-limit.
+- `WEB_BASE_URL` pasa a ser obligatoria en producción: ahora los links no solo los manda el
+  bot, también viajan en el cuerpo de una respuesta pública, y un default a `localhost` sería
+  un link roto enviado a pacientes reales.
 
 ## Relacionado
 [[adr/0018-scheduling-link-wa]] · [[adr/0004-pii-y-compliance]] ·

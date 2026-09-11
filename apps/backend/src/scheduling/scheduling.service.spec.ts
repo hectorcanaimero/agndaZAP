@@ -345,6 +345,49 @@ describe('SchedulingService.createAppointment', () => {
     expect(res.patientCreated).toBe(false);
     expect(prisma.patient.update).toHaveBeenCalledTimes(1);
   });
+
+  it('un error que NO es P2002 se propaga: no lo tapamos con un update', async () => {
+    prisma.patient.findUnique.mockResolvedValue(null);
+    prisma.patient.create.mockRejectedValue(new Error('conexión caída'));
+
+    await expect(
+      service.createAppointment({
+        clinicId: 'clinic-A',
+        patient: { phone: '+584141234567', name: 'Ana' },
+        serviceId: 'svc-1',
+        professionalId: 'prof-1',
+        startAtISO,
+        source: 'PUBLIC',
+      }),
+    ).rejects.toThrow('conexión caída');
+    expect(prisma.patient.update).not.toHaveBeenCalled();
+  });
+
+  it('un P2002 de OTRO unique también se propaga, no se confunde con el de phone', async () => {
+    // El día que Patient gane un unique de email o documento, mandar ese
+    // conflicto a un update por clinicId_phone moriría con P2025 y taparía el
+    // error real.
+    prisma.patient.findUnique.mockResolvedValue(null);
+    prisma.patient.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('unique', {
+        code: 'P2002',
+        clientVersion: 'x',
+        meta: { target: ['clinicId', 'email'] },
+      }),
+    );
+
+    await expect(
+      service.createAppointment({
+        clinicId: 'clinic-A',
+        patient: { phone: '+584141234567', name: 'Ana' },
+        serviceId: 'svc-1',
+        professionalId: 'prof-1',
+        startAtISO,
+        source: 'PUBLIC',
+      }),
+    ).rejects.toMatchObject({ code: 'P2002' });
+    expect(prisma.patient.update).not.toHaveBeenCalled();
+  });
 });
 
 describe('SchedulingService.rescheduleAppointment', () => {
@@ -544,10 +587,13 @@ describe('SchedulingService.cancelByPatient', () => {
   beforeEach(() => {
     prisma = {
       appointment: {
+        // El UPDATE lleva la condición dentro (anti lost-update): devuelve
+        // count 1 cuando la cita era cancelable.
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         findFirst: jest.fn().mockResolvedValue(makeAppt()),
-        update: jest.fn().mockImplementation(({ data }: any) =>
-          Promise.resolve({ ...makeAppt(), ...data }),
-        ),
+        findFirstOrThrow: jest
+          .fn()
+          .mockResolvedValue(makeAppt({ status: 'CANCELADA', canceledAt: new Date() })),
       },
     };
     availability = { getSlots: jest.fn() };
@@ -566,29 +612,41 @@ describe('SchedulingService.cancelByPatient', () => {
     });
 
     expect(res.status).toBe('CANCELADA');
-    expect(prisma.appointment.update.mock.calls[0][0].data.canceledAt).toBeInstanceOf(Date);
+    expect(prisma.appointment.updateMany.mock.calls[0][0].data.canceledAt).toBeInstanceOf(Date);
     // Un recordatorio de una cita cancelada solo puede hacer daño.
     expect(reminders.cancelForAppointment).toHaveBeenCalledWith('appt-1');
   });
 
-  it('multi-tenant: la cita se busca SIEMPRE acotada por clinicId', async () => {
+  it('la condición va DENTRO del UPDATE: no hay ventana de lost-update', async () => {
+    // Si la recepcionista marca ATENDIDA entre la lectura y la escritura, un
+    // update incondicional la pisaría y dejaría una transición imposible.
     await service.cancelByPatient({ clinicId: 'clinic-A', appointmentId: 'appt-1' });
 
-    expect(prisma.appointment.findFirst).toHaveBeenCalledWith({
-      where: { id: 'appt-1', clinicId: 'clinic-A' },
-    });
+    const where = prisma.appointment.updateMany.mock.calls[0][0].where;
+    expect(where.id).toBe('appt-1');
+    expect(where.clinicId).toBe('clinic-A');
+    expect(where.status.in).toEqual(['PENDIENTE', 'CONFIRMADA', 'EN_RIESGO']);
+    expect(where.startAt.gt).toBeInstanceOf(Date);
+  });
+
+  it('multi-tenant: el UPDATE va SIEMPRE acotado por clinicId', async () => {
+    await service.cancelByPatient({ clinicId: 'clinic-A', appointmentId: 'appt-1' });
+
+    expect(prisma.appointment.updateMany.mock.calls[0][0].where.clinicId).toBe('clinic-A');
   });
 
   it('cita de otra clínica → 404, nunca se cancela', async () => {
+    prisma.appointment.updateMany.mockResolvedValue({ count: 0 });
     prisma.appointment.findFirst.mockResolvedValue(null);
 
     await expect(
       service.cancelByPatient({ clinicId: 'clinic-B', appointmentId: 'appt-1' }),
     ).rejects.toThrow(NotFoundException);
-    expect(prisma.appointment.update).not.toHaveBeenCalled();
+    expect(reminders.cancelForAppointment).not.toHaveBeenCalled();
   });
 
-  it('es idempotente: cancelar dos veces no re-escribe ni re-cancela recordatorios', async () => {
+  it('es idempotente: cancelar dos veces no re-cancela recordatorios', async () => {
+    prisma.appointment.updateMany.mockResolvedValue({ count: 0 });
     prisma.appointment.findFirst.mockResolvedValue(makeAppt({ status: 'CANCELADA' }));
 
     const res = await service.cancelByPatient({
@@ -597,23 +655,25 @@ describe('SchedulingService.cancelByPatient', () => {
     });
 
     expect(res.status).toBe('CANCELADA');
-    expect(prisma.appointment.update).not.toHaveBeenCalled();
     expect(reminders.cancelForAppointment).not.toHaveBeenCalled();
   });
 
   it.each(['ATENDIDA', 'NO_SHOW'])(
     'estado terminal %s → 409: cambiarlo falsearía el histórico',
     async (status) => {
+      // El propio UPDATE no matchea (su where excluye los terminales).
+      prisma.appointment.updateMany.mockResolvedValue({ count: 0 });
       prisma.appointment.findFirst.mockResolvedValue(makeAppt({ status }));
 
       await expect(
         service.cancelByPatient({ clinicId: 'clinic-A', appointmentId: 'appt-1' }),
       ).rejects.toThrow(ConflictException);
-      expect(prisma.appointment.update).not.toHaveBeenCalled();
+      expect(reminders.cancelForAppointment).not.toHaveBeenCalled();
     },
   );
 
   it('cita ya pasada → 409 aunque el estado siga PENDIENTE', async () => {
+    prisma.appointment.updateMany.mockResolvedValue({ count: 0 });
     prisma.appointment.findFirst.mockResolvedValue(
       makeAppt({ status: 'PENDIENTE', startAt: past() }),
     );

@@ -4,6 +4,7 @@ import {
   ConflictException,
   Controller,
   Get,
+  Header,
   HttpCode,
   Logger,
   NotFoundException,
@@ -264,6 +265,8 @@ export class PublicController {
         startAt: Date;
         endAt: Date;
         status: string;
+        /** Link de gestión (ADR 0020). Ausente si no se pudo emitir el token. */
+        manageUrl?: string;
       }
     | { ok: true }
   > {
@@ -277,7 +280,9 @@ export class PublicController {
     // 2) Resolvemos clínica por slug.
     const clinic = await this.prisma.clinic.findFirst({
       where: { slug, status: 'ACTIVE' },
-      select: { id: true },
+      // `locale` va acá y no en una query aparte: lo necesita `issueManageUrl`
+      // para armar la URL de la web.
+      select: { id: true, locale: true },
     });
     if (!clinic) {
       throw new NotFoundException('clínica no encontrada');
@@ -360,7 +365,7 @@ export class PublicController {
     // la respuesta sin `manageUrl` y el front simplemente no muestra el link.
     let manageUrl: string | undefined;
     try {
-      manageUrl = await this.issueManageUrl(appointment, slug);
+      manageUrl = await this.issueManageUrl(appointment, slug, clinic.locale);
     } catch (e) {
       this.logger.error(
         `no se pudo emitir el manage token slug=${slug} apptId=${appointment.id}: ${(e as Error).message}`,
@@ -388,28 +393,20 @@ export class PublicController {
   private async issueManageUrl(
     appt: { id: string; clinicId: string; startAt: Date },
     slug: string,
+    locale: string,
   ): Promise<string> {
-    const clinic = await this.prisma.clinic.findUnique({
-      where: { id: appt.clinicId },
-      select: { locale: true },
-    });
-    const patient = await this.prisma.appointment.findUnique({
-      where: { id: appt.id },
-      select: { patient: { select: { phone: true } } },
-    });
     const { token } = await this.sessions.createManage(
       {
         appointmentId: appt.id,
         clinicId: appt.clinicId,
         clinicSlug: slug,
-        phone: patient?.patient.phone ?? null,
       },
       appt.startAt,
     );
     const baseUrl = (
       process.env.WEB_BASE_URL ?? 'http://localhost:3000'
     ).replace(/\/+$/, '');
-    return `${baseUrl}/${clinic?.locale ?? 'es'}/agendar/${slug}/cita?t=${token}`;
+    return `${baseUrl}/${locale}/agendar/${slug}/cita?t=${token}`;
   }
 
   /**
@@ -430,7 +427,16 @@ export class PublicController {
     const appointment = await this.prisma.appointment.findFirst({
       // El `clinicId` del token es la barrera multi-tenant: aunque el id de la
       // cita se filtrara, sin el token de esa clínica no se resuelve.
-      where: { id: session.appointmentId, clinicId: session.clinicId },
+      //
+      // `clinic.status ACTIVE` replica lo que hacen los otros tres endpoints
+      // públicos: una clínica suspendida por impago o archivada al terminar el
+      // contrato deja de servir datos de pacientes y de aceptar cambios. Sin
+      // esto seguiría haciéndolo durante los 30 días de vida del token.
+      where: {
+        id: session.appointmentId,
+        clinicId: session.clinicId,
+        clinic: { status: 'ACTIVE' },
+      },
       include: {
         service: { select: { id: true, name: true, durationMin: true } },
         professional: { select: { id: true, name: true } },
@@ -460,7 +466,8 @@ export class PublicController {
    * historial del navegador o reenviada por WhatsApp.
    */
   @Get(':slug/appointments/manage/:token')
-  @UseGuards(RateLimit(10, 'manage'))
+  @UseGuards(RateLimit(30, 'manage-read'))
+  @Header('Cache-Control', 'no-store')
   async getManagedAppointment(
     @Param('slug', SlugValidationPipe) slug: string,
     @Param('token') token: string,
@@ -499,7 +506,8 @@ export class PublicController {
    * caso, con el estado actual para que la web pueda decir qué pasó.
    */
   @Post(':slug/appointments/manage/:token/cancel')
-  @UseGuards(RateLimit(10, 'manage'))
+  @UseGuards(RateLimit(10, 'manage-write'))
+  @Header('Cache-Control', 'no-store')
   @HttpCode(200)
   async cancelManagedAppointment(
     @Param('slug', SlugValidationPipe) slug: string,
@@ -535,7 +543,8 @@ export class PublicController {
    * cambiar, e invalida el anterior.
    */
   @Post(':slug/appointments/manage/:token/reschedule')
-  @UseGuards(RateLimit(10, 'manage'))
+  @UseGuards(RateLimit(10, 'manage-write'))
+  @Header('Cache-Control', 'no-store')
   @HttpCode(200)
   async rescheduleManagedAppointment(
     @Param('slug', SlugValidationPipe) slug: string,
@@ -567,12 +576,18 @@ export class PublicController {
       throw e;
     }
 
-    // Token nuevo con el TTL del horario nuevo; el viejo se quema para que no
-    // queden dos links vivos apuntando a la misma cita.
-    await this.sessions.invalidateManage(token);
+    // Token nuevo con el TTL del horario nuevo. El viejo se quema DESPUÉS y
+    // solo si el nuevo salió bien: al revés, un fallo de Redis dejaría al
+    // paciente sin ningún link para volver a su cita. El ADR 0020 acepta que
+    // convivan varios tokens por cita, así que este orden no cuesta nada.
     let manageUrl: string | undefined;
     try {
-      manageUrl = await this.issueManageUrl(updated, slug);
+      manageUrl = await this.issueManageUrl(
+        updated,
+        slug,
+        appointment.clinic.locale,
+      );
+      await this.sessions.invalidateManage(token);
     } catch (e) {
       this.logger.error(
         `no se pudo re-emitir el manage token slug=${slug} apptId=${updated.id}: ${(e as Error).message}`,
