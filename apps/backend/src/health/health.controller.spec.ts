@@ -1,3 +1,4 @@
+import type { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { HealthController } from './health.controller';
 
@@ -9,28 +10,45 @@ import { HealthController } from './health.controller';
  *  - `/live` responde siempre 200.
  *  - Timeout por check (redis lento → false, no cuelga el response).
  *  - En prod NO expone error messages en el response (anti-recon).
+ *  - Profundidad de la cola `bot-inbound` (B10).
  */
 describe('HealthController', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let prisma: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let redis: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let botInbound: any;
   let controller: HealthController;
-  const logger = { warn: jest.fn(), setContext: jest.fn() };
+  const logger = {
+    warn: jest.fn(),
+    error: jest.fn(),
+    setContext: jest.fn(),
+  };
   const originalFetch = global.fetch;
 
   beforeEach(() => {
     prisma = { $queryRawUnsafe: jest.fn().mockResolvedValue([{ '?column?': 1 }]) };
-    redis = { ping: jest.fn().mockResolvedValue('PONG') };
+    redis = {
+      ping: jest.fn().mockResolvedValue('PONG'),
+      // Los fallidos se cuentan con ZCOUNT sobre el zset, no trayendo jobs.
+      zcount: jest.fn().mockResolvedValue(0),
+    };
     // Mock global fetch — WAHA check happy path por default.
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       status: 200,
     } as unknown as Response);
+    botInbound = {
+      getWaitingCount: jest.fn().mockResolvedValue(0),
+      getWaiting: jest.fn().mockResolvedValue([]),
+    };
     logger.warn.mockClear();
+    logger.error.mockClear();
     controller = new HealthController(
       prisma as unknown as PrismaService,
       redis,
+      botInbound as unknown as Queue,
       logger as never,
     );
   });
@@ -164,6 +182,124 @@ describe('HealthController', () => {
       // Con paralelismo real deberíamos estar cerca de 50ms + overhead.
       // Damos margen generoso: <120ms es señal clara de paralelismo.
       expect(elapsed).toBeLessThan(120);
+    });
+  });
+
+  /**
+   * B10: la cola entre el webhook y el bot convierte un fallo ruidoso (500 →
+   * WAHA reintenta) en uno silencioso. Si el worker muere, los mensajes se
+   * apilan y el paciente no recibe nada; este check es lo que lo hace visible.
+   */
+  describe('cola bot-inbound', () => {
+    it('cola vacía: ok y expone los contadores', async () => {
+      const res = await controller.check();
+      expect(res.ok).toBe(true);
+      expect(res.checks.botInbound).toMatchObject({
+        ok: true,
+        waiting: 0,
+        failedLastHour: 0,
+      });
+    });
+
+    it('más de 50 esperando → degradado y log de error', async () => {
+      botInbound.getWaitingCount.mockResolvedValue(51);
+      const res = await controller.check();
+
+      expect(res.ok).toBe(false);
+      expect(res.checks.botInbound.ok).toBe(false);
+      expect(res.checks.botInbound.waiting).toBe(51);
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ waiting: 51 }),
+        expect.stringContaining('bot-inbound'),
+      );
+    });
+
+    it('exactamente 50 esperando todavía es ok (el umbral no se pasa)', async () => {
+      botInbound.getWaitingCount.mockResolvedValue(50);
+      const res = await controller.check();
+      expect(res.checks.botInbound.ok).toBe(true);
+    });
+
+    /**
+     * Un fallo suelto se reporta y se loguea, pero NO tumba el `ok`: este
+     * endpoint es público, y si un mensaje concreto revienta el bot bastaría
+     * repetirlo para mantener el backend "degradado" una hora entera, gratis.
+     */
+    it('un fallo definitivo se reporta y loguea, pero no tumba el ok', async () => {
+      redis.zcount.mockResolvedValue(1);
+      const res = await controller.check();
+
+      expect(res.ok).toBe(true);
+      expect(res.checks.botInbound.failedLastHour).toBe(1);
+      expect(logger.error).toHaveBeenCalled();
+    });
+
+    it('cuenta los fallidos con ZCOUNT sobre la ventana de una hora', async () => {
+      await controller.check();
+      const [key, min] = redis.zcount.mock.calls[0];
+      expect(key).toBe('bull:bot-inbound:failed');
+      expect(min).toBeGreaterThan(Date.now() - 3_700_000);
+    });
+
+    it('NO trae los jobs fallidos: llevan el texto del paciente', async () => {
+      await controller.check();
+      expect(botInbound.getFailed).toBeUndefined();
+    });
+
+    /**
+     * La profundidad sola no detecta un worker muerto: una clínica con 5-10
+     * mensajes/hora tardaría días en juntar 51 pendientes y el health estaría
+     * verde todo ese tiempo sin que nadie reciba respuesta.
+     */
+    it('un mensaje viejo esperando degrada aunque haya pocos pendientes', async () => {
+      botInbound.getWaitingCount.mockResolvedValue(3);
+      botInbound.getWaiting.mockResolvedValue([
+        { timestamp: Date.now() - 300_000 },
+      ]);
+      const res = await controller.check();
+
+      expect(res.ok).toBe(false);
+      expect(res.checks.botInbound.oldestWaitingS).toBeGreaterThanOrEqual(300);
+    });
+
+    it('un mensaje recién encolado no degrada nada', async () => {
+      botInbound.getWaitingCount.mockResolvedValue(3);
+      botInbound.getWaiting.mockResolvedValue([
+        { timestamp: Date.now() - 5_000 },
+      ]);
+      const res = await controller.check();
+      expect(res.ok).toBe(true);
+    });
+
+    it('sólo mira el primero de la cola, no la lista entera', async () => {
+      await controller.check();
+      expect(botInbound.getWaiting).toHaveBeenCalledWith(0, 0);
+    });
+
+    it('cola sana: no loguea error (un falso positivo aquí despierta a alguien)', async () => {
+      await controller.check();
+      expect(logger.error).not.toHaveBeenCalled();
+    });
+
+    it('si no se puede consultar la cola NO se declara degradado el sistema', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+      // Fail-open: el check de Redis ya cubre esa causa raíz; no vamos a poner
+      // el health en rojo por no poder mirar.
+      botInbound.getWaitingCount.mockRejectedValue(new Error('redis down'));
+      const res = await controller.check();
+
+      expect(res.checks.botInbound.ok).toBe(true);
+      expect(logger.warn).toHaveBeenCalled();
+    });
+
+    it('no sube a los booleanos planos de compat', async () => {
+      botInbound.getWaitingCount.mockResolvedValue(999);
+      const res = await controller.check();
+      // `ok` sí lo refleja; db/redis/waha siguen siendo lo que son.
+      expect(res.ok).toBe(false);
+      expect(res.db).toBe(true);
+      expect(res.redis).toBe(true);
+      expect(res.waha).toBe(true);
     });
   });
 });

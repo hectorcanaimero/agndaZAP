@@ -62,9 +62,13 @@ export class FeedbackController {
     const rows = await this.prisma.feedback.findMany({
       where: {
         ...scope,
-        ...(professionalId
-          ? { appointment: { professionalId } }
-          : {}),
+        // El `include` de abajo trae paciente, profesional y servicio DE LA
+        // CITA. Filtrar solo por `Feedback.clinicId` da por hecho que la cita
+        // es del mismo tenant, y hasta la FK compuesta (ADR 0022) nada en la BD
+        // lo garantizaba: una fila con el clinicId cruzado habría expuesto
+        // datos de otra clínica. Exigirlo también en la cita es barato y no
+        // depende de que la migración ya se haya aplicado.
+        appointment: { is: { ...scope, ...(professionalId ? { professionalId } : {}) } },
       },
       orderBy: { respondedAt: 'desc' },
       take: limit,
@@ -103,7 +107,9 @@ export class FeedbackController {
     // de tracking). Si algún tenant explota en cardinalidad se migra a groupBy
     // + agg del lado de Postgres. Por ahora simplicidad > premature optimization.
     const rows = await this.prisma.feedback.findMany({
-      where: scope,
+      // Mismo motivo que en `list`: el `include` trae datos de la cita, así que
+      // el tenant se exige también sobre ella y no solo sobre el feedback.
+      where: { ...scope, appointment: { is: { ...scope } } },
       include: {
         appointment: {
           include: {

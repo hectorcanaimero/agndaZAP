@@ -125,7 +125,11 @@ sin exponer el identificador real.
 La lógica está en un único módulo, `bot/bot-rate-limit.ts`, y la consumen los dos
 caminos de entrada:
 
-- `BotService.handleIncoming` → `scope: 'bot'` (mensajes de texto).
+- `WebhookController` → `scope: 'bot'` (mensajes de texto), **antes** de encolar en
+  `bot-inbound`. **No** vuelve a aplicarse dentro de `BotService.handleIncoming`: con la
+  cola en medio eso consumía presupuesto dos veces y, peor, un reintento de BullMQ que
+  cruzara el cap hacía `return` en silencio y el mensaje del paciente se perdía sin
+  fallo, sin Sentry y sin bandeja. Ver [[adr/0021-cola-bot-inbound]].
 - `WebhookController.withinRateLimit` → `scope: 'media'` (adjuntos, que no pasan
   por el bot).
 

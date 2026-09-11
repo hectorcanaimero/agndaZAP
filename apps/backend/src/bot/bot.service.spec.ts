@@ -110,6 +110,12 @@ describe('BotService — FSM de agendamiento', () => {
       },
       conversation: {
         upsert: jest.fn().mockImplementation(async () => convoState),
+        // S5: liga `patientId`. `updateMany` (no `update`) porque el where
+        // lleva `clinicId` además del id.
+        updateMany: jest.fn().mockImplementation(async ({ data }: any) => {
+          if ('patientId' in data) convoState.patientId = data.patientId;
+          return { count: 1 };
+        }),
         update: jest.fn().mockImplementation(async ({ data }: any) => {
           if ('flowStep' in data) convoState.flowStep = data.flowStep;
           if ('flowData' in data) convoState.flowData = data.flowData ?? null;
@@ -131,7 +137,14 @@ describe('BotService — FSM de agendamiento', () => {
         findMany: jest.fn().mockResolvedValue([professional1]),
         findFirst: jest.fn().mockResolvedValue(professional1),
       },
-      patient: { findUnique: jest.fn().mockResolvedValue(null) },
+      patient: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        // `linkConversationPatient` comprueba que el paciente sea de la clínica
+        // antes de escribir (defensa en profundidad contra un cross-tenant).
+        findFirst: jest.fn().mockImplementation(async ({ where }: any) =>
+          where.clinicId === 'clinic-A' ? { id: where.id } : null,
+        ),
+      },
       appointment: { findFirst: jest.fn().mockResolvedValue(null) },
       // Recordatorio SENT reciente: gatea el "sí" suelto (B2). Default null
       // = no hay nada que confirmar.
@@ -283,6 +296,50 @@ describe('BotService — FSM de agendamiento', () => {
     const finalMsg = waha.sendText.mock.calls.at(-1)![2];
     expect(finalMsg).toMatch(/agendada|confirmada/);
     expect(finalMsg).toMatch(/Av\. Siempre Viva/);
+  });
+
+  it('S5: confirmar por la FSM deja la conversación ligada al paciente de la cita', async () => {
+    scheduling.createAppointment.mockResolvedValue({
+      appointment: {
+        id: 'appt-new',
+        patientId: 'pat-nuevo',
+        status: 'PENDIENTE',
+        startAt: tomorrow10.toJSDate(),
+        endAt: tomorrow1030.toJSDate(),
+      },
+      patientCreated: true,
+    });
+
+    await bot.handleIncoming({
+      clinicId: 'clinic-A',
+      chatId: convoState.chatId,
+      phone: convoState.phone,
+      text: 'quiero agendar',
+    });
+    await bot.handleIncoming({
+      clinicId: 'clinic-A',
+      chatId: convoState.chatId,
+      phone: convoState.phone,
+      text: '1',
+    });
+    await bot.handleIncoming({
+      clinicId: 'clinic-A',
+      chatId: convoState.chatId,
+      phone: convoState.phone,
+      text: 'Ana Pérez',
+    });
+    await bot.handleIncoming({
+      clinicId: 'clinic-A',
+      chatId: convoState.chatId,
+      phone: convoState.phone,
+      text: 'sí',
+    });
+
+    expect(prisma.conversation.updateMany).toHaveBeenCalledWith({
+      where: { id: 'convo-1', clinicId: 'clinic-A' },
+      data: { patientId: 'pat-nuevo' },
+    });
+    expect(convoState.patientId).toBe('pat-nuevo');
   });
 
   it('si el paciente ya tiene nombre en DB, la FSM salta ASK_NAME y va directo a CONFIRM', async () => {
@@ -1048,7 +1105,12 @@ describe('BotService — FSM de agendamiento', () => {
         text: '¿cuál es el horario?',
       });
 
-      expect(prisma.appointment.findFirst).not.toHaveBeenCalled();
+      // S5: sin teléfono todavía se puede resolver por conversationId, pero
+      // este chat no tiene ninguna cita, así que la invitación va igual.
+      for (const call of prisma.appointment.findFirst.mock.calls) {
+        expect(call[0].where.clinicId).toBe('clinic-A');
+        expect(call[0].where.patientId).toBeUndefined();
+      }
       expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/\*agendar\*/);
     });
 
@@ -1102,56 +1164,10 @@ describe('BotService — FSM de agendamiento', () => {
 
   // ─────────────────── Rate-limit por chatId (ADR 0007) ───────────────────
 
-  it('el 16to mensaje del mismo chat en la ventana se descarta silenciosamente', async () => {
-    intent.detect.mockResolvedValue(Intent.OTRO);
-
-    // Los primeros 15 pasan.
-    for (let i = 0; i < 15; i++) {
-      await bot.handleIncoming({
-        clinicId: 'clinic-A',
-        chatId: convoState.chatId,
-        phone: convoState.phone,
-        text: 'ping',
-      });
-    }
-    expect(intent.detect).toHaveBeenCalledTimes(15);
-    const callsBefore = waha.sendText.mock.calls.length;
-
-    // El 16to debe cortarse ANTES de intent.detect: sin nuevas llamadas al LLM,
-    // sin nuevas respuestas al chat.
-    await bot.handleIncoming({
-      clinicId: 'clinic-A',
-      chatId: convoState.chatId,
-      phone: convoState.phone,
-      text: 'ping-16',
-    });
-    expect(intent.detect).toHaveBeenCalledTimes(15);
-    expect(waha.sendText.mock.calls.length).toBe(callsBefore);
-
-    // El contador Redis reflejó el intento (INCR corre siempre).
-    const rlKeys = [...redisCounters.keys()].filter((k) =>
-      k.startsWith('bot:msg:clinic-A:5804141234567@c.us:'),
-    );
-    expect(rlKeys.length).toBeGreaterThan(0);
-    expect(redisCounters.get(rlKeys[0])).toBe(16);
-  });
-
-  it('si Redis falla, fail-open: el bot sigue procesando', async () => {
-    intent.detect.mockResolvedValue(Intent.OTRO);
-    redis.incr.mockRejectedValueOnce(new Error('redis down'));
-
-    // Texto que NO es saludo — GREETING_REGEX cortaría antes de llegar a
-    // intent.detect y este test verifica que el pipeline LLM se ejecuta.
-    await bot.handleIncoming({
-      clinicId: 'clinic-A',
-      chatId: convoState.chatId,
-      phone: convoState.phone,
-      text: '¿tienen turno mañana?',
-    });
-
-    // Fail-open: intent.detect se llamó igual.
-    expect(intent.detect).toHaveBeenCalledTimes(1);
-  });
+  // El rate-limit del ADR 0007 ya no vive en `handleIncoming`: con la cola
+  // `bot-inbound` en medio pasó al webhook, ANTES de encolar. Su cobertura
+  // está en `webhook.controller.spec.ts` → "rate-limit antes de encolar".
+  // Ver docs/adr/0021-cola-bot-inbound.md.
 
   it('resolveChoice ignora matches por nombre con menos de 3 chars', () => {
     // Accedemos al método privado a propósito: es determinista y no depende de
@@ -1411,17 +1427,70 @@ describe('BotService — FSM de agendamiento', () => {
       });
     }
 
-    it('busca la próxima cita dentro del tenant (clinicId + patientId, estados abiertos, futura)', async () => {
+    it('busca la próxima cita dentro del tenant, por conversación y luego por teléfono (S5)', async () => {
+      // Sin `patientId` ligado: primero se prueba por conversationId y, si no
+      // hay nada, por el teléfono de la conversación.
+      prisma.appointment.findFirst
+        .mockResolvedValueOnce(null) // por conversationId
+        .mockResolvedValue(upcoming); // por patientId tras resolver el phone
+
       await say('sí');
+
+      const byConversation = prisma.appointment.findFirst.mock.calls[0][0].where;
+      expect(byConversation.clinicId).toBe('clinic-A');
+      expect(byConversation.conversationId).toBe('convo-1');
+      expect(byConversation.status).toEqual({
+        in: ['PENDIENTE', 'EN_RIESGO', 'CONFIRMADA'],
+      });
+      expect(byConversation.startAt.gte).toBeInstanceOf(Date);
 
       expect(prisma.patient.findUnique).toHaveBeenCalledWith({
         where: { clinicId_phone: { clinicId: 'clinic-A', phone: '+584141234567' } },
       });
+      const byPatient = prisma.appointment.findFirst.mock.calls[1][0].where;
+      expect(byPatient.clinicId).toBe('clinic-A');
+      expect(byPatient.patientId).toBe('pat-1');
+    });
+
+    it('ligar `patientId` de paso: al resolver por teléfono, la conversación queda ligada', async () => {
+      prisma.appointment.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue(upcoming);
+
+      await say('sí');
+
+      expect(prisma.conversation.updateMany).toHaveBeenCalledWith({
+        where: { id: 'convo-1', clinicId: 'clinic-A' },
+        data: { patientId: 'pat-1' },
+      });
+      expect(convoState.patientId).toBe('pat-1');
+    });
+
+    it('con `patientId` ya ligado no vuelve a resolver el teléfono', async () => {
+      convoState.patientId = 'pat-1';
+
+      await say('sí');
+
       const where = prisma.appointment.findFirst.mock.calls[0][0].where;
-      expect(where.clinicId).toBe('clinic-A');
       expect(where.patientId).toBe('pat-1');
-      expect(where.status).toEqual({ in: ['PENDIENTE', 'EN_RIESGO', 'CONFIRMADA'] });
-      expect(where.startAt.gte).toBeInstanceOf(Date);
+      expect(prisma.patient.findUnique).not.toHaveBeenCalled();
+      expect(reminders.confirmAppointment).toHaveBeenCalledWith('appt-7');
+    });
+
+    it('conversación ligada por `patientId` y sin teléfono: el "sí" confirma igual', async () => {
+      // El caso que motivó S5: chat @lid que agendó por la web.
+      convoState.patientId = 'pat-1';
+      convoState.phone = null;
+
+      await bot.handleIncoming({
+        clinicId: 'clinic-A',
+        chatId: 'abc123@lid',
+        phone: null,
+        lid: 'abc123',
+        text: 'sí',
+      });
+
+      expect(reminders.confirmAppointment).toHaveBeenCalledWith('appt-7');
     });
 
     it.each(['sí', 'SI', 'Confirmo', 'ok', 'dale'])(
@@ -1511,7 +1580,8 @@ describe('BotService — FSM de agendamiento', () => {
     it('sin cita próxima: responde que no la encontró y no toca reminders', async () => {
       prisma.appointment.findFirst.mockResolvedValue(null);
 
-      await say('sí');
+      // Verbo explícito: no pasa por el gate de contexto, llega al handler.
+      await say('confirmo');
 
       expect(reminders.confirmAppointment).not.toHaveBeenCalled();
       expect(reminders.cancelForAppointment).not.toHaveBeenCalled();
@@ -1520,24 +1590,37 @@ describe('BotService — FSM de agendamiento', () => {
 
     it('paciente desconocido en este tenant: no cruza a otras clínicas', async () => {
       prisma.patient.findUnique.mockResolvedValue(null);
+      prisma.appointment.findFirst.mockResolvedValue(null);
 
       await say('cancelar');
 
-      expect(prisma.appointment.findFirst).not.toHaveBeenCalled();
+      // Se busca por conversationId (siempre acotado a la clínica) y por
+      // teléfono; ninguna de las dos vías cruza de tenant.
+      for (const call of prisma.appointment.findFirst.mock.calls) {
+        expect(call[0].where.clinicId).toBe('clinic-A');
+      }
       expect(prisma.appointment.update).not.toHaveBeenCalled();
+      expect(prisma.conversation.updateMany).not.toHaveBeenCalled();
       expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/No encontré una cita/i);
     });
 
-    it('chat @lid sin teléfono: no puede asociar cita → deriva a recepción', async () => {
+    it('chat @lid sin teléfono ni cita resoluble: deriva a recepción', async () => {
+      // El `upsert` mockeado devuelve `convoState`, así que el estado de la
+      // conversación hay que fijarlo acá: un chat @lid no tiene teléfono.
+      convoState.phone = null;
+      prisma.appointment.findFirst.mockResolvedValue(null);
+
       await bot.handleIncoming({
         clinicId: 'clinic-A',
         chatId: 'abc123@lid',
         phone: null,
         lid: 'abc123',
-        text: 'sí',
+        text: 'confirmo',
       });
 
-      expect(prisma.appointment.findFirst).not.toHaveBeenCalled();
+      // Sí se intenta resolver por conversationId (S5); lo que no hay es nada
+      // que resolver, y sin teléfono tampoco hay segunda vía.
+      expect(prisma.patient.findUnique).not.toHaveBeenCalled();
       expect(reminders.confirmAppointment).not.toHaveBeenCalled();
       expect(convoState.state).toBe('NEEDS_HUMAN');
     });
@@ -1562,7 +1645,7 @@ describe('BotService — FSM de agendamiento', () => {
 
     // ── B2: "sí/ok/dale" solo confirman cuando hay un recordatorio esperando ──
 
-    it('busca el recordatorio SENT dentro del tenant y de la ventana de 48 h', async () => {
+    it('busca el recordatorio SENT de ESA cita y dentro de la ventana de 48 h', async () => {
       await say('sí');
 
       const where = prisma.reminder.findFirst.mock.calls[0][0].where;
@@ -1572,11 +1655,10 @@ describe('BotService — FSM de agendamiento', () => {
         48 * 3600 * 1000,
         -4,
       );
-      expect(where.appointment.clinicId).toBe('clinic-A');
-      expect(where.appointment.patient).toEqual({
-        clinicId: 'clinic-A',
-        phone: '+584141234567',
-      });
+      // Por `appointmentId` de la cita ya resuelta: el aislamiento por tenant
+      // lo garantiza `findUpcomingAppointment`, que filtra por clinicId en
+      // todas sus vías. No hace falta repetirlo acá.
+      expect(where.appointmentId).toBe('appt-7');
     });
 
     it('"sí" suelto SIN contexto de confirmación: responde el menú, no "no encontré cita"', async () => {
@@ -1585,7 +1667,6 @@ describe('BotService — FSM de agendamiento', () => {
       await say('sí');
 
       expect(reminders.confirmAppointment).not.toHaveBeenCalled();
-      expect(prisma.appointment.findFirst).not.toHaveBeenCalled();
       expect(intent.detect).not.toHaveBeenCalled();
       const msg = waha.sendText.mock.calls.at(-1)![2];
       expect(msg).not.toMatch(/No encontré una cita/i);
@@ -1637,15 +1718,20 @@ describe('BotService — FSM de agendamiento', () => {
       expect(intent.detect).not.toHaveBeenCalled();
     });
 
-    it('un Reminder SENT de OTRA clínica no habilita el "sí" (aislamiento efectivo)', async () => {
-      // El mock devuelve null para el where con clinicId='clinic-A': simula que
-      // el único recordatorio SENT del sistema es de otro tenant.
-      prisma.reminder.findFirst.mockImplementation(async ({ where }: any) =>
-        where.appointment.clinicId === 'clinic-A' ? null : { id: 'rem-otra' },
+    it('una cita de OTRA clínica nunca se resuelve: todas las vías filtran por clinicId', async () => {
+      // Simula que la única cita abierta del sistema es de otro tenant: las
+      // tres vías de `findUpcomingAppointment` llevan clinicId, así que
+      // ninguna la ve.
+      prisma.appointment.findFirst.mockImplementation(async ({ where }: any) =>
+        where.clinicId === 'clinic-A' ? null : { id: 'appt-de-otra-clinica' },
       );
 
       await say('sí');
 
+      // Ninguna de las vías devuelve la cita ajena, y todas llevan clinicId.
+      for (const call of prisma.appointment.findFirst.mock.calls) {
+        expect(call[0].where.clinicId).toBe('clinic-A');
+      }
       expect(reminders.confirmAppointment).not.toHaveBeenCalled();
       expect(waha.sendText.mock.calls.at(-1)![2]).toMatch(/\*agendar\*/);
     });
