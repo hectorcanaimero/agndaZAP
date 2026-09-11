@@ -666,3 +666,13 @@
   vacía lo dice y muestra todo.
 - Tras dos respuestas seguidas sin entender, ofrece el form web sin resetear la FSM.
 - Detalle y gotchas en [[notas/2026-09-11-fsm-navegacion-horarios]].
+
+## 2026-09-11 — S5: ligar `Conversation.patientId`
+- `findUpcomingAppointment` resuelve por `patientId` → `conversationId` → `phone` de la
+  conversación, y liga de paso cuando encuentra al paciente por el teléfono de WAHA.
+- Desde el token `BOT_WEB`: se liga solo si el `Patient` nació en ese `createAppointment`, y
+  **nunca** se escribe `Conversation.phone` con el número del formulario. Ese número es declarado;
+  convertirlo en verificado dejaría a un chat `@lid` gestionar citas ajenas.
+- Efecto colateral necesario: `handleReminderReply` ya no exige teléfono antes de buscar, que era
+  lo que impedía confirmar desde un `@lid` ligado — el caso que S5 venía a arreglar.
+- Detalle y razonamiento en [[notas/2026-09-11-conversation-patient-link]].

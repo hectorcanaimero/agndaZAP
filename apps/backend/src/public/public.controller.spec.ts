@@ -157,6 +157,15 @@ describe('PublicController', () => {
           .mockResolvedValue({ patient: { phone: '+584141234567' } }),
         findFirst: jest.fn().mockResolvedValue(null),
       },
+      // S5: ligar `Conversation.patientId` cuando la cita nace de un link WA.
+      conversation: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'conv-1',
+          phone: null,
+          patientId: null,
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
     };
     availability = {
       getSlots: jest.fn().mockResolvedValue([]),
@@ -166,6 +175,7 @@ describe('PublicController', () => {
         appointment: {
           id: 'appt-1',
           clinicId: 'clinic-1',
+          patientId: 'pat-1',
           startAt: new Date('2030-06-01T14:00:00Z'),
           endAt: new Date('2030-06-01T14:30:00Z'),
           status: 'PENDIENTE',
@@ -439,6 +449,129 @@ describe('PublicController', () => {
             conversationId: 'conv-1',
           }),
         );
+      });
+
+      // ── S5: ligar Conversation.patientId ──
+
+      function withSession(overrides: Record<string, unknown> = {}) {
+        sessions.consume.mockResolvedValueOnce({
+          conversationId: 'conv-1',
+          clinicId: 'clinic-A',
+          clinicSlug: 'clinica-a',
+          phone: '+584141234567',
+          lid: null,
+          name: 'Ana',
+          createdAtISO: new Date().toISOString(),
+          ...overrides,
+        });
+      }
+
+      it('conversación @lid y paciente NUEVO: liga patientId y deja phone en null', async () => {
+        withSession();
+        prisma.conversation.findFirst.mockResolvedValue({
+          id: 'conv-1',
+          phone: null,
+          patientId: null,
+        });
+
+        await controller.createAppointment('clinica-a', {
+          ...dto,
+          token: validToken,
+        });
+
+        expect(prisma.conversation.updateMany).toHaveBeenCalledWith({
+          where: { id: 'conv-1', clinicId: 'clinic-A', patientId: null },
+          data: { patientId: 'pat-1' },
+        });
+        // NUNCA se escribe el teléfono del formulario: es declarado, no
+        // verificado. Ver la nota de S5.
+        const written = prisma.conversation.updateMany.mock.calls[0][0].data;
+        expect(written).not.toHaveProperty('phone');
+      });
+
+      it('conversación @lid y paciente PREEXISTENTE: no liga (la cita se alcanza por conversationId)', async () => {
+        withSession();
+        scheduling.createAppointment.mockResolvedValueOnce({
+          appointment: {
+            id: 'appt-1',
+            clinicId: 'clinic-1',
+            patientId: 'pat-1',
+            startAt: new Date('2030-06-01T14:00:00Z'),
+            endAt: new Date('2030-06-01T14:30:00Z'),
+            status: 'PENDIENTE',
+          },
+          patientCreated: false,
+        });
+        prisma.conversation.findFirst.mockResolvedValue({
+          id: 'conv-1',
+          phone: null,
+          patientId: null,
+        });
+
+        await controller.createAppointment('clinica-a', {
+          ...dto,
+          token: validToken,
+        });
+
+        expect(prisma.conversation.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('teléfono del form distinto al de la conversación: no liga y la cita se crea igual', async () => {
+        withSession();
+        prisma.conversation.findFirst.mockResolvedValue({
+          id: 'conv-1',
+          phone: '+584149999999', // el verificado por WAHA
+          patientId: null,
+        });
+
+        const res: any = await controller.createAppointment('clinica-a', {
+          ...dto,
+          phone: '+584141234567', // el declarado en el form
+          token: validToken,
+        });
+
+        expect(prisma.conversation.updateMany).not.toHaveBeenCalled();
+        // La cita se crea igual: el paciente no paga por una discrepancia nuestra.
+        expect(scheduling.createAppointment).toHaveBeenCalled();
+        expect(res.id).toBe('appt-1');
+      });
+
+      it('conversación ya ligada: no la vuelve a escribir', async () => {
+        withSession();
+        prisma.conversation.findFirst.mockResolvedValue({
+          id: 'conv-1',
+          phone: null,
+          patientId: 'pat-viejo',
+        });
+
+        await controller.createAppointment('clinica-a', {
+          ...dto,
+          token: validToken,
+        });
+
+        expect(prisma.conversation.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('la conversación se busca acotada al tenant', async () => {
+        withSession();
+
+        await controller.createAppointment('clinica-a', {
+          ...dto,
+          token: validToken,
+        });
+
+        expect(prisma.conversation.findFirst).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: 'conv-1', clinicId: 'clinic-A' },
+          }),
+        );
+      });
+
+      it('sin token no se toca la conversación', async () => {
+        await controller.createAppointment('clinica-a', { ...dto });
+
+        expect(prisma.conversation.findFirst).not.toHaveBeenCalled();
+        expect(prisma.conversation.updateMany).not.toHaveBeenCalled();
       });
 
       it('token inválido/expirado → 400 y NO crea cita', async () => {

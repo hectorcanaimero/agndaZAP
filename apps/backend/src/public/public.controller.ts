@@ -335,11 +335,12 @@ export class PublicController {
     // / BadRequestException con sus mensajes internos; el endpoint público
     // reemplaza el 409 por un texto orientado a paciente ("elegí otro").
     let appointment;
+    let patientCreated = false;
     try {
       // `patientCreated` se queda acá dentro: en el borde público diría si ese
       // teléfono ya era paciente de la clínica, o sea un oráculo para enumerar
       // pacientes probando números.
-      ({ appointment } = await this.scheduling.createAppointment({
+      ({ appointment, patientCreated } = await this.scheduling.createAppointment({
         clinicId: clinic.id,
         patient: {
           phone: normalizedPhone,
@@ -368,6 +369,17 @@ export class PublicController {
       `appointment created slug=${slug} apptId=${appointment.id} source=${source} status=${appointment.status}`,
     );
 
+    // 6b) S5: ligar la conversación de WhatsApp al paciente, con condiciones.
+    if (conversationId) {
+      await this.linkConversationToPatient({
+        clinicId: clinic.id,
+        conversationId,
+        patientId: appointment.patientId,
+        formPhone: normalizedPhone,
+        patientCreated,
+      });
+    }
+
     // Link de gestión para que /gracias ofrezca "cancelar o cambiar horario"
     // sin que el paciente tenga que escribir por WhatsApp. Fail-open: si Redis
     // está caído la cita ya está creada y eso es lo que importa — devolvemos
@@ -391,6 +403,61 @@ export class PublicController {
       status: appointment.status,
       ...(manageUrl ? { manageUrl } : {}),
     };
+  }
+
+  /**
+   * Liga `Conversation.patientId` cuando una cita nace de un link de WhatsApp
+   * (S5). Sin esto, una conversación `@lid` que agendó por la web no se
+   * encuentra ni por teléfono ni por paciente, y pierde el
+   * recordatorio-respuesta, el follow-up y el saludo con contexto.
+   *
+   * Tres reglas, todas de seguridad:
+   *
+   *  1. **Nunca se rellena `Conversation.phone`** con el número del formulario.
+   *     Ese número es *declarado*: el campo llega readonly, pero el token viaja
+   *     en una URL y el form es público. Convertirlo en verificado dejaría que
+   *     un chat `@lid` respondiera `SÍ` o `CANCELAR` sobre las citas del
+   *     paciente dueño de ese teléfono. El único teléfono en el que confiamos
+   *     es el que reporta WAHA.
+   *  2. **Solo ligamos si el `Patient` nació en este mismo `createAppointment`**
+   *     (`patientCreated`): nadie más pudo reclamarlo todavía. Si el paciente
+   *     ya existía, no ligamos; esa cita sigue siendo alcanzable desde el chat
+   *     por `appointment.conversationId`, que es lo que consulta el bot.
+   *  3. Si la conversación ya tenía teléfono y NO coincide con el del form, no
+   *     ligamos y dejamos un `warn` sin PII. La cita se crea igual: el paciente
+   *     no tiene por qué pagar por una discrepancia nuestra.
+   */
+  private async linkConversationToPatient(input: {
+    clinicId: string;
+    conversationId: string;
+    patientId: string;
+    formPhone: string;
+    patientCreated: boolean;
+  }): Promise<void> {
+    const { clinicId, conversationId, patientId, formPhone, patientCreated } =
+      input;
+
+    const convo = await this.prisma.conversation.findFirst({
+      where: { id: conversationId, clinicId },
+      select: { id: true, phone: true, patientId: true },
+    });
+    if (!convo || convo.patientId) return;
+
+    if (convo.phone && convo.phone !== formPhone) {
+      this.logger.warn(
+        `link conversation/patient omitido: teléfono del form distinto al de la conversación convoId=${conversationId}`,
+      );
+      return;
+    }
+
+    if (!patientCreated) return;
+
+    // `updateMany` con `clinicId`: un `update` por id suelto escribiría sin
+    // comprobar el tenant.
+    await this.prisma.conversation.updateMany({
+      where: { id: conversationId, clinicId, patientId: null },
+      data: { patientId },
+    });
   }
 
   // ──────────────────── Gestión de cita por link (ADR 0020) ────────────────────
