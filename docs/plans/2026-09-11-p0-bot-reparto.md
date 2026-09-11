@@ -134,3 +134,38 @@ Objetivo: que el RAG responda con datos reales de la BD además de las FAQ.
 
 Sin dependencias entre A1 y B1/B2. A2 debe rebasar sobre main cuando B2 esté mergeado si va a
 incluir el wiring de `phone`.
+
+## Post-P0 · S5 — ligar `Conversation.patientId` (sesión A, tras merge de #42 y #47)
+
+Rama `fix/bot-ligar-conversation-patient`. Origen: hallazgo de PR #44
+([[notas/2026-09-11-conversation-chatid-canonico]]): una conversación `@lid` que agendó por
+la web no se encuentra ni por `phone` ni por `patientId`, así que pierde recordatorio-respuesta,
+follow-up y saludo con contexto.
+
+**Regla**: nunca se crea un `Patient` por este ítem. Solo se liga cuando el paciente ya existe
+o cuando lo crea `SchedulingService.createAppointment` (upsert por `(clinicId, phone)`).
+Solo hacia adelante: sin migración ni backfill (opcional después: script idempotente que
+ligue conversaciones con `phone` a su `Patient` por `(clinicId, phone)`).
+
+Puntos de enlace:
+1. **FSM, `handleConfirm` con éxito** → `conversation.update({ patientId: appt.patientId })`.
+2. **Token BOT_WEB consumido** (`POST /public/:slug/appointments` con `token`): ya ata
+   `appointment.conversationId`; además `conversation.update({ patientId })`. Si
+   `conversation.phone` es `null` (caso `@lid`), rellenar `phone` con el del `Patient` recién
+   creado (es el que el paciente declaró en el form; anotar en la nota que es declarado, no
+   verificado). Si `conversation.phone` existe y **no coincide** con el del form (el campo era
+   readonly, así que solo pasa por manipulación): no ligar, `logger.warn` sin PII, seguir.
+3. **Oportunista**: `findUpcomingAppointment` y `greetingWithAppointment` buscan primero por
+   `patientId` si existe y, si no, por `phone`; cuando encuentran `Patient` por `phone` y la
+   conversación tiene `patientId = null`, lo ligan.
+4. Multi-tenant: todas las escrituras con `where: { id, clinicId }`.
+
+Tests (`bot.service.spec.ts`, `public.controller.spec.ts`):
+- Confirmar cita por FSM deja `conversation.patientId` = paciente de la cita.
+- Cita por token con conversación `@lid` (`phone = null`) → liga `patientId` y rellena `phone`.
+- Cita por token con `phone` distinto al de la conversación → no liga, warn, la cita se crea igual.
+- Conversación con `patientId` ligado y `phone = null` responde `SÍ` al recordatorio y confirma.
+- Follow-up: conversación ligada por `patientId` recibe `AWAITING_NPS_SCORE` (coordinar con #44).
+- Cero fuga: `patientId` de otra clínica nunca se liga.
+
+`security-auditor` obligatorio (toca `Patient` y `Appointment`).
