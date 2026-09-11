@@ -89,6 +89,7 @@ Rate-limit 10/min. Token inválido, expirado, de otra clínica o cita inexistent
   canCancel, canReschedule }`. Del paciente solo sale el nombre: nunca el teléfono.
 - `POST /api/public/clinics/:slug/appointments/manage/:token/cancel` → `{ status: 'CANCELADA' }`.
   Cancela los recordatorios. Idempotente. 409 si el estado ya no lo permite.
+  Marca `Appointment.canceledByPatient` y **avisa a recepción** (ver abajo).
 - `POST /api/public/clinics/:slug/appointments/manage/:token/reschedule` body `{ startAtISO }`
   → `{ appointment: {…}, manageUrl }`. **Mueve la cita in-place (mismo `id`)**: crear una
   nueva y cancelar la vieja dejaría una fila `CANCELADA` por reagendamiento y el no-show rate
@@ -239,6 +240,33 @@ fácil que no aparecer, así que `canCancel` sigue `true` con el tope alcanzado.
 **Deuda conocida**: mover una cita puede reenviar un recordatorio de un offset que ya se había
 mandado (el nuevo cae en el futuro), así que un paciente que reagenda tres veces puede recibir
 varias tandas. Pendiente de suprimir offsets ya enviados recientemente.
+
+### Aviso a recepción cuando el paciente gestiona su cita (S11)
+
+Una cancelación por link que nadie ve es media feature: el hueco solo se recupera si alguien en
+la clínica se entera. Cancelar o mover la cita desde el link deja un mensaje `OUT` en la
+conversación de WhatsApp del paciente, que es donde el operador mira (la bandeja del panel). No
+sale nada hacia el paciente.
+
+La conversación se resuelve con el criterio único del sistema: por `patientId` si está ligado,
+si no por `phone`, `orderBy updatedAt desc`. Si el paciente agendó por la web y nunca escribió,
+no hay hilo donde dejarlo y queda solo el log.
+
+`state = NEEDS_HUMAN` se reserva para lo que de verdad necesita que alguien llame, porque si se
+marcara todo la bandeja se llenaría de hilos que nadie tiene que atender y el aviso dejaría de
+significar nada. Se marca cuando:
+- **la cancelación es a menos de 24 h** — el hueco es difícil de rellenar solo y conviene
+  reaccionar hoy, no cuando alguien mire la bandeja;
+- **el paciente lleva 2 cambios de horario o más** — deja de ser un imprevisto y empieza a ser
+  señal de riesgo de no-show. Es la razón de que `rescheduleCount` exista.
+
+El aviso es fail-open en los endpoints (la cancelación ya está persistida y no se deshace) y
+**fail-closed en el worker de recordatorios**, donde el error sube para que BullMQ reintente:
+perder la alerta de una cita en riesgo es peor que repetir el check.
+
+`GET /api/dashboard/metrics` gana `selfService: { canceled30d, rescheduled30d, canceledShare }`
+— cuánto resuelve el paciente solo. `canceledShare` es qué parte de las cancelaciones pidió el
+paciente y no la clínica.
 
 ### Recordatorios
 - Se programa un job por cada offset futuro. Los offsets en el pasado se omiten.

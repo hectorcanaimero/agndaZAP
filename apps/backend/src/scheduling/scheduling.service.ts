@@ -343,7 +343,13 @@ export class SchedulingService {
         status: { in: [...SchedulingService.PATIENT_MUTABLE_STATUSES] },
         startAt: { gt: new Date() },
       },
-      data: { status: 'CANCELADA', canceledAt: new Date() },
+      data: {
+        status: 'CANCELADA',
+        canceledAt: DateTime.now().toJSDate(),
+        // Marca de origen: el dashboard cuenta aparte las cancelaciones que
+        // pidió el paciente, porque son huecos liberados con aviso.
+        canceledByPatient: true,
+      },
     });
 
     if (count === 0) {

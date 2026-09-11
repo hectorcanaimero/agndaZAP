@@ -21,6 +21,7 @@ import {
   SchedulingService,
 } from '../scheduling/scheduling.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { alertReception } from '../conversations/reception-alert';
 import { Public } from '../auth/decorators/public.decorator';
 import { CreatePublicAppointmentDto } from './dto/create-public-appointment.dto';
 import { RescheduleByTokenDto } from './dto/reschedule-by-token.dto';
@@ -448,7 +449,9 @@ export class PublicController {
       include: {
         service: { select: { id: true, name: true, durationMin: true } },
         professional: { select: { id: true, name: true } },
-        patient: { select: { name: true } },
+        // `phone` y `patientId` son para encontrar la conversación al avisar a
+        // recepción; NUNCA salen en la respuesta (ver el GET).
+        patient: { select: { name: true, phone: true } },
         clinic: {
           select: { name: true, address: true, timezone: true, locale: true },
         },
@@ -461,6 +464,116 @@ export class PublicController {
     }
 
     return { session, appointment };
+  }
+
+  /**
+   * Deja el aviso para recepción de un movimiento hecho por el paciente.
+   *
+   * Sin esto, una cancelación por link solo aparece si alguien refresca el
+   * panel: la recepción no se entera de que se liberó un hueco, que es
+   * justamente lo que el producto promete convertir en valor.
+   *
+   * `needsHuman` saca la conversación del bot y la marca para atención, y se
+   * reserva para lo que de verdad necesita que alguien llame. Si marcáramos
+   * todo, la bandeja se llenaría de hilos que nadie tiene que atender y el
+   * aviso dejaría de significar nada.
+   */
+  private async alertReceptionOfPatientChange(
+    appt: {
+      id: string;
+      clinicId: string;
+      patientId: string;
+      startAt: Date;
+      patient: { name: string | null; phone: string };
+      service: { name: string };
+      professional: { name: string };
+      clinic: { timezone: string; locale: string };
+    },
+    kind: 'cancel' | 'reschedule',
+    ctx: { newStartAt?: Date; rescheduleCount?: number },
+  ): Promise<void> {
+    const fmt = (d: Date) =>
+      DateTime.fromJSDate(d)
+        .setZone(appt.clinic.timezone)
+        .setLocale(appt.clinic.locale)
+        .toFormat("cccc d 'de' LLLL, HH:mm");
+
+    const patientName = appt.patient.name ?? appt.patient.phone;
+    const hoursUntil =
+      (appt.startAt.getTime() - Date.now()) / (1000 * 60 * 60);
+
+    let body: string;
+    let needsHuman: boolean;
+
+    if (kind === 'cancel') {
+      // Menos de 24 h: el hueco es difícil de rellenar solo y a la clínica le
+      // interesa reaccionar hoy, no cuando alguien mire la bandeja.
+      needsHuman = hoursUntil < 24;
+      body =
+        `🔴 El paciente canceló su cita desde el link.
+` +
+        `Paciente: ${patientName}
+` +
+        `Servicio: ${appt.service.name}
+` +
+        `Profesional: ${appt.professional.name}
+` +
+        `Era: ${fmt(appt.startAt)}` +
+        (needsHuman
+          ? `
+
+⚠️ Faltaban menos de 24 h: conviene intentar rellenar el hueco.`
+          : '');
+    } else {
+      const count = ctx.rescheduleCount ?? 0;
+      // Dos cambios o más dejan de ser un imprevisto y empiezan a ser señal de
+      // riesgo de no-show. Es la razón de que `rescheduleCount` exista.
+      needsHuman = count >= 2;
+      body =
+        `🔄 El paciente cambió el horario desde el link.
+` +
+        `Paciente: ${patientName}
+` +
+        `Servicio: ${appt.service.name}
+` +
+        `Profesional: ${appt.professional.name}
+` +
+        `Antes: ${fmt(appt.startAt)}
+` +
+        `Ahora: ${ctx.newStartAt ? fmt(ctx.newStartAt) : '—'}` +
+        (needsHuman
+          ? `
+
+⚠️ Ya van ${count} cambios de horario: conviene llamar.`
+          : '');
+    }
+
+    // Fail-open: lo que motivó el aviso (la cancelación, el cambio de horario)
+    // ya está persistido y no se puede deshacer. Perder el aviso es malo, pero
+    // devolverle un 500 al paciente por una cita que SÍ se canceló es peor.
+    let written = false;
+    try {
+      written = await alertReception(this.prisma, {
+        clinicId: appt.clinicId,
+        patientId: appt.patientId,
+        phone: appt.patient.phone,
+        body,
+        needsHuman,
+      });
+    } catch (e) {
+      this.logger.error(
+        `no se pudo avisar a recepción apptId=${appt.id} kind=${kind}: ${(e as Error).message}`,
+      );
+      return;
+    }
+
+    if (!written) {
+      // Paciente que agendó por la web y nunca escribió por WhatsApp: no hay
+      // hilo donde dejar el aviso. Queda el log para poder detectarlo.
+      this.logger.warn(
+        `sin conversación para avisar a recepción slug=${appt.clinicId} apptId=${appt.id} kind=${kind}`,
+      );
+    }
   }
 
   /**
@@ -547,6 +660,8 @@ export class PublicController {
     // La cita ya no es gestionable: el token no tiene nada más que ofrecer.
     await this.sessions.invalidateManage(token);
 
+    await this.alertReceptionOfPatientChange(appointment, 'cancel', {});
+
     this.logger.log(
       `appointment canceled via link slug=${slug} apptId=${appointment.id}`,
     );
@@ -630,6 +745,11 @@ export class PublicController {
         `no se pudo re-emitir el manage token slug=${slug} apptId=${updated.id}: ${(e as Error).message}`,
       );
     }
+
+    await this.alertReceptionOfPatientChange(appointment, 'reschedule', {
+      newStartAt: updated.startAt,
+      rescheduleCount: updated.rescheduleCount,
+    });
 
     this.logger.log(
       `appointment rescheduled via link slug=${slug} apptId=${updated.id}`,

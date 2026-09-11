@@ -51,6 +51,17 @@ export interface DashboardMetrics {
       professionalName: string;
     }>;
   };
+  /**
+   * Autogestión del paciente desde el link (S11): cuánto resuelve solo, sin
+   * ocupar a recepción. Es la métrica que cuenta la historia del producto —
+   * una cancelación con aviso es un hueco recuperable, no un no-show.
+   */
+  selfService: {
+    canceled30d: number;
+    rescheduled30d: number;
+    /** Parte de las cancelaciones que pidió el paciente y no la clínica (0-1). */
+    canceledShare: number;
+  };
   deltas: {
     totalAppointments: { current: number; previous: number; deltaPct: number };
     noShowRate: { current: number; previous: number; deltaPct: number };
@@ -88,6 +99,8 @@ interface Appt60d {
   startAt: Date;
   endAt: Date;
   confirmedAt: Date | null;
+  canceledByPatient: boolean;
+  rescheduleCount: number;
   patientId: string;
   serviceId: string;
   service: { name: string; priceCents: number | null };
@@ -149,6 +162,8 @@ export class DashboardController {
         startAt: true,
         endAt: true,
         confirmedAt: true,
+        canceledByPatient: true,
+        rescheduleCount: true,
         patientId: true,
         serviceId: true,
         service: { select: { name: true, priceCents: true } },
@@ -172,6 +187,24 @@ export class DashboardController {
       NO_SHOW: 0,
     };
     for (const a of appts30) byStatus[a.status]++;
+
+    // ── Autogestión del paciente (S11) ────────────────────────────────────
+    // Cuánto resuelve el paciente solo desde el link, sin ocupar a recepción.
+    // Es la métrica que cuenta la historia del producto: una cancelación con
+    // aviso es un hueco recuperable, lo contrario de un no-show. Se mide sobre
+    // los MISMOS 30 días que el resto del bloque.
+    let canceledByPatient30d = 0;
+    let rescheduledByPatient30d = 0;
+    for (const a of appts30) {
+      if (a.canceledByPatient) canceledByPatient30d++;
+      if (a.rescheduleCount > 0) rescheduledByPatient30d++;
+    }
+    // Proporción de las cancelaciones que pidió el paciente, no la clínica.
+    const selfCancelShare =
+      byStatus.CANCELADA === 0
+        ? 0
+        : Math.round((canceledByPatient30d / byStatus.CANCELADA) * 10000) /
+          10000;
 
     const closed = byStatus.ATENDIDA + byStatus.NO_SHOW;
     const noShowRate = closed === 0 ? 0 : byStatus.NO_SHOW / closed;
@@ -577,6 +610,12 @@ export class DashboardController {
       pendingConfirmation: {
         total: pendingList.length,
         next: pendingNext,
+      },
+      selfService: {
+        canceled30d: canceledByPatient30d,
+        rescheduled30d: rescheduledByPatient30d,
+        /** Qué parte de las cancelaciones vino del paciente y no de la clínica. */
+        canceledShare: selfCancelShare,
       },
       deltas,
       topServices,
