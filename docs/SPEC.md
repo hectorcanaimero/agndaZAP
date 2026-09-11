@@ -182,6 +182,20 @@ Cualquier otra transición se rechaza con 422.
 ### Bot
 - Confirmaciones (`sí`, `cancelar`, etc.) se resuelven por regla determinista antes de invocar el LLM.
 - Las respuestas de recordatorio `SÍ`, `REAGENDAR` y `CANCELAR` no dependen del LLM: confirman, derivan a recepción para reagendar sin mover la cita todavía, o cancelan explícitamente la cita.
+- `CANCELAR`, `REAGENDAR`, `CONFIRMO` y `CONFIRMAR` son verbos explícitos y valen siempre.
+  `SÍ`, `OK` y `DALE` son ambiguos: solo cuentan como confirmación si el bot preguntó
+  primero. Hay contexto de confirmación cuando el último mensaje saliente de la conversación
+  pide responder `*SÍ*`, o cuando existe un `Reminder` con `status = SENT` y `sentAt` en las
+  últimas 48 h para una cita próxima de ese teléfono en esa clínica. Si el mensaje además
+  nombra otra cosa ("sí, quiero agendar una cita"), va al clasificador. Sin contexto, el bot
+  responde el menú — nunca "no encontré una cita".
+- El saludo se recorta del mensaje, no lo consume: "hola, quiero agendar una cita" arranca la
+  FSM sin responder el saludo. Solo se responde el saludo si lo que queda tras recortarlo está
+  vacío, o son ≤ 2 palabras sin contenido ("hola, todo bien").
+- Pedir hablar con una persona deriva a `NEEDS_HUMAN` por palabras sueltas (`humano`,
+  `operador`, `asesor`, `representante`, `atendente`) o frases explícitas (`hablar con`,
+  `quiero una persona`, `atienda una persona`…). La palabra `persona` suelta NO deriva:
+  "es para otra persona" es un mensaje normal.
 - El bot nunca crea ni cancela una cita sin confirmación explícita del paciente.
 - Si `Conversation.state = HUMAN`, el bot no responde.
 - La FSM de agendamiento se persiste en `Conversation.flowStep` + `flowData` y avanza por `ASK_SERVICE → ASK_PROFESSIONAL → ASK_SLOT → CONFIRM`; pasos auxiliares como captura de nombre deben preservar esos datos para que el flujo sea retomable.

@@ -1,5 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { LlmRouterService } from '../common/llm/llm-router.service';
+import {
+  countTokens,
+  isCourtesyClosing,
+  isHumanEscape,
+  normalizeText,
+  startsWithAny,
+} from './message-matching';
 
 export enum Intent {
   AGENDAR = 'agendar',
@@ -15,6 +22,10 @@ export enum Intent {
  * Clasifica intención con LLM barato vía `LlmRouterService`. Si todos los
  * providers fallan, degrada a `Intent.OTRO` (el bot responde el flujo genérico
  * "no te entendí" en vez de romper el webhook).
+ *
+ * Las reglas deterministas comparten el matching con `BotService` (ver
+ * `message-matching.ts`) para que el clasificador y la escalera del bot no se
+ * contradigan.
  */
 @Injectable()
 export class IntentService {
@@ -46,62 +57,39 @@ export class IntentService {
   }
 
   private detectDeterministic(text: string): Intent | null {
-    const normalized = text
-      .trim()
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/\p{Diacritic}/gu, '')
-      .replace(/[¡!¿?.,;:]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
+    const normalized = normalizeText(text);
     if (!normalized) return null;
+
+    // "ok gracias" es un cierre de cortesía, no una confirmación. Se chequea
+    // ANTES que `ok`/`dale` para que cualquier consumidor de `detect()` —no
+    // solo `BotService`, que lo intercepta antes— no lo lea como CONFIRMAR.
+    if (isCourtesyClosing(normalized)) return Intent.OTRO;
+
+    // `confirmo` / `confirmar` son verbos explícitos: valen siempre.
+    // `si` / `ok` / `dale` son ambiguos — solo cuentan como confirmación si el
+    // mensaje es corto. "sí, quiero agendar una cita" NO es una confirmación,
+    // es un pedido de turno que empieza con "sí" (ver B2 del análisis del bot).
     if (
-      this.startsWithAny(normalized, [
-        'si',
-        'confirmo',
-        'confirmar',
-        'ok',
-        'dale',
-      ])
+      startsWithAny(normalized, ['confirmo', 'confirmar']) ||
+      (countTokens(normalized) <= 2 &&
+        startsWithAny(normalized, ['si', 'ok', 'dale']))
     ) {
       return Intent.CONFIRMAR;
     }
-    if (
-      this.startsWithAny(normalized, [
-        'cancelar',
-        'cancela',
-        'cancelo',
-        'anular',
-      ])
-    ) {
+    if (startsWithAny(normalized, ['cancelar', 'cancela', 'cancelo', 'anular'])) {
       return Intent.CANCELAR;
     }
-    if (this.startsWithAny(normalized, ['reagendar', 'reprogramar'])) {
+    if (startsWithAny(normalized, ['reagendar', 'reprogramar'])) {
       return Intent.REPROGRAMAR;
     }
-    if (this.startsWithAny(normalized, ['agendar', 'reservar', 'sacar turno'])) {
+    if (startsWithAny(normalized, ['agendar', 'reservar', 'sacar turno'])) {
       return Intent.AGENDAR;
     }
-    if (
-      normalized.includes('hablar con') ||
-      this.startsWithAny(normalized, [
-        'humano',
-        'persona',
-        'operador',
-        'asesor',
-        'representante',
-      ])
-    ) {
+    // `persona` suelta NO deriva (B3): "es para otra persona" es un mensaje
+    // normal. Ver `isHumanEscape` en message-matching.ts.
+    if (isHumanEscape(normalized)) {
       return Intent.HABLAR_HUMANO;
     }
     return null;
-  }
-
-  private startsWithAny(normalized: string, keywords: string[]): boolean {
-    return keywords.some((keyword) => {
-      const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      return new RegExp(`^${escaped}(?:\\b|$)`, 'u').test(normalized);
-    });
   }
 }

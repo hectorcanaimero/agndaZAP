@@ -535,3 +535,22 @@
 - `AI_DISCLOSURE` del bot queda en una línea sin listar proveedores; el consent del form sigue nombrándolos. ADR 0004 §7.1.
 - Palabra de escape unificada: `escribe *humano*`.
 - RAG: umbral de distancia 0.5 → 0.65 tras calibrar con preguntas reales (la pregunta de ubicación hacía handoff). Ver [[notas/2026-09-10-rag-umbral-distancia]].
+
+## 2026-09-11 — P0 del bot, PR A1: matching de saludo, confirmación y escape a humano
+- B1: el saludo ya no se come el mensaje. `stripGreeting` recorta saludos, muletillas y el nombre
+  de la clínica; si queda contenido, sigue la escalera (recordatorio → clasificador → RAG) con el
+  texto recortado. `"hola, quiero agendar una cita"` arranca la FSM sin saludo previo.
+- B2: `sí`/`ok`/`dale` solo confirman si el bot preguntó primero — último `OUT` con `*SÍ*`, o un
+  `Reminder` SENT de las últimas 48 h para una cita próxima de ese teléfono. Si el mensaje nombra
+  otra cosa ("sí, quiero agendar una cita") va al clasificador. `confirmo`/`cancelar`/`reagendar`
+  siguen pasando siempre. Nuevo cierre de cortesía sin LLM para `"ok gracias"`.
+- SPEC actualizado con el contrato nuevo de confirmación, saludo y escape a humano.
+- B3: `persona` deja de ser palabra suelta de escape a humano; quedan `humano`, `operador`,
+  `asesor`, `representante` y las frases explícitas.
+- Las reglas de matching se mudaron a `apps/backend/src/bot/message-matching.ts` (funciones puras,
+  spec propio) y las comparten `BotService` e `IntentService`.
+- Gotcha de tests encontrado de paso: mockear `Math.random` hacía que jest reportara
+  `RangeError: Maximum call stack size exceeded` en vez del fallo real. Ver
+  [[notas/2026-09-11-source-map-stack-overflow]].
+- Detalle: [[notas/2026-09-11-bot-matching-saludo-si-persona]]. Fuente: §4 del análisis técnico
+  del chatbot del 2026-09-11 (pendiente de commit por la sesión de planeamiento).

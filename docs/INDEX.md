@@ -70,6 +70,8 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[notas/2026-09-10-waha-healthcheck-wget|2026-09-10 — Healthcheck de WAHA: la imagen no trae `wget`, usar `curl`]]
 - [[notas/2026-09-10-tono-espanol-neutro|2026-09-10 — Tono de voz: español latinoamericano neutro (tuteo, sin voseo)]]
 - [[notas/2026-09-10-rag-umbral-distancia|2026-09-10 — RAG: umbral de distancia 0.5 → 0.65, calibrado con preguntas reales]]
+- [[notas/2026-09-11-bot-matching-saludo-si-persona|2026-09-11 — Bot: saludo recortado, `sí` con contexto de recordatorio, `persona` no deriva]]
+- [[notas/2026-09-11-source-map-stack-overflow|2026-09-11 — ts-jest: mockear `Math.random` rompe el reporte de fallos con un RangeError opaco]]
 
 ## Flujo de trabajo
 - [[skills-y-flujo|Skills, agentes y flujo de trabajo]]
