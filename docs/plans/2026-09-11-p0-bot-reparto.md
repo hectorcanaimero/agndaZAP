@@ -162,9 +162,10 @@ Puntos de enlace:
    por `patientId` si está ligado, luego por `appointment.conversationId = convo.id`, luego por
    `phone` de la conversación. Así un chat `@lid` gestiona **sus propias** citas sin heredar el
    historial del teléfono.
-3. **Oportunista**: `findUpcomingAppointment` y `greetingWithAppointment` buscan primero por
-   `patientId` si existe y, si no, por `phone`; cuando encuentran `Patient` por `phone` y la
-   conversación tiene `patientId = null`, lo ligan.
+3. **Oportunista**: `findUpcomingAppointment` y `greetingWithAppointment` usan el orden del
+   punto 2b (`patientId` → `conversationId` → `phone`). Cuando encuentran `Patient` por el
+   `phone` propio de la conversación (verificado por WAHA) y `patientId = null`, lo ligan.
+   Nunca ligan a partir de un teléfono declarado.
 4. Multi-tenant: todas las escrituras con `where: { id, clinicId }`.
 
 Tests (`bot.service.spec.ts`, `public.controller.spec.ts`):
@@ -212,8 +213,9 @@ Rate-limit scope `manage` (10/min por token+ip). Cero PII en logs. Todas las que
 Implementa el contrato de arriba: `SchedulingSessionService.createManage/resolveManage/invalidate`,
 `SchedulingService.cancelByPatient(appointmentId, clinicId)` y `reschedule(...)` (transacción),
 endpoints en `public.controller.ts`, `manageUrl` en la respuesta de creación, spec de cada
-endpoint, `security-auditor`, ADR `0020-gestion-cita-por-link.md`, SPEC.md (contratos). No
-tocar `bot.service.ts` ni `reminders.processor.ts` (eso es M2-c).
+endpoint, `security-auditor`, ADR `0020-gestion-cita-por-link.md`, SPEC.md (contratos). Además `createAppointment` pasa a devolver `{ appointment, patientCreated: boolean }` (lo
+necesita S5; actualizar los callers: bot, public.controller, specs). No tocar `bot.service.ts`
+ni `reminders.processor.ts` (eso es M2-c).
 
 ### agndazap-ef → S4 y luego M2-b web
 - **S4** (rama `fix/feedback-tenant-check`): `FollowUpsService.recordFeedback` verifica
@@ -239,7 +241,8 @@ prefiltro determinista. `maxTokens` 40.
 2. **S5** (spec arriba).
 3. **S1** extraer el rate-limit de ADR 0007 a `bot/bot-rate-limit.ts` y usarlo en
    `bot.service.ts` y `webhook.controller.ts`.
-4. **B6** `AI_DISCLOSURE` solo si no hay `Message OUT` en las últimas 24 h (siempre en el primer contacto).
+4. **B6** `AI_DISCLOSURE` solo si no hay `Message OUT` en las últimas 24 h (siempre en el primer contacto). **Bloqueado hasta visto bueno explícito del owner**: es un requisito de compliance (ADR 0004 §7.1), el PR debe actualizar ese ADR. Si no hay respuesta, saltar y seguir con el ítem 5.
+   S1 solo cuando #43 y #46 estén en main (toca `webhook.controller.ts`); si no, saltar y volver después.
 5. **M2-c** (tras M2-a en main): el bot manda el link de gestión primero en `REPROGRAMAR` y
    `CANCELAR` con cita encontrada ("Puedes cambiarla o cancelarla aquí: {link}. Si prefieres,
    responde *CANCELAR* aquí mismo"), en la confirmación post-agendamiento y en
