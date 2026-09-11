@@ -1,5 +1,11 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-11 — M10: exploración de STT para notas de voz (sin código)
+- Nota en [[notas/2026-09-11-exploracion-stt-notas-de-voz]] con comparativa, precios verificados en septiembre de 2026 y plan de 3 PRs.
+- **Recomendación: OpenAI `gpt-4o-mini-transcribe`.** No por precio —a este volumen las tres opciones cuestan céntimos— sino porque es el único proveedor **ya dentro del consent del ADR 0004**, que nombra explícitamente a OpenAI, DeepSeek y Google. Sumar Deepgram obligaría a reescribir el texto legal, versionarlo y volver a pedirlo.
+- **Deepgram es la mejor tecnología de las tres y aun así la peor opción aquí**: su ventaja es la latencia de streaming, y una nota de voz llega entera. Pagaríamos un coste legal real por una ventaja que este caso de uso no usa.
+- **Regla propuesta: transcribir y NO guardar el audio.** Una nota de voz es mucho más sensible que el texto equivalente —lleva la voz, el ruido de fondo, quién más está en la habitación— y el ADR 0004 §1 ni siquiera cifra las `notes` at-rest.
+- **Tres premisas del encargo que no se sostenían**, verificadas: (a) Gemini NO está usable en el router —llama a `gemini-2.0-flash`, retirado en junio de 2026, y `GEMINI_API_KEY` no está en Coolify, así que la cadena real es `deepseek → opencode`—; (b) WAHA no descarga media (faltan las envs `WAHA_MEDIA_*`), así que hoy llega `hasMedia: true` con `media: null`; (c) el handoff tras dos adjuntos no está en producción porque #46 quedó huérfano.
 ## 2026-09-11 — S17: CI falla si la corrida de tests fue verde pero incompleta (rama `ci/fallar-si-un-suite-no-arranca`)
 - **Lo que ya estaba cubierto** (verificado con sondas, no asumido): un suite que no arranca sale con exit 1, y un fichero de test sin tests también. CI ya los cazaba.
 - **El hueco real**: los tests que EXISTEN y no se ejecutan. Un `it.only` olvidado deja el resto del fichero sin correr y Jest sale **0** diciendo "1 passed" — incluidos los tests que habrían fallado. Un suite entero con `it.skip` sale 0 también. Es el caso peligroso porque es el que ocurre sin querer: alguien depura en local y commitea el `.only`.
