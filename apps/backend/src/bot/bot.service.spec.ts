@@ -1109,6 +1109,107 @@ describe('BotService — FSM de agendamiento', () => {
     });
   });
 
+  // ── B7: una clínica pt recibe el bot en portugués ──
+  describe('copy por idioma de la clínica (B7)', () => {
+    beforeEach(() => {
+      prisma.clinic.findUniqueOrThrow.mockResolvedValue(
+        makeClinic({ locale: 'pt', name: 'Clínica Sorriso' }),
+      );
+    });
+
+    async function say(text: string) {
+      await bot.handleIncoming({
+        clinicId: 'clinic-A',
+        chatId: convoState.chatId,
+        phone: convoState.phone,
+        text,
+      });
+      return waha.sendText.mock.calls.at(-1)![2] as string;
+    }
+
+    function conCitaProxima() {
+      prisma.patient.findUnique.mockResolvedValue({
+        id: 'pat-1',
+        clinicId: 'clinic-A',
+        phone: convoState.phone,
+        name: 'Ana',
+      });
+      prisma.appointment.findFirst.mockResolvedValue({
+        id: 'appt-7',
+        clinicId: 'clinic-A',
+        patientId: 'pat-1',
+        serviceId: 'svc-1',
+        professionalId: 'prof-1',
+        status: 'PENDIENTE',
+        startAt: tomorrow10.toJSDate(),
+      });
+    }
+
+    it('el saludo y el aviso de IA salen en portugués', async () => {
+      const msg = await say('oi');
+
+      expect(msg).toContain('assistente');
+      expect(msg).not.toMatch(/Escríbeme|asistente automático/);
+    });
+
+    it('entiende el saludo en portugués y lo recorta igual', async () => {
+      intent.detect.mockResolvedValue(Intent.AGENDAR);
+
+      await say('bom dia, quero marcar uma consulta');
+
+      expect(intent.detect).toHaveBeenCalledWith('quero marcar uma consulta', 'pt');
+    });
+
+    it('"sim" confirma igual que "sí"', async () => {
+      conCitaProxima();
+      prisma.reminder.findFirst.mockResolvedValue({ id: 'rem-1' });
+
+      await say('sim');
+
+      expect(reminders.confirmAppointment).toHaveBeenCalledWith('appt-7');
+    });
+
+    it('"remarcar" entra por el mismo camino que "reagendar"', async () => {
+      conCitaProxima();
+
+      await say('remarcar');
+
+      expect(reminders.cancelForAppointment).not.toHaveBeenCalled();
+      expect(waha.sendText.mock.calls.at(-1)![2]).toBeTruthy();
+    });
+
+    it('"obrigado" cierra con cortesía, sin LLM', async () => {
+      const msg = await say('obrigado');
+
+      expect(intent.detect).not.toHaveBeenCalled();
+      expect(msg).toMatch(/prazer|nada/i);
+    });
+
+    it('la lista de servicios se pide en portugués', async () => {
+      intent.detect.mockResolvedValue(Intent.AGENDAR);
+      prisma.service.findMany.mockResolvedValue([
+        service1,
+        { ...service1, id: 'svc-2', name: 'Limpeza' },
+      ]);
+
+      const msg = await say('agendar');
+
+      expect(msg).toContain('servi');
+      expect(msg).not.toMatch(/¿qué servicio|Responde con el número/);
+    });
+
+    it('el override del tenant gana sobre el idioma', async () => {
+      // Si la clínica escribió su propio saludo, ese es el que quiere.
+      prisma.clinic.findUniqueOrThrow.mockResolvedValue(
+        makeClinic({ locale: 'pt', botGreeting: 'Saludo propio de la clínica' }),
+      );
+
+      const msg = await say('oi');
+
+      expect(msg).toContain('Saludo propio de la clínica');
+    });
+  });
+
   // ── M6: cierre con acción tras responder una duda ──
   describe('cierre con acción tras el RAG (M6)', () => {
     beforeEach(() => {

@@ -81,6 +81,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[notas/2026-09-11-source-map-stack-overflow|2026-09-11 — ts-jest: mockear `Math.random` rompe el reporte de fallos con un RangeError opaco]]
 - [[notas/2026-09-11-fsm-navegacion-horarios|2026-09-11 — FSM del bot: más horarios, cualquier profesional y preferencias]]
 - [[notas/2026-09-11-conversation-patient-link|2026-09-11 — Ligar `Conversation.patientId`: el teléfono del form es declarado, no verificado]]
+- [[notas/2026-09-11-bot-copy-es-pt|2026-09-11 — El bot habla el idioma de la clínica (es/pt)]]
 - [[notas/2026-09-11-conversation-chatid-canonico|2026-09-11 — `Conversation.chatId`: formato canónico y por qué no se puede hacer upsert a ciegas]]
 - [[notas/2026-09-11-waha-mensajes-sin-texto|2026-09-11 — WAHA: mensajes sin texto (audio, imagen, sticker) y cómo detectarlos]]
 - [[notas/2026-09-11-gestion-cita-por-link-web|2026-09-11 — Gestión de cita por link: decisiones de la web (M2-b)]]
