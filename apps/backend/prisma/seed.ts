@@ -268,7 +268,12 @@ async function main() {
   // 6) FAQs — idempotente por (clinicId, content).
   // `llm` solo se usa en answer() (RAG); el seed solo llama ingest(), que a lo
   // sumo toca embedText y ya tolera OPENAI_API_KEY ausente vía KnowledgeUnavailableError.
-  const knowledge = new KnowledgeService(prisma as unknown as any, null as any);
+  // `clinicFacts` (3er arg) solo se usa en answer(); el seed solo llama ingest().
+  const knowledge = new KnowledgeService(
+    prisma as unknown as any,
+    null as any,
+    null as any,
+  );
   const faqSamples = [
     'Horarios de atención: L-V de 9:00 a 18:00. Sin atención sábados y domingos.',
     'Dirección: Av. Principal 123, Caracas. A 2 cuadras del metro Chacaíto.',
