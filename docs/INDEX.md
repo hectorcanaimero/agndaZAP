@@ -79,6 +79,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[notas/2026-09-11-fsm-navegacion-horarios|2026-09-11 — FSM del bot: más horarios, cualquier profesional y preferencias]]
 - [[notas/2026-09-11-conversation-chatid-canonico|2026-09-11 — `Conversation.chatId`: formato canónico y por qué no se puede hacer upsert a ciegas]]
 - [[notas/2026-09-11-waha-mensajes-sin-texto|2026-09-11 — WAHA: mensajes sin texto (audio, imagen, sticker) y cómo detectarlos]]
+- [[notas/2026-09-11-gestion-cita-por-link-web|2026-09-11 — Gestión de cita por link: decisiones de la web (M2-b)]]
 - [[notas/2026-09-11-feedback-cross-tenant|2026-09-11 — `Feedback` admitía filas cruzadas entre clínicas (S4)]]
 
 ## Análisis

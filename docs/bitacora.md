@@ -582,6 +582,37 @@
 - Es el teléfono que reporta WAHA, no uno declarado en un formulario. La distinción importa: ver
   la decisión de S5 sobre no rellenar `Conversation.phone` con el número del form público.
 
+## 2026-09-11 — P1 · M2-b: página web de gestión de cita por link
+- `/[locale]/agendar/[clinicSlug]/cita?t=<token>`: el paciente ve su cita, la cancela con
+  confirmación o le cambia el horario. Server component que hidrata contra el `GET manage` de M2-a;
+  el resto es client con react-query.
+- `/gracias` muestra el link de gestión cuando la creación devuelve `manageUrl`. **El link es un
+  token bearer**, así que viaja por `sessionStorage` y no por la query string (Referer, historial y
+  logs del CDN) — mismo canal y mismo motivo que el nombre del paciente en el ADR 0004 §B.4.
+- Decisiones en [[notas/2026-09-11-gestion-cita-por-link-web]]: una sola pantalla para todos los
+  fallos de token (el backend devuelve el mismo 404 a propósito), `canCancel` tratado como pista y
+  no como garantía (409 manejado en las dos acciones, con `router.refresh()` en vez de adivinar), y
+  aviso explícito cuando el reagendamiento no devuelve token nuevo.
+- **Corrección al plan**: decía "reutiliza `ScheduleSelection`", pero ese archivo no es un selector
+  de horarios sino un context + el resumen de la sidebar; el selector real está acoplado a
+  `react-hook-form` dentro de `ScheduleForm.tsx`. Se extrajo sólo el formateo puro
+  (`slot-format.ts`, que ahora usan las dos páginas) y la página de gestión tiene su propio picker.
+- Pendiente: el E2E del flujo completo está tras `E2E_MANAGE=1` hasta que M2-a entre en `main`.
+- Del `code-reviewer` salieron cinco blockers, todos corregidos antes del PR: (1) `router.refresh()`
+  no resincronizaba el client (React conserva su state) → el copy del 409 mentía; (2) cancelar no
+  actualizaba el estado de la cita en la tarjeta; (3) el `ConfirmDialog` se quedaba abierto tapando
+  el resultado y permitiendo un segundo POST; (4) `new Date().toISOString()` como `from` de
+  disponibilidad usaba la TZ del navegador; (5) si no se podía extraer el token nuevo del
+  `manageUrl`, la página quedaba con un token muerto y sin avisar.
+- También: pantalla propia para fallos transitorios (un 429 ya no dice "link inválido", que llevaba
+  a citas duplicadas), confirmación al reagendar, `noindex` en la ruta, y aviso de que el rate-limit
+  por IP ve la del servidor Next en SSR — pendiente de resolver en M2-a.
+- Tras la revisión de M2-a: el `GET manage` pasa a limitarse **por token y no por IP** (en SSR el
+  cubo veía la IP del servidor Next, compartida por toda la clínica); se descartó mandar la IP real
+  en una cabecera, que es el vector que `TRUST_PROXY` existe para cerrar. Y dos cambios de contrato
+  que la web ya contempla: reagendar devuelve la cita a `PENDIENTE` (limpia `confirmedAt`) y hay un
+  tope de reagendamientos **del paciente**, cuyo `canReschedule` actualizado viene en la respuesta
+  del POST — sin usarlo, quien gastaba su último cambio seguía viendo el botón.
 ## 2026-09-11 — M4: navegación de horarios en la FSM
 - "0. Ver más horarios" avanza la ventana 7 días (`flowData.slotWindowCount`), con tope de 4
   ventanas y después el link tokenizado. Sin resetear la FSM en ningún caso.

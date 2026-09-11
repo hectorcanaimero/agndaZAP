@@ -14,6 +14,7 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { Card, CardContent } from '@/components/ui/card';
 import { fetchClinic } from '@/lib/api';
 import { AddToCalendarButton } from './AddToCalendarButton';
+import { ThanksManageLink } from './ThanksManageLink';
 import { ThanksName } from './ThanksName';
 
 /**
@@ -167,6 +168,11 @@ export default async function GraciasPage({
               </a>
             ) : null}
           </div>
+
+          {/* Link de gestión de la cita. Client component: el link lleva un
+              token bearer y viaja por sessionStorage, no por la query string.
+              Si no hay link (Redis caído al crear la cita) no renderiza nada. */}
+          <ThanksManageLink />
 
           <Link
             href={`/${locale}/agendar/${clinicSlug}`}
