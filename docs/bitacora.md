@@ -563,3 +563,13 @@
 - Detalle: [[notas/2026-09-11-bot-matching-saludo-si-persona]]. Fuente: §4 de
   [[analisis/2026-09-11-chatbot-analisis-tecnico]]; reparto en [[plans/2026-09-11-p0-bot-reparto]]
   (ambos llegan por el PR #45).
+
+## 2026-09-11 — El RAG del bot recibe el teléfono de la conversación
+- `bot.service.ts` pasa `phone: convo.phone` a `knowledge.answer` (paso 4 de M1, que la sesión B
+  dejó como parámetro opcional). Con eso el bloque de hechos de BD incluye "tu próxima cita" y el
+  bot puede responder "¿cuándo es mi cita?" sin inventar.
+- Va `convo.phone` y no el `phone` del mensaje: el upsert de la conversación conserva el número ya
+  conocido, así que un mensaje que llegue por `@lid` no borra el contexto. Sin teléfono el bloque
+  sale igual, sin la parte de la cita.
+- Es el teléfono que reporta WAHA, no uno declarado en un formulario. La distinción importa: ver
+  la decisión de S5 sobre no rellenar `Conversation.phone` con el número del form público.
