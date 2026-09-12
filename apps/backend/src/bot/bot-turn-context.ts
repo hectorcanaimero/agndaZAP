@@ -33,6 +33,13 @@ export interface BotTurnData {
   source?: 'rule' | 'llm';
   /** El turno acabó derivando a una persona. */
   handoff?: boolean;
+  /**
+   * Cómo entró el mensaje. **Campo aparte de `source` a propósito**: `source`
+   * dice quién resolvió la intención (una regla o el LLM), y reusarlo para el
+   * tipo de entrada mezclaría dos métricas distintas en el mismo contador del
+   * dashboard.
+   */
+  inputKind?: 'text' | 'audio';
   /** Resultado de la búsqueda del RAG, si hubo. */
   rag?: {
     /** Chunks recuperados antes de filtrar por distancia. */
