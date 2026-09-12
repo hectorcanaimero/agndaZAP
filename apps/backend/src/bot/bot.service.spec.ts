@@ -1505,6 +1505,23 @@ describe('BotService — FSM de agendamiento', () => {
       );
     });
 
+    it('dos mensajes de verdad, un solo aviso (sin forzar el null a mano)', async () => {
+      // No es el mismo test que "el segundo mensaje ... es silencio": aquel
+      // fuerza `redis.set → null`, así que prueba la rama pero da por buena la
+      // clave. Este manda dos mensajes reales contra un fake que honra `NX`, y
+      // por tanto también comprueba que la segunda llamada construye LA MISMA
+      // clave — si llevara, por ejemplo, un timestamp, el throttle no
+      // throttlearía nada y el otro test seguiría verde.
+      //
+      // Hasta ahora era imposible de escribir: el fake decía siempre 'OK'.
+      await say('sigo esperando');
+      const tras1 = waha.sendText.mock.calls.length;
+
+      await say('¿hay alguien?');
+
+      expect(waha.sendText.mock.calls.length).toBe(tras1);
+    });
+
     it('si Redis falla, no avisa: mejor callar que repetir en cada mensaje', async () => {
       redis.set.mockRejectedValue(new Error('redis down'));
 
