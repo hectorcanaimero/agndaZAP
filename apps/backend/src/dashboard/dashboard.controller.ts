@@ -413,9 +413,15 @@ export class DashboardController {
     }
 
     const nowJS = now.toJSDate();
-    const endOfTodayJS = endOfToday.toJSDate();
+    // Filtra por cuándo EMPIEZA, no por cuándo termina.
+    //
+    // Con `endAt < endOfToday`, una cita de las 23:45 que acaba a las 00:15
+    // contaba en `today.total` pero desaparecía de `upcoming`: la clínica veía
+    // "6 citas hoy" y sólo 5 en la lista, justo al final del día, que es cuando
+    // mira qué le queda por atender. El rango del día ya lo aplica la query de
+    // arriba sobre `startAt`, así que aquí sólo hay que descartar las pasadas.
     const upcoming = apptsToday
-      .filter((a) => a.startAt >= nowJS && a.endAt < endOfTodayJS)
+      .filter((a) => a.startAt >= nowJS)
       .slice(0, 6)
       .map((a) => ({
         id: a.id,

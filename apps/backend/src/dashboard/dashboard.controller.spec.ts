@@ -1,4 +1,4 @@
-import { DateTime } from 'luxon';
+import { DateTime, Settings } from 'luxon';
 import type { AuthUser } from '../auth/tenant-context.util';
 import type Redis from 'ioredis';
 import { PrismaService } from '../prisma/prisma.service';
@@ -145,8 +145,25 @@ describe('DashboardController', () => {
     ];
   }
 
+  afterEach(() => {
+    Settings.now = () => Date.now();
+  });
+
   beforeEach(() => {
     tz = 'America/Caracas';
+    // Reloj fijo a media mañana en la zona de la clínica.
+    //
+    // Sin esto el test de `today` fallaba **según la hora a la que se
+    // ejecutara**: sus citas son `now.plus({ hours: 1..3 })` y el filtro de
+    // `upcoming` exige `endAt < endOfToday`, así que a partir de las ~20:30
+    // hora de la clínica se salían del día y `upcoming` volvía vacío. En CI se
+    // veía como un fallo intermitente sin relación con el cambio que lo
+    // disparaba; en local, según a qué hora se trabajara.
+    //
+    // Se fija con `Settings.now` y no con jest fake timers porque el
+    // controller usa Luxon: así el `now` del test y el del código bajo prueba
+    // son exactamente el mismo instante.
+    Settings.now = () => Date.UTC(2026, 8, 15, 14, 0, 0);
     now = DateTime.now().setZone(tz);
     const seed60 = buildSeed60();
     prisma = {
@@ -342,6 +359,36 @@ describe('DashboardController', () => {
       expect(m.today.upcoming[0].id).toBe('t1');
       expect(m.today.upcoming[0].patientName).toBe('Maria');
       expect(m.today.upcoming[0].professionalColor).toBe('#3b82f6');
+    });
+
+    it('una cita que se pasa de medianoche sigue saliendo en las próximas', async () => {
+      // Antes se filtraba por `endAt < endOfToday`: una cita de las 23:45 que
+      // acaba a las 00:15 contaba en `today.total` y desaparecía de la lista.
+      // La clínica veía "1 cita hoy" y ninguna debajo, al final del día, que es
+      // justo cuando mira qué le queda.
+      const casiMedianoche = now.set({ hour: 23, minute: 45 });
+      prisma.appointment.findMany = jest
+        .fn()
+        .mockResolvedValueOnce(buildSeed60())
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          {
+            id: 't-tarde',
+            startAt: casiMedianoche.toJSDate(),
+            endAt: casiMedianoche.plus({ minutes: 30 }).toJSDate(),
+            status: 'CONFIRMADA',
+            patient: { name: 'Ana', phone: '+58412' },
+            service: { name: 'Consulta' },
+            professional: { name: 'Ana', color: '#3b82f6' },
+          },
+        ])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      const m = await controller.metrics(adminA);
+
+      expect(m.today.total).toBe(1);
+      expect(m.today.upcoming.map((u) => u.id)).toEqual(['t-tarde']);
     });
 
     it('sin citas hoy → todos 0 y upcoming vacío', async () => {

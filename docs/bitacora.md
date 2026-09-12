@@ -1,5 +1,21 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-12 — Panel: la cita de las 23:45 desaparecía de "próximas" (rama `fix/dashboard-today-spec-hora`)
+- Apareció como un test flaky (`dashboard.controller.spec` fallaba sólo pasadas
+  las ~22:30 hora de la clínica) y resultó ser un bug de verdad: `upcoming`
+  filtraba por `endAt < endOfToday`, así que una cita de las 23:45 que acaba a
+  las 00:15 contaba en `today.total` pero no salía en la lista. La clínica veía
+  "6 citas hoy" y 5 debajo, **al final del día**, que es justo cuando mira qué
+  le queda por atender.
+- El rango del día ya lo aplica la query sobre `startAt`; el filtro en memoria
+  sólo tiene que descartar las pasadas.
+- El reloj del spec queda fijado con `Settings.now` (no con fake timers: el
+  controller usa Luxon, y así el `now` del test y el del código son el mismo
+  instante). El test que quedaba a merced de la hora era el síntoma, no la
+  causa, pero un test que falla según cuándo se ejecute es ruido que acaba
+  ignorándose.
+- Verificado por mutación: con el filtro viejo, el test nuevo cae.
+
 ## 2026-09-12 — B6: el aviso de "asistente automático" deja de repetirse en cada saludo (rama `feat/bot-disclosure-24h`)
 - **Antes**: `resolveBotMessage('greeting')` concatenaba `aiDisclosure` SIEMPRE. Un paciente que saluda tres veces en la semana leía tres veces que habla con un bot. **Ahora**: el primer saludo de la conversación siempre lo lleva, y después como mucho una vez cada 24 h.
 - **Sin estado nuevo**: no hay columna `disclosureShownAt` ni flag en `flowData`. `shouldSendAiDisclosure` pregunta si hay algún `Message OUT` de esa conversación en las últimas 24 h **cuyo cuerpo contenga el aviso**. La query cae en el índice `[conversationId, createdAt]` que ya existe.
