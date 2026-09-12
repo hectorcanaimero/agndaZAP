@@ -1,5 +1,27 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-12 — S38 (1/3): cota diaria de transcripciones por clínica (rama `feat/presupuesto-stt`)
+- El rate-limit del ADR 0007 es **fail-open** a propósito, y con texto eso
+  significaba "más llamadas al LLM". Con audio significa gasto por minuto y
+  grabaciones de pacientes saliendo del perímetro — y su techo de 500 mensajes/h
+  por clínica son ~12.000 transcripciones al día. Cota propia y **fail-closed**.
+- El día se calcula en la **TZ de la clínica**: en UTC, una clínica en Caracas
+  vería su cota reiniciarse a las 20:00 hora local.
+- Leer y apuntar van separados (`withinSttBudget` / `consumeSttBudget`): entre
+  comprobar y encolar todavía puede aparecer un motivo para no mandar el audio,
+  y cobrar por lo que no se transcribió haría que la cota mintiera.
+- Agotada la cota **no se deriva de entrada a una persona**, que era la
+  propuesta: cae al aviso de "solo leo texto", que ya deriva por la racha de
+  adjuntos si el paciente insiste. Quien puede escribir sigue siendo atendido
+  por el bot sin ocupar a nadie, y la bandeja no se llena el día en que algo se
+  disparó. El motivo va al evento (`stt-sin-presupuesto`) para que se vea.
+- Al añadirlo, 4 tests del webhook se pusieron rojos porque su fake de Redis no
+  tenía `get`: es la propia lógica fail-closed funcionando.
+- **Flaky encontrado de paso (no es de este PR)**: `dashboard.controller.spec`
+  → "agrega counts por status" falla cuando en la clínica son más de las ~22:30,
+  porque sus citas `now.plus({hours})` se salen del día y el filtro
+  `endAt < endOfToday` las descarta. Va en PR aparte.
+
 ## 2026-09-12 — B6: el aviso de "asistente automático" deja de repetirse en cada saludo (rama `feat/bot-disclosure-24h`)
 - **Antes**: `resolveBotMessage('greeting')` concatenaba `aiDisclosure` SIEMPRE. Un paciente que saluda tres veces en la semana leía tres veces que habla con un bot. **Ahora**: el primer saludo de la conversación siempre lo lleva, y después como mucho una vez cada 24 h.
 - **Sin estado nuevo**: no hay columna `disclosureShownAt` ni flag en `flowData`. `shouldSendAiDisclosure` pregunta si hay algún `Message OUT` de esa conversación en las últimas 24 h **cuyo cuerpo contenga el aviso**. La query cae en el índice `[conversationId, createdAt]` que ya existe.
