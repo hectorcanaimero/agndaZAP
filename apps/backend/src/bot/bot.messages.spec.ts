@@ -52,6 +52,10 @@ describe('bot.messages (B7)', () => {
       pt.reminder('Ana', 'Limpeza', 'Clínica', 'segunda'),
       pt.followUpPrompt('Ana', 'Clínica', 'Dr. Silva'),
       pt.voiceNoteFirstTime,
+      pt.voiceNoteTooLong,
+      pt.voiceNoteFailed,
+      pt.voiceConfirmHandoff,
+      pt.voiceConfirmEcho('sim', pt.wordYes),
     ];
     for (const t of textos) {
       expect(`${t}`).not.toMatch(sospechosas);
@@ -69,6 +73,24 @@ describe('bot.messages (B7)', () => {
     expect(pt.aiDisclosure).toContain('*humano*');
     expect(pt.reminder('', 'x', 'y', 'z')).toContain('*SIM*');
     expect(pt.reminder('', 'x', 'y', 'z')).toContain('*REMARCAR*');
+  });
+
+  it('voiceConfirmEcho (M10 PR5) pide la palabra del idioma de la clínica', () => {
+    // Si el eco dijera *SÍ* en una clínica en portugués, el paciente escribiría
+    // lo que le dijimos y `parseReminderReply` no lo entendería.
+    expect(botCopy('es').voiceConfirmEcho('sí', botCopy('es').wordYes)).toContain(
+      '*SÍ*',
+    );
+    expect(botCopy('pt').voiceConfirmEcho('sim', botCopy('pt').wordYes)).toContain(
+      '*SIM*',
+    );
+    // Y la misma que usa el recordatorio, que es a lo que el paciente responde.
+    expect(botCopy('pt').reminder('', 'x', 'y', 'z')).toContain(
+      `*${botCopy('pt').wordYes}*`,
+    );
+    expect(botCopy('es').reminder('', 'x', 'y', 'z')).toContain(
+      `*${botCopy('es').wordYes}*`,
+    );
   });
 
   it('voiceNoteFirstTime (M10) dice que se transcribe con IA y que el audio no se guarda', () => {
