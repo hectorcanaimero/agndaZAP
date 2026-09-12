@@ -505,6 +505,9 @@ export function createBotInboundWorker(
         lid,
         contactName,
         text: effectiveText,
+        // El bot necesita saberlo, no sólo el dashboard: desde una nota de voz
+        // no se confirma ni se cancela una cita sin repreguntar por escrito.
+        ...(transcription ? { inputKind: 'audio' as const } : {}),
       }),
     );
 

@@ -641,6 +641,28 @@ describe('createBotInboundWorker', () => {
       );
     });
 
+    it('le dice al bot que vino por voz, no sólo al dashboard', async () => {
+      // Es el cable que enciende el guard de confirmaciones (M10 PR5). Sin
+      // esta aserción se puede borrar el `inputKind` del `handleIncoming` y
+      // los doce tests del guard siguen verdes con el guard muerto: pasan
+      // `inputKind` ellos mismos.
+      stt.transcribe.mockResolvedValue({ text: 'sí', model: 'm' });
+
+      await processor(audioJob());
+
+      expect(bot.handleIncoming).toHaveBeenCalledWith(
+        expect.objectContaining({ inputKind: 'audio' }),
+      );
+    });
+
+    it('un mensaje escrito NO lo lleva: ausencia significa texto', async () => {
+      await processor(makeJob());
+
+      expect(bot.handleIncoming.mock.calls[0][0]).not.toHaveProperty(
+        'inputKind',
+      );
+    });
+
     it('marca el turno como entrada de audio', async () => {
       stt.transcribe.mockResolvedValue({ text: 'hola', model: 'm' });
       bot.handleIncoming.mockImplementation(async () => {
