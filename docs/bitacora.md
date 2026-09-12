@@ -1,12 +1,47 @@
 # Bitácora de sesiones — AgendaZap
 
 ## 2026-09-12 — B6: el aviso de "asistente automático" deja de repetirse en cada saludo (rama `feat/bot-disclosure-24h`)
-- **Antes**: `resolveBotMessage('greeting')` concatenaba `aiDisclosure` SIEMPRE. Un paciente que saluda tres veces en la semana leía tres veces que habla con un bot. **Ahora**: primer contacto siempre, y después como mucho una vez cada 24 h por conversación.
-- **Sin estado nuevo**: no hay columna `disclosureShownAt` ni flag en `flowData`. `shouldSendAiDisclosure` pregunta si la conversación tiene algún `Message OUT` en las últimas 24 h; una conversación recién creada no tiene ninguno, así que **el primer contacto queda cubierto por construcción** y no por un caso especial que alguien pueda romper. La query cae en el índice `[conversationId, createdAt]` que ya existe.
+- **Antes**: `resolveBotMessage('greeting')` concatenaba `aiDisclosure` SIEMPRE. Un paciente que saluda tres veces en la semana leía tres veces que habla con un bot. **Ahora**: el primer saludo de la conversación siempre lo lleva, y después como mucho una vez cada 24 h.
+- **Sin estado nuevo**: no hay columna `disclosureShownAt` ni flag en `flowData`. `shouldSendAiDisclosure` pregunta si hay algún `Message OUT` de esa conversación en las últimas 24 h **cuyo cuerpo contenga el aviso**. La query cae en el índice `[conversationId, createdAt]` que ya existe.
+- **El bug que encontró el code-reviewer, y por qué el filtro es por texto**: mi primera versión contaba tráfico OUT, no avisos. La conversación no la crea solo el bot — el aviso de adjuntos (B4), el prompt de NPS, la alerta a recepción y el retorno del handoff escriben `OUT` sobre conversaciones que ellos mismos acaban de crear. Un paciente cuyo primer mensaje es una foto recibía "solo puedo leer texto", saludaba después y **se quedaba sin aviso en su primer contacto**: justo la garantía que el ADR promete. Y no era solo compliance — el aviso es el único sitio donde se le dice que escriba *humano*. Filtrando por `body contains`, la consulta pregunta literalmente lo que dice el ADR.
+- **Lección**: el proxy barato ("¿hubo tráfico?") y la propiedad que quieres ("¿ya se lo dijimos?") coinciden solo mientras un único subsistema escriba en esa tabla. Aquí escriben cuatro.
 - **Fail-open**: si la consulta al historial falla, el aviso se manda igual. Repetirlo es ruido; omitirlo sería incumplir.
 - **Un solo sitio concatena el aviso**: `resolveBotMessage` y `greetingWithAppointment` ahora devuelven el saludo pelado y `buildGreeting` decide. Era la única forma de que la ventana no se saltara por un call-site nuevo, y de paso las dos ramas del saludo (genérico y con cita próxima) comparten la regla en vez de copiarla.
+- **Deuda que NO cierra este PR** (anterior a B6, anotada en el ADR): el aviso solo viaja en las ramas del saludo. Un primer contacto que entra directo a la FSM, al RAG o al handoff nunca lo ve. Cerrarlo es moverlo al primer `OUT` de la conversación dentro de `reply()`; toca el copy de varios flujos, así que es ítem propio.
 - **Encuadre de compliance** (aprobado por el owner, anotado en [[adr/0004-pii-y-compliance]] §7.1): el requisito es que el paciente sepa que habla con un bot y cómo salir, no que se lo repitan. El consentimiento con la lista de proveedores sigue viviendo en el form público y la política de privacidad, que es lo que tiene valor legal.
-- **Tests**: 1379 verdes, 7 nuevos (primer contacto, 2 h, 23 h 59 m, 25 h, saludo con cita próxima, locale `pt`, fallo de DB). El mock de `message.count` aplica el filtro de verdad, así que los tests comprueban la ventana que manda el servicio y no el valor que devuelve el mock; verificado con una mutación (`return true`) que tumba 4 de ellos.
+- **Tests**: 12 nuevos. El mock de `message.count` es una bandeja en memoria que aplica los cuatro filtros de la consulta, así que los tests comprueban lo que el servicio pregunta y no lo que el mock devuelve; incluye los `OUT` de otros subsistemas que tumbaban la versión anterior.
+## 2026-09-12 — M10 PR 3: listo para mergear ahora que PR 2 está en `main`
+- #99 (`feat/stt-notas-de-voz`, `SttService`) se mergeó en `9b8d814`. Mergeé
+  `main` en PR 3 y corregí el ADR 0004 §7.2 para reflejarlo: PR 1 y PR 2 ya
+  están en `main`, ninguno desplegado/cableado todavía.
+- El propio PR 2 marcó el orden correcto: cablear `SttService` al bot **antes**
+  de que este PR 3 esté en `main` abriría una ventana real donde se mandan
+  notas de voz a OpenAI bajo un consent que solo habla de texto. Quedó anotado
+  en el ADR como "orden de encendido, no solo de merge", con la recomendación
+  de un flag por clínica si el cableado necesita salir antes del deploy del
+  copy nuevo.
+- Quito el borrador: `pnpm --filter @showly/backend test:ci` sigue en verde
+  tras el merge.
+
+## 2026-09-12 — M10 PR 3 (borrador): copy de consent para notas de voz (rama `feat/consent-notas-de-voz-ia`)
+- Actualiza el texto de consent (form público, política de privacidad `es`/`pt`) y agrega
+  `BotCopy.voiceNoteFirstTime` en `bot.messages.ts` para el aviso que el bot manda la primera vez
+  que un paciente envía una nota de voz. Versión 2 del texto de consent del ADR 0004 §7
+  (documentado en la nueva §7.2): agrega que las notas de voz se transcriben con IA (OpenAI) y que
+  el audio se elimina en minutos.
+- **PR abierto como borrador a propósito**: el texto describe lo que hace M10 PR 1 (#98, ya en
+  `main`, WAHA descarga y borra el audio a los 15 min) y PR 2 (`SttService` transcribe y descarta
+  el audio, todavía no mergeado). No se mergea hasta que PR 2 lo esté.
+- No toca `bot.service.ts` ni `webhook.controller.ts`: es copy y documentación, según el reparto de
+  `docs/plans/2026-09-11-p0-bot-reparto.md`.
+
+## 2026-09-12 — M10 PR 1: que WAHA descargue los adjuntos (rama `feat/waha-media-storage`)
+- **El gotcha**: NOWEB entrega `hasMedia: true` con `media: null` si el contenedor no tiene `WAHA_MEDIA_STORAGE`. Detecta el adjunto y no lo descarga, así que no hay nada que transcribir ni que escuchar. Las variables van al servicio `waha`, no al backend.
+- **La decisión de verdad es `WHATSAPP_FILES_LIFETIME`**, que el encargo no contemplaba. El default de WAHA son **180 s**, que deja sin audio a cualquier reintento de la cola de transcripción; y `0` desactiva la limpieza, convirtiendo la base en un archivo permanente de grabaciones de pacientes — PHI sin retención ni cifrado at-rest. Elegimos **900 s**, explícito en los tres compose.
+- Es lo que hace aplicable el *"transcribir y no guardar el audio"* de la nota de exploración: no basta con que el backend no lo persista, hay que configurar que WAHA tampoco.
+- El `Message IN` pasa de `[audio]` a `[audio] (17s · url)`. La duración viene anidada y cambia de sitio entre versiones de NOWEB, así que se prueban varias rutas; y la URL se valida a `http(s)` antes de guardarla, porque viene de un tercero y acaba en la bandeja del panel.
+- **No rompe nada si no se despliega**: sin las envs, `media` llega `null` y el body queda como antes.
+- **Tests**: 1380 verdes.
 
 ## 2026-09-11 — S8-bis: revisión de los pares `clinicId` + FK restantes (nota, sin migración)
 - Nota en [[notas/2026-09-11-revision-fks-compuestas-restantes]] con la decisión pareja por pareja y un plan de un solo PR.

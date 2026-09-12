@@ -43,7 +43,7 @@
       "service": "Servicio",
       "professional": "Profesional",
       "slot": "Horario",
-      "consent": "Autorizo el uso de mis datos para gestionar la cita. Mis mensajes pueden procesarse con servicios de IA de terceros (DeepSeek, Google, OpenAI) para responder y agendar; no se comparten para publicidad. <link>Más info</link>",
+      "consent": "Autorizo el uso de mis datos para gestionar la cita. Mis mensajes de WhatsApp, incluidas las notas de voz (que se transcriben con IA de OpenAI y cuyo audio se elimina en minutos), pueden procesarse con servicios de IA de terceros (DeepSeek, Google, OpenAI) para responder y agendar; no se comparten para publicidad. <link>Más info</link>",
       "submit": "Confirmar cita",
       "submitting": "Confirmando..."
     },
@@ -1835,6 +1835,7 @@
             "name": "Nombre y apellido del paciente.",
             "phone": "Número de WhatsApp (en formato internacional).",
             "messages": "Los mensajes de WhatsApp que el paciente intercambia con el número de la clínica.",
+            "voice": "Notas de voz: si el paciente escribe por WhatsApp con un audio, lo transcribimos automáticamente a texto con inteligencia artificial (OpenAI). No guardamos el archivo de audio: se elimina en minutos, apenas se genera la transcripción.",
             "appointments": "Datos de la cita: servicio, profesional, fecha, hora y estado (confirmada, cancelada, no asistió).",
             "health": "Datos de salud únicamente si el paciente los escribe por su cuenta (por ejemplo, el motivo de la consulta). No los pedimos ni los inferimos."
           }
@@ -1848,7 +1849,7 @@
           "body": "Para que el servicio funcione, algunos datos pasan por proveedores externos:",
           "items": {
             "whatsapp": "Proveedor de conexión a WhatsApp. En el piloto usamos WAHA, una integración no oficial de WhatsApp, con una sesión dedicada por clínica.",
-            "ai": "Proveedores de inteligencia artificial de terceros (DeepSeek, Google, OpenAI) que procesan el texto de los mensajes para entender la intención y responder consultas. Reciben el mensaje tal como lo escribió el paciente.",
+            "ai": "Proveedores de inteligencia artificial de terceros (DeepSeek, Google, OpenAI) que procesan el texto de los mensajes para entender la intención y responder consultas. Reciben el mensaje tal como lo escribió el paciente. Si el mensaje es una nota de voz, OpenAI la transcribe a texto antes de procesarla; el archivo de audio se elimina en minutos después de transcribirse, solo se conserva el texto resultante.",
             "hosting": "Proveedores de hosting y base de datos donde corre la plataforma, con cifrado en tránsito y en disco."
           }
         },
@@ -1873,7 +1874,7 @@
         },
         "changes": {
           "title": "Cambios a esta política",
-          "body": "Esta es una versión piloto. Cuando el texto cambie, actualizamos la fecha de esta página y avisamos a las clínicas activas por email."
+          "body": "Esta es una versión piloto. Cuando el texto cambie, actualizamos la fecha de esta página y avisamos a las clínicas activas por email. Versión 2 (12 de septiembre de 2026): agrega que las notas de voz se transcriben con inteligencia artificial (OpenAI) y que el archivo de audio se elimina en minutos. La versión 1 (9 de agosto de 2026) ya cubría el procesamiento de mensajes de texto con IA de terceros."
         }
       }
     },
