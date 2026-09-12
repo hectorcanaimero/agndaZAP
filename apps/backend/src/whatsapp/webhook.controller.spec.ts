@@ -454,6 +454,102 @@ describe('WebhookController', () => {
    * no llegan al bot. Se registran en la bandeja y se responde una sola vez
    * cada 6 h explicando que sólo leemos texto.
    */
+  /**
+   * Rastro del adjunto en la bandeja (M10, PR 1).
+   *
+   * Sin `WAHA_MEDIA_STORAGE` en el contenedor de WAHA, NOWEB manda
+   * `hasMedia: true` con `media: null`: detecta el adjunto pero no lo descarga.
+   * Con la config puesta manda `media.url`, y es lo que permite que quien
+   * atiende pueda escuchar la nota de voz — y de lo que se colgará el
+   * `SttService` del PR 2.
+   */
+  describe('rastro del adjunto en el Message IN (M10)', () => {
+    it('con media.url la registra junto a la etiqueta', async () => {
+      await post(
+        mediaEvent({
+          type: 'ptt',
+          hasMedia: true,
+          media: { url: 'https://waha.internal/api/files/abc.oga' },
+        }),
+      );
+
+      const body = prisma.message.create.mock.calls.find(
+        (c: any) => c[0].data.direction === 'IN',
+      )![0].data.body as string;
+      expect(body).toContain('[audio]');
+      expect(body).toContain('https://waha.internal/api/files/abc.oga');
+    });
+
+    it('incluye la duración cuando NOWEB la manda anidada', async () => {
+      await post(
+        mediaEvent({
+          type: 'ptt',
+          hasMedia: true,
+          media: { url: 'https://waha.internal/api/files/abc.oga' },
+          _data: { message: { audioMessage: { seconds: 17 } } },
+        }),
+      );
+
+      const body = prisma.message.create.mock.calls.find(
+        (c: any) => c[0].data.direction === 'IN',
+      )![0].data.body as string;
+      expect(body).toContain('17s');
+    });
+
+    it('sin media (WAHA sin storage configurado) el body no cambia', async () => {
+      // Es el estado ANTES de que el owner añada las envs en Coolify: el PR no
+      // puede romper nada mientras tanto.
+      await post(mediaEvent({ type: 'ptt', hasMedia: true, media: null }));
+
+      expect(prisma.message.create).toHaveBeenCalledWith({
+        data: { conversationId: 'convo-1', direction: 'IN', body: '[audio]' },
+      });
+    });
+
+    it.each([
+      ['javascript:', 'javascript:alert(1)'],
+      ['data:', 'data:text/html;base64,PHNjcmlwdD4='],
+      ['no es URL', 'no-soy-una-url'],
+    ])('descarta una url %s: el campo viene de un tercero', async (_caso, url) => {
+      await post(mediaEvent({ type: 'ptt', hasMedia: true, media: { url } }));
+
+      const body = prisma.message.create.mock.calls.find(
+        (c: any) => c[0].data.direction === 'IN',
+      )![0].data.body as string;
+      expect(body).toBe('[audio]');
+    });
+
+    it('el pie de foto y el rastro conviven', async () => {
+      await post(
+        mediaEvent({
+          type: 'image',
+          hasMedia: true,
+          body: 'mira esto',
+          media: { url: 'https://waha.internal/api/files/x.jpg' },
+        }),
+      );
+
+      const body = prisma.message.create.mock.calls.find(
+        (c: any) => c[0].data.direction === 'IN',
+      )![0].data.body as string;
+      expect(body).toContain('[imagen]');
+      expect(body).toContain('mira esto');
+      expect(body).toContain('https://waha.internal/api/files/x.jpg');
+    });
+
+    it('el aviso al paciente NO cambia: sigue siendo el mismo texto', async () => {
+      await post(
+        mediaEvent({
+          type: 'ptt',
+          hasMedia: true,
+          media: { url: 'https://waha.internal/api/files/abc.oga' },
+        }),
+      );
+
+      expect(waha.sendText).toHaveBeenCalledWith('clinic-a', FROM, NOTICE_TEXT);
+    });
+  });
+
   describe('mensajes sin texto (B4)', () => {
     it('audio: no llama al bot, registra [audio] y responde una vez', async () => {
       await post(mediaEvent({ type: 'ptt', hasMedia: true }));

@@ -76,6 +76,17 @@ services:
       WAHA_API_KEY: ${WAHA_API_KEY}
       WHATSAPP_HOOK_URL: http://backend:4000/webhooks/waha
       WHATSAPP_HOOK_EVENTS: message,session.status
+      # ── Media (M10, PR 1) ───────────────────────────────────────────────
+      # Sin esto NOWEB entrega `hasMedia: true` con `media: null`: detecta el
+      # adjunto pero no lo descarga, así que no hay nada que transcribir.
+      WAHA_MEDIA_STORAGE: ${WAHA_MEDIA_STORAGE:-POSTGRESQL}
+      WAHA_MEDIA_POSTGRESQL_URL: ${WAHA_MEDIA_POSTGRESQL_URL:-postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}}
+      # Cuánto vive el fichero antes de que WAHA lo borre solo. El default de
+      # WAHA son 180 s, que deja sin audio a cualquier reintento de la cola de
+      # transcripción; y `0` lo desactiva, que acumularía audio de pacientes
+      # indefinidamente. 15 min es el punto medio: margen para reintentar sin
+      # convertir la base en un archivo de grabaciones clínicas.
+      WHATSAPP_FILES_LIFETIME: ${WHATSAPP_FILES_LIFETIME:-900}
       WHATSAPP_HOOK_CUSTOM_HEADERS: "x-webhook-token:${WEBHOOK_TOKEN}"
       # HMAC-SHA256 sobre el body raw. Si WAHA Plus está disponible, esto es
       # el mecanismo primario de auth del webhook. En community WAHA no lo

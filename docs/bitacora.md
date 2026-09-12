@@ -1,5 +1,13 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-12 — M10 PR 1: que WAHA descargue los adjuntos (rama `feat/waha-media-storage`)
+- **El gotcha**: NOWEB entrega `hasMedia: true` con `media: null` si el contenedor no tiene `WAHA_MEDIA_STORAGE`. Detecta el adjunto y no lo descarga, así que no hay nada que transcribir ni que escuchar. Las variables van al servicio `waha`, no al backend.
+- **La decisión de verdad es `WHATSAPP_FILES_LIFETIME`**, que el encargo no contemplaba. El default de WAHA son **180 s**, que deja sin audio a cualquier reintento de la cola de transcripción; y `0` desactiva la limpieza, convirtiendo la base en un archivo permanente de grabaciones de pacientes — PHI sin retención ni cifrado at-rest. Elegimos **900 s**, explícito en los tres compose.
+- Es lo que hace aplicable el *"transcribir y no guardar el audio"* de la nota de exploración: no basta con que el backend no lo persista, hay que configurar que WAHA tampoco.
+- El `Message IN` pasa de `[audio]` a `[audio] (17s · url)`. La duración viene anidada y cambia de sitio entre versiones de NOWEB, así que se prueban varias rutas; y la URL se valida a `http(s)` antes de guardarla, porque viene de un tercero y acaba en la bandeja del panel.
+- **No rompe nada si no se despliega**: sin las envs, `media` llega `null` y el body queda como antes.
+- **Tests**: 1380 verdes.
+
 ## 2026-09-11 — S8-bis: revisión de los pares `clinicId` + FK restantes (nota, sin migración)
 - Nota en [[notas/2026-09-11-revision-fks-compuestas-restantes]] con la decisión pareja por pareja y un plan de un solo PR.
 - **Comprobado contra la base**: cero filas cruzadas en los ocho pares. La query queda escrita para correrla contra producción antes de migrar.
