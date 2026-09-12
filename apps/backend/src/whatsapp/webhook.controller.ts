@@ -35,10 +35,7 @@ import {
 import { REDIS_CLIENT } from '../public/rate-limit.guard';
 import { WahaService } from './waha.service';
 import { verifyWebhookAuthFromEnv } from './webhook-auth.util';
-import {
-  consumeSttBudget,
-  withinSttBudget,
-} from '../stt/stt-budget';
+import { withinSttBudget } from '../stt/stt-budget';
 
 /**
  * Shape del cuerpo del webhook. NO usamos DTO con class-validator porque el
@@ -501,6 +498,33 @@ export class WebhookController {
    * mismo al paciente en cada nota de voz. El mensaje entrante ya quedó
    * registrado en la bandeja de cualquier forma.
    */
+  /**
+   * Un `warn` por clínica y día, no uno por mensaje.
+   *
+   * El repo ya decidió esto mismo para el rate-limit (`log: false`, con el
+   * motivo escrito): una línea por mensaje descartado convierte un flood en
+   * coste de ingesta, y aquí el flood lo controla quien escriba al número.
+   */
+  private async warnQuotaOnce(clinicId: string): Promise<void> {
+    try {
+      const dia = new Date().toISOString().slice(0, 10);
+      const nueva = await this.redis.set(
+        `stt:quota-warn:${clinicId}:${dia}`,
+        '1',
+        'EX',
+        WebhookController.MEDIA_NOTICE_TTL_SEC,
+        'NX',
+      );
+      if (nueva !== null) {
+        this.logger.warn(
+          `notas de voz sin transcribir: cota diaria agotada clinic=${clinicId}`,
+        );
+      }
+    } catch {
+      // Perder una línea de log no puede costar la respuesta a un paciente.
+    }
+  }
+
   private async claimMediaNotice(
     clinicId: string,
     chatId: string,
@@ -556,6 +580,15 @@ export class WebhookController {
      * aviso Y sin transcripción: silencio absoluto para el paciente.
      */
     transcribable?: boolean;
+    /**
+     * Manda el aviso aunque el throttle de 6 h diga que no.
+     *
+     * Solo para el caso en que el presupuesto de STT quedó **indeterminado**
+     * (Redis mudo): ahí el throttle vive en el mismo Redis que acaba de
+     * fallar, y `claimMediaNotice` es fail-closed, así que sin esto el
+     * paciente se queda sin transcripción y sin respuesta.
+     */
+    forceNotice?: boolean;
     /**
      * `true` si el mensaje acabó derivando la conversación a una persona.
      * Lo devuelve para que el evento `bot.turn` lo refleje: es una derivación
@@ -628,7 +661,10 @@ export class WebhookController {
       return { handoff: escalated, state: convo.state };
     }
 
-    if (!(await this.claimMediaNotice(clinic.id, chatId))) {
+    if (
+      !params.forceNotice &&
+      !(await this.claimMediaNotice(clinic.id, chatId))
+    ) {
       return { handoff: false, state: convo.state };
     }
 
@@ -893,25 +929,30 @@ export class WebhookController {
         // si lo hubiera escrito.
         let audio = this.transcribableAudio(msg);
 
-        // Cota diaria de transcripciones por clínica (S38). Agotada, la nota de
-        // voz cae al camino de siempre: el aviso de "solo puedo leer mensajes
-        // de texto", que ya deriva a una persona si el paciente insiste con
-        // audios. Es mejor final que derivarlo de entrada — quien pueda
-        // escribir sigue siendo atendido por el bot sin ocupar a nadie, y la
-        // bandeja no se llena justo el día en que algo se disparó.
+        // Filtro barato de la cota diaria (S38). Quien de verdad manda es
+        // `claimSttBudget` en el worker, justo antes de pagar; esto sirve para
+        // decidir YA si al paciente se le manda el aviso de "solo leo texto" o
+        // se le encola la nota de voz.
         let sinPresupuesto = false;
+        let presupuestoIndeterminado = false;
         if (audio) {
-          sinPresupuesto = !(await withinSttBudget(this.redis, this.logger, {
+          const estado = await withinSttBudget(this.redis, this.logger, {
             clinicId: clinic.id,
-            timezone: clinic.timezone,
-          }));
-          if (sinPresupuesto) {
-            this.logger.warn(
-              `nota de voz sin transcribir: cota diaria agotada clinic=${clinic.id}`,
-            );
+            chatId: from,
+          });
+          if (estado !== 'ok') {
+            sinPresupuesto = estado === 'agotado';
+            // Redis mudo: no se transcribe, pero el aviso NO puede depender de
+            // un throttle que vive en el mismo Redis que acaba de fallar. Sin
+            // esto el paciente se queda sin transcripción **y** sin respuesta,
+            // que es peor que antes de M10 — y justo en el escenario para el
+            // que se eligió el fail-closed.
+            presupuestoIndeterminado = estado === 'indeterminado';
             audio = null;
           }
+          if (sinPresupuesto) await this.warnQuotaOnce(clinic.id);
         }
+
         let handoff = false;
         let convoState: ConversationState = 'BOT';
         try {
@@ -919,6 +960,7 @@ export class WebhookController {
             // El mensaje no se está rechazando, se está atendiendo por otra
             // vía: ni aviso ni contador de racha hacia el handoff.
             transcribable: audio !== null,
+            forceNotice: presupuestoIndeterminado,
             clinic,
             chatId: from,
             phone,
@@ -972,14 +1014,6 @@ export class WebhookController {
             if (dedupKey) await this.releaseMessage(dedupKey);
             throw e;
           }
-          // Se apunta DESPUÉS de encolar y no al comprobar: entre una cosa y
-          // otra todavía podía aparecer un motivo para no mandar el audio (que
-          // la conversación la tomara una persona), y cobrar por lo que no se
-          // transcribe haría que la cota mintiera justo cuando importa.
-          await consumeSttBudget(this.redis, this.logger, {
-            clinicId: clinic.id,
-            timezone: clinic.timezone,
-          });
           // Sin `recordTurn` aquí: lo emite el worker cuando procesa el job,
           // con la latencia y el desenlace de verdad. Emitir en los dos sitios
           // contaba cada nota de voz dos veces en el panel de la clínica —el
@@ -1006,7 +1040,14 @@ export class WebhookController {
           ...(sinPresupuesto
             ? { reasonCode: 'stt-sin-presupuesto' as const }
             : {}),
-          turn: { handoff },
+          // `inputKind` también cuando NO se transcribió. Sin esto el contador
+          // `audio` del día bajaba a cero al agotarse la cota: se perdía a la
+          // vez la señal de cuántas notas de voz llegan y la de por qué no se
+          // transcriben, que son justo las dos que explican la caída.
+          turn: {
+            handoff,
+            ...(sinPresupuesto ? { inputKind: 'audio' as const } : {}),
+          },
         });
         return { ok: true };
       }
