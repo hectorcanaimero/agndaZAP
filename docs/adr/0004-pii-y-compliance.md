@@ -331,6 +331,15 @@ IP no existe todavía, así que seguimos sin poder demostrar qué versión del t
 aceptó cada paciente — solo el `boolean`. Cuando esa tabla exista, esta sección
 es la referencia de qué dice "versión 2".
 
+**Cruce con §7.1 — leer antes de cablear `SttService`**: cuando el cableado
+exista, la nota de voz pasa a ser el **primer `OUT`** de muchísimas
+conversaciones, y el copy de arriba le dice al paciente que hay IA de por medio
+pero **no cómo salir** — `*humano*` solo vive en el `aiDisclosure` de §7.1, que
+hoy únicamente viaja en las ramas del saludo. Ese es exactamente el caso de la
+deuda anotada al final de §7.1: cerrarla (mover el aviso al primer `OUT` de la
+conversación, dentro de `BotService.reply`) cubre de una vez las notas de voz,
+los adjuntos y el primer contacto que entra directo a la FSM o al RAG.
+
 **Riesgo residual**: hasta que #98 (PR 1) se despliegue en Coolify, `WAHA_MEDIA_STORAGE`
 no está configurado y WAHA sigue sin descargar el audio (`media: null`); y hasta
 que alguien cablee `SttService` (PR 2, ya en `main` pero sin invocar) a
