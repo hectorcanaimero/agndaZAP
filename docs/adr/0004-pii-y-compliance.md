@@ -235,3 +235,62 @@ El texto legal completo sigue siendo el de §7.
 
 Además, todos los textos que ven pacientes van en **español latinoamericano
 neutro (tuteo)**, nunca voseo. Ver [[notas/2026-09-10-tono-espanol-neutro]].
+
+### §7.2 Notas de voz: transcripción con IA y no retención del audio (agregado 2026-09-12)
+
+**Contexto**: [[notas/2026-09-11-exploracion-stt-notas-de-voz]] evalúa transcribir
+las notas de voz que llegan por WhatsApp (hoy reciben *"Por ahora solo puedo leer
+mensajes de texto"*) y recomienda un plan de 3 PRs:
+
+1. **PR 1** (#98, `feat/waha-media-storage`, **ya en `main`, pendiente de
+   desplegar en Coolify**): que WAHA descargue el audio. Fija
+   `WHATSAPP_FILES_LIFETIME=900` (15 min) explícito en
+   los tres compose — ni el default de WAHA (180 s, muy corto para la cola de
+   transcripción) ni `0` (retención indefinida de audio de pacientes, PHI sin
+   política ni cifrado at-rest, ver §1). A los 15 minutos WAHA borra el fichero
+   por su cuenta, sin intervención del backend.
+2. **PR 2** (`feat/stt-notas-de-voz`, en curso): `SttService` transcribe con
+   `gpt-4o-mini-transcribe` de OpenAI y descarta el fichero apenas obtiene el
+   texto — no espera a que WAHA lo borre, lo hace de inmediato.
+3. **PR 3** (esta sección; rama `feat/consent-notas-de-voz-ia`): el copy que
+   describe lo anterior. Es **PR borrador**: describe lo que el sistema hace,
+   así que no se mergea hasta que PR 2 esté en main (el owner coordina el orden
+   de merge; ver regla 0 del reparto en `docs/plans/2026-09-11-p0-bot-reparto.md`).
+
+**Por qué no Deepgram** (evaluado y descartado en la nota de exploración): mejor
+tecnología de audio de las tres comparadas, pero exigiría sumar un cuarto
+proveedor a la lista que el paciente ya aceptó (`OpenAI, DeepSeek, Google`) sin
+que su ventaja — latencia de streaming — aplique a un audio que llega entero.
+OpenAI ya está en el consent (lo usamos para embeddings del RAG): cero
+superficie legal nueva.
+
+**Decisión**: transcribir y no guardar el audio, con redundancia en dos capas —
+WAHA lo borra solo a los 15 minutos (PR 1) y el backend lo descarta apenas
+transcribe (PR 2). No es solo intención de diseño: el texto de consent puede
+afirmarlo con precisión ("el archivo se elimina en minutos") porque está
+forzado por configuración en ambas capas, no solo por costumbre del código.
+
+**Copy actualizado — versión 2 del texto de §7** (agregado a `form.labels.consent`,
+`legal.privacy.sections.data.items.voice`, `legal.privacy.sections.sharing.items.ai`
+y `legal.privacy.sections.changes.body` en `apps/web/messages/{es,pt}.json`, y a
+`BotCopy.voiceNoteFirstTime` en `apps/backend/src/bot/bot.messages.ts` — mensaje
+que el bot manda la primera vez que un paciente envía una nota de voz):
+
+> "Las notas de voz se transcriben automáticamente con inteligencia artificial
+> (OpenAI). No guardamos el audio: el archivo se elimina en minutos: lo hace el
+> propio proveedor de WhatsApp automáticamente, y el backend lo descarta apenas
+> obtiene el texto."
+
+La versión 1 (2026-08-09, §7 arriba) sigue vigente para el resto del texto: esta
+versión 2 la extiende, no la reemplaza.
+
+**Deuda que esto NO cierra** (sigue igual que §7): `ConsentEvent` con versión e
+IP no existe todavía, así que seguimos sin poder demostrar qué versión del texto
+aceptó cada paciente — solo el `boolean`. Cuando esa tabla exista, esta sección
+es la referencia de qué dice "versión 2".
+
+**Riesgo residual**: hasta que #98 (PR 1) se despliegue en Coolify, `WAHA_MEDIA_STORAGE`
+no está configurado y WAHA sigue sin descargar el audio (`media: null`); el aviso
+al paciente y este copy no cambian de comportamiento real hasta ese momento. El
+copy de esta sección describe el estado una vez PR 1 y PR 2 estén en producción,
+no el estado en el momento de escribir esto.

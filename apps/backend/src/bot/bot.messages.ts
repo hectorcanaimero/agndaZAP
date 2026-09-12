@@ -111,6 +111,15 @@ export interface BotCopy {
   npsThanks: string;
   npsAskComment: string;
   npsDone: string;
+
+  /**
+   * Aviso de transcripción de notas de voz (M10, PR3). Se envía una sola vez
+   * por paciente, antes de procesar su primera nota de voz como si fuera
+   * texto (ver docs/adr/0004-pii-y-compliance.md §7.2). Depende de que M10
+   * PR1 (WAHA descarga el audio) y PR2 (SttService transcribe) estén en
+   * producción: hasta entonces esta clave no se usa desde el bot.
+   */
+  voiceNoteFirstTime: string;
 }
 
 const es: BotCopy = {
@@ -268,6 +277,9 @@ const es: BotCopy = {
   npsAskComment:
     '¡Gracias! Si quieres contarnos algo más, escríbelo ahora (o responde *no* para finalizar).',
   npsDone: '¡Muchas gracias por tu tiempo! Que tengas un buen día.',
+
+  voiceNoteFirstTime:
+    'Recibí tu nota de voz. La transcribo automáticamente con inteligencia artificial (OpenAI) para poder ayudarte; el audio se elimina en minutos, solo guardo el texto. Si prefieres, también puedes escribirme directo.',
 };
 
 const pt: BotCopy = {
@@ -424,6 +436,9 @@ const pt: BotCopy = {
   npsAskComment:
     'Obrigado! Se quiser contar mais alguma coisa, escreva agora (ou responda *não* para finalizar).',
   npsDone: 'Muito obrigado pelo seu tempo! Tenha um ótimo dia.',
+
+  voiceNoteFirstTime:
+    'Recebi sua nota de voz. Transcrevo automaticamente com inteligência artificial (OpenAI) para poder ajudar você; o áudio é apagado em minutos, só guardo o texto. Se preferir, você também pode escrever direto.',
 };
 
 /** Si alguien añade una clave a `es` y se olvida de `pt`, esto no compila. */

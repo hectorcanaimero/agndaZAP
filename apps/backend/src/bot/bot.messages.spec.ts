@@ -51,6 +51,7 @@ describe('bot.messages (B7)', () => {
       pt.confirmPrompt('Ana', 'Limpeza', 'Dr. Silva', 'segunda'),
       pt.reminder('Ana', 'Limpeza', 'Clínica', 'segunda'),
       pt.followUpPrompt('Ana', 'Clínica', 'Dr. Silva'),
+      pt.voiceNoteFirstTime,
     ];
     for (const t of textos) {
       expect(`${t}`).not.toMatch(sospechosas);
@@ -68,5 +69,17 @@ describe('bot.messages (B7)', () => {
     expect(pt.aiDisclosure).toContain('*humano*');
     expect(pt.reminder('', 'x', 'y', 'z')).toContain('*SIM*');
     expect(pt.reminder('', 'x', 'y', 'z')).toContain('*REMARCAR*');
+  });
+
+  it('voiceNoteFirstTime (M10) dice que se transcribe con IA y que el audio no se guarda', () => {
+    // Ver docs/adr/0004-pii-y-compliance.md §7.2: el aviso tiene que ser
+    // honesto sobre las dos cosas que le importan al paciente: quién procesa
+    // su voz y si esa grabación se queda guardada en algún lado.
+    for (const locale of ['es', 'pt'] as const) {
+      const msg = botCopy(locale).voiceNoteFirstTime;
+      expect(msg).toMatch(/OpenAI/);
+      expect(msg.toLowerCase()).toMatch(/(guardo|guarda|conserva)/);
+      expect(msg.toLowerCase()).toMatch(/áudio|audio/);
+    }
   });
 });
