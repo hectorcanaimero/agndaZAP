@@ -35,6 +35,10 @@ import {
 import { REDIS_CLIENT } from '../public/rate-limit.guard';
 import { WahaService } from './waha.service';
 import { verifyWebhookAuthFromEnv } from './webhook-auth.util';
+import {
+  consumeSttBudget,
+  withinSttBudget,
+} from '../stt/stt-budget';
 
 /**
  * Shape del cuerpo del webhook. NO usamos DTO con class-validator porque el
@@ -887,7 +891,27 @@ export class WebhookController {
         // vez del aviso de "solo leo texto" se encola para transcribir. El
         // paciente acaba recibiendo la respuesta del bot a lo que dijo, como
         // si lo hubiera escrito.
-        const audio = this.transcribableAudio(msg);
+        let audio = this.transcribableAudio(msg);
+
+        // Cota diaria de transcripciones por clínica (S38). Agotada, la nota de
+        // voz cae al camino de siempre: el aviso de "solo puedo leer mensajes
+        // de texto", que ya deriva a una persona si el paciente insiste con
+        // audios. Es mejor final que derivarlo de entrada — quien pueda
+        // escribir sigue siendo atendido por el bot sin ocupar a nadie, y la
+        // bandeja no se llena justo el día en que algo se disparó.
+        let sinPresupuesto = false;
+        if (audio) {
+          sinPresupuesto = !(await withinSttBudget(this.redis, this.logger, {
+            clinicId: clinic.id,
+            timezone: clinic.timezone,
+          }));
+          if (sinPresupuesto) {
+            this.logger.warn(
+              `nota de voz sin transcribir: cota diaria agotada clinic=${clinic.id}`,
+            );
+            audio = null;
+          }
+        }
         let handoff = false;
         let convoState: ConversationState = 'BOT';
         try {
@@ -948,6 +972,14 @@ export class WebhookController {
             if (dedupKey) await this.releaseMessage(dedupKey);
             throw e;
           }
+          // Se apunta DESPUÉS de encolar y no al comprobar: entre una cosa y
+          // otra todavía podía aparecer un motivo para no mandar el audio (que
+          // la conversación la tomara una persona), y cobrar por lo que no se
+          // transcribe haría que la cota mintiera justo cuando importa.
+          await consumeSttBudget(this.redis, this.logger, {
+            clinicId: clinic.id,
+            timezone: clinic.timezone,
+          });
           // Sin `recordTurn` aquí: lo emite el worker cuando procesa el job,
           // con la latencia y el desenlace de verdad. Emitir en los dos sitios
           // contaba cada nota de voz dos veces en el panel de la clínica —el
@@ -967,6 +999,13 @@ export class WebhookController {
           timezone: clinic.timezone,
           outcome: 'unsupported',
           latencyMs: Date.now() - mediaStartedAt,
+          // El motivo va al evento para que en el panel se distinga "llegó una
+          // nota de voz y no la transcribimos porque se acabó la cota" de
+          // "llegó una foto". Sin esto, quedarse sin presupuesto es invisible:
+          // se ve una caída de transcripciones y ninguna explicación.
+          ...(sinPresupuesto
+            ? { reasonCode: 'stt-sin-presupuesto' as const }
+            : {}),
           turn: { handoff },
         });
         return { ok: true };

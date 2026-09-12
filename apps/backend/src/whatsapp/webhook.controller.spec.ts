@@ -26,7 +26,9 @@ describe('WebhookController', () => {
     message: { create: jest.Mock };
   };
   let inbound: { add: jest.Mock };
-  let redis: jest.Mocked<Pick<Redis, 'set' | 'del' | 'incr' | 'expire' | 'pipeline'>>;
+  let redis: jest.Mocked<
+    Pick<Redis, 'set' | 'del' | 'incr' | 'expire' | 'pipeline' | 'get'>
+  >;
   let waha: { sendText: jest.Mock };
   let controller: WebhookController;
 
@@ -116,16 +118,20 @@ describe('WebhookController', () => {
       // Rate-limit del ADR 0007: por defecto siempre dentro de la cota.
       incr: jest.fn().mockResolvedValue(1),
       expire: jest.fn().mockResolvedValue(1),
+      // Cota diaria de STT (S38): nada consumido todavía. Es fail-closed, así
+      // que sin este `get` NINGUNA nota de voz se transcribe — no es opcional.
+      get: jest.fn().mockResolvedValue(null),
       // Contadores de M9: pipeline encadenable.
       pipeline: jest.fn(() => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const chain: any = { exec: jest.fn().mockResolvedValue([]) };
         chain.hincrby = jest.fn(() => chain);
+        chain.incr = jest.fn(() => chain);
         chain.expire = jest.fn(() => chain);
         return chain;
       }),
     } as unknown as jest.Mocked<
-      Pick<Redis, 'set' | 'del' | 'incr' | 'expire' | 'pipeline'>
+      Pick<Redis, 'set' | 'del' | 'incr' | 'expire' | 'pipeline' | 'get'>
     >;
     waha = { sendText: jest.fn().mockResolvedValue(undefined) };
     controller = new WebhookController(
@@ -1193,6 +1199,89 @@ describe('WebhookController', () => {
       await post(audioEvent({ media: { url: 'file:///etc/passwd' } }));
 
       expect(inbound.add).not.toHaveBeenCalled();
+    });
+
+    describe('cota diaria de transcripciones (S38)', () => {
+      afterEach(() => delete process.env.STT_DAILY_LIMIT);
+
+      it('agotada, no se encola y se le responde como antes de M10', async () => {
+        // Cae al camino de siempre en vez de derivar de entrada: quien puede
+        // escribir sigue siendo atendido por el bot sin ocupar a nadie, y la
+        // bandeja no se llena justo el día en que algo se disparó.
+        process.env.STT_ENABLED = 'true';
+        process.env.STT_DAILY_LIMIT = '10';
+        redis.get.mockResolvedValue('10');
+
+        await post(audioEvent());
+
+        expect(inbound.add).not.toHaveBeenCalled();
+        expect(waha.sendText).toHaveBeenCalledWith(
+          'clinic-a',
+          FROM,
+          expect.stringContaining('solo puedo leer'),
+        );
+      });
+
+      it('el evento dice por qué, para que se vea en el panel', async () => {
+        // Sin el motivo, quedarse sin cota es invisible: se ve una caída de
+        // transcripciones y ninguna explicación.
+        process.env.STT_ENABLED = 'true';
+        process.env.STT_DAILY_LIMIT = '10';
+        redis.get.mockResolvedValue('10');
+        const spy = jest
+          .spyOn(Logger.prototype, 'log')
+          .mockImplementation(() => undefined);
+
+        await post(audioEvent());
+
+        const turno = spy.mock.calls
+          .map((c) => c[0])
+          .filter((a: any) => typeof a === 'object' && a?.event === 'bot.turn')
+          .at(-1);
+        expect(turno).toMatchObject({ reasonCode: 'stt-sin-presupuesto' });
+        spy.mockRestore();
+      });
+
+      it('con presupuesto, se apunta el consumo', async () => {
+        process.env.STT_ENABLED = 'true';
+
+        await post(audioEvent());
+
+        expect(inbound.add).toHaveBeenCalled();
+        const claves = redis.pipeline.mock.results
+          .flatMap((r: any) => r.value.incr.mock.calls)
+          .map((c: unknown[]) => String(c[0]));
+        expect(claves.some((k) => k.startsWith('stt:quota:clinic-A:'))).toBe(
+          true,
+        );
+      });
+
+      it('si Redis no responde no se transcribe: el gasto es fail-closed', async () => {
+        // Al revés que el rate-limit del ADR 0007, que ante la duda deja pasar.
+        // Aquí equivocarse se paga en dinero y en grabaciones saliendo hacia un
+        // tercero.
+        process.env.STT_ENABLED = 'true';
+        redis.get.mockRejectedValue(new Error('redis down'));
+
+        await post(audioEvent());
+
+        expect(inbound.add).not.toHaveBeenCalled();
+        expect(waha.sendText).toHaveBeenCalled();
+      });
+
+      it('una imagen no consume cota de transcripción', async () => {
+        process.env.STT_ENABLED = 'true';
+
+        await post(
+          mediaEvent({
+            type: 'image',
+            hasMedia: true,
+            media: { url: 'https://waha.internal/api/files/x.jpg' },
+          }),
+        );
+
+        expect(redis.get).not.toHaveBeenCalled();
+      });
     });
 
     it('una url desmedida no se encola ni entra entera en la bandeja', async () => {
