@@ -119,11 +119,20 @@ describe('createBotInboundWorker', () => {
             calls.push(['hincrby', ...a]);
             return chain;
           }),
+          // Cota de STT (S38): el worker reserva con INCR antes de transcribir.
+          // Sin esto no se reserva nada y NINGUNA nota de voz se transcribe —
+          // el fail-closed funcionando, no un fallo del test.
+          incr: jest.fn((...a: any[]) => {
+            calls.push(['incr', ...a]);
+            return chain;
+          }),
           expire: jest.fn((...a: any[]) => {
             calls.push(['expire', ...a]);
             return chain;
           }),
-          exec: jest.fn(async () => calls),
+          // Cada comando devuelve `[err, valor]`. El `1` hace que la reserva de
+          // cota vea "primera del día".
+          exec: jest.fn(async () => calls.map(() => [null, 1])),
         };
         redisCalls.push(calls);
         return chain;
@@ -676,6 +685,74 @@ describe('createBotInboundWorker', () => {
       expect(bot.handleIncoming).not.toHaveBeenCalled();
       // Tampoco se le escribe: ya hay una persona en el hilo.
       expect(waha.sendText).not.toHaveBeenCalled();
+    });
+
+    describe('cota diaria (S38)', () => {
+      /** Pipeline cuyo INCR devuelve el valor que se le diga. */
+      function conCota(valor: number | Error) {
+        redis.pipeline = jest.fn(() => {
+          const chain: any = {};
+          chain.incr = jest.fn(() => chain);
+          chain.expire = jest.fn(() => chain);
+          chain.hincrby = jest.fn(() => chain);
+          chain.exec = jest.fn(async () =>
+            valor instanceof Error
+              ? [[valor, null]]
+              : [
+                  [null, valor],
+                  [null, 1],
+                ],
+          );
+          return chain;
+        });
+      }
+
+      it('agotada, no se llama al proveedor y se deriva', async () => {
+        // Se reserva aquí y no al encolar: bajar el límite durante un incidente
+        // de coste tiene que parar también los jobs ya encolados y los `retry`
+        // desde el panel de BullMQ.
+        process.env.STT_DAILY_LIMIT = '10';
+        conCota(11);
+
+        await expect(processor(audioJob())).resolves.toBeUndefined();
+
+        expect(stt.transcribe).not.toHaveBeenCalled();
+        expect(prisma.conversation.updateMany).toHaveBeenCalledWith(
+          expect.objectContaining({ data: { state: 'NEEDS_HUMAN' } }),
+        );
+        delete process.env.STT_DAILY_LIMIT;
+      });
+
+      it('si no se puede reservar, tampoco se transcribe', async () => {
+        // Redis que acepta lecturas y rechaza escrituras (disco lleno con
+        // `stop-writes-on-bgsave-error yes`, el default): con la versión que
+        // leía con GET y apuntaba aparte, el contador se congelaba y la cota
+        // quedaba desactivada en silencio, gastando dinero.
+        conCota(new Error('MISCONF'));
+        stt.transcribe.mockResolvedValue({ text: 'x', model: 'm' });
+
+        await expect(processor(audioJob())).resolves.toBeUndefined();
+
+        expect(stt.transcribe).not.toHaveBeenCalled();
+      });
+
+      it('la reserva va DESPUÉS del consent y ANTES de transcribir', async () => {
+        // Reservar antes de avisar cobraría por una transcripción que el
+        // consent todavía puede impedir.
+        prisma.conversation.findFirst.mockResolvedValue({
+          id: 'convo-1',
+          state: 'BOT',
+          voiceConsentVersion: null,
+        });
+        waha.sendText.mockRejectedValue(new Error('waha down'));
+
+        await processor(audioJob());
+
+        const incrementos = (redis.pipeline as jest.Mock).mock.results
+          .flatMap((r: any) => r.value.incr?.mock.calls ?? [])
+          .map((c: unknown[]) => String(c[0]));
+        expect(incrementos.some((k) => k.startsWith('stt:quota'))).toBe(false);
+      });
     });
 
     it('un mensaje de texto normal no pasa por el transcriptor', async () => {

@@ -10,6 +10,7 @@ import type Redis from 'ioredis';
 import { hashChatId } from './bot-rate-limit';
 import { recordBotStats } from './bot-stats';
 import { isSttEnabled } from './bot-inbound.queue';
+import { claimSttBudget } from '../stt/stt-budget';
 import {
   AudioTooLongError,
   MediaExpiredError,
@@ -393,6 +394,16 @@ export function createBotInboundWorker(
       !(await ensureVoiceConsent(convo, job.data, clinic.locale, clinic.wahaSession))
     ) {
       return derivar(null, null);
+    }
+
+    // La cota se reserva AQUÍ, no al encolar, por el mismo motivo que el gate
+    // de `STT_ENABLED` se recomprueba en el worker: bajar el límite durante un
+    // incidente de coste tiene que parar también los jobs ya encolados y los
+    // `retry` desde el panel de BullMQ. Y porque el dinero se gasta en la línea
+    // de abajo: contar al encolar cobraba por todo lo que aborta en medio.
+    if (!(await claimSttBudget(redis, logger, { clinicId, chatId: job.data.chatId }))) {
+      logger.warn(`nota de voz sin transcribir: sin cota clinic=${clinicId}`);
+      return derivar(copy.voiceNoteFailed, convo.id);
     }
 
     try {
