@@ -220,6 +220,16 @@ export class BotService {
   /** Ventana en la que un "sí" suelto se lee como respuesta a un recordatorio. */
   private static readonly REMINDER_REPLY_WINDOW_H = 48;
 
+  /**
+   * Ventana del guard de confirmación por voz (M10). Media hora: lo bastante
+   * para cubrir un ida y vuelta real —el paciente escucha, escribe, se
+   * equivoca— sin que una nota de voz de la semana pasada cuente como intento.
+   */
+  private static readonly VOICE_CONFIRM_TTL_SEC = 30 * 60;
+
+  /** Tope de lo que se le repite al paciente de su propia nota de voz. */
+  private static readonly ECHO_MAX_CHARS = 160;
+
   /** Días que abarca cada página de horarios en ASK_SLOT. */
   private static readonly SLOT_WINDOW_DAYS = 7;
 
@@ -520,8 +530,21 @@ export class BotService {
     /** pushName visible del contacto (puede cambiar entre mensajes). */
     contactName?: string | null;
     text: string;
+    /**
+     * Cómo llegó el mensaje. `'audio'` significa que `text` es la
+     * transcripción de una nota de voz (M10), no algo que el paciente haya
+     * escrito y releído.
+     *
+     * **Parámetro explícito y no el contexto del turno** (`recordBotTurn`), que
+     * también lo lleva: ese contexto es de observabilidad y es un no-op fuera
+     * de un turno, así que un guard de seguridad colgado de él se apagaría en
+     * silencio en cualquier camino que no lo abra. Aquí la ausencia tiene que
+     * significar "texto escrito", y eso es lo que significa el default.
+     */
+    inputKind?: 'text' | 'audio';
   }): Promise<void> {
     const { clinicId, chatId, phone, lid, contactName, text } = input;
+    const fromAudio = input.inputKind === 'audio';
 
     // NO hay rate-limit acá a propósito. Las dos capas del ADR 0007 viven en
     // `webhook.controller.ts`, ANTES de encolar en `bot-inbound` (ver
@@ -594,7 +617,12 @@ export class BotService {
       // `CANCELAR` explícito sí se atiende: es una acción ya confirmada por el
       // paciente y hacerle esperar a una persona para liberar el turno va en
       // contra de lo único que este producto existe para conseguir.
-      if (parseReminderReply(normalized) === 'CANCEL') {
+      // Por voz NO se cancela aquí, y tampoco se ecoa: el bot está callado a
+      // propósito y el eco se saltaría el throttle de 4 h de abajo, así que
+      // tres audios seguidos serían tres respuestas de un bot que se supone
+      // mudo. Cae al aviso normal y quien atienda lee el "cancelar" en la
+      // bandeja — que es justo lo bueno de este estado: ya viene alguien.
+      if (!fromAudio && parseReminderReply(normalized) === 'CANCEL') {
         await this.handleReminderReply(clinic, convo, 'CANCEL', phone);
         return;
       }
@@ -629,7 +657,7 @@ export class BotService {
 
     // 1) FSM activa: procesamos el paso ANTES de tocar el LLM.
     if (convo.flowStep) {
-      await this.handleFlowStep(clinic, convo, normalized, text);
+      await this.handleFlowStep(clinic, convo, normalized, text, fromAudio);
       return;
     }
 
@@ -679,6 +707,20 @@ export class BotService {
         reminderAction === 'YES' && isAmbiguousYes(effectiveNormalized);
 
       if (!ambiguous) {
+        // Desde una nota de voz no se confirma, no se cancela y no se reagenda.
+        // Las dos primeras mutan la cita; `REAGENDAR` no la toca, pero pone la
+        // FSM en ASK_SLOT y a partir de ahí el parser de recordatorios queda
+        // **inalcanzable**: un "reagendar" mal transcrito secuestra la
+        // conversación hasta que el paciente diga "cancelar".
+        if (fromAudio) {
+          await this.askWrittenConfirmation(
+            clinic,
+            convo,
+            text,
+            this.wordFor(clinic, reminderAction),
+          );
+          return;
+        }
         await this.handleReminderReply(clinic, convo, reminderAction, phone);
         return;
       }
@@ -688,6 +730,19 @@ export class BotService {
       // cancelar…), va al clasificador aunque haya un recordatorio esperando.
       if (!asksForSomethingElse(effectiveNormalized)) {
         if (await this.hasConfirmationContext(clinic.id, convo)) {
+          // El guard va DEBAJO de esta comprobación a propósito: un "ok,
+          // entonces nos vemos el martes" dicho por voz no iba a confirmar
+          // nada, y pedirle que lo escriba sería fricción por un riesgo que no
+          // existe. Sólo se repregunta lo que de verdad iba a mutar.
+          if (fromAudio) {
+            await this.askWrittenConfirmation(
+              clinic,
+              convo,
+              text,
+              this.wordFor(clinic, reminderAction),
+            );
+            return;
+          }
           await this.handleReminderReply(clinic, convo, reminderAction, phone);
           return;
         }
@@ -733,6 +788,18 @@ export class BotService {
         break;
 
       case Intent.REPROGRAMAR:
+        // Mismo secuestro de estado que el `reagendar` determinista de arriba,
+        // por otra puerta: aquí lo resolvió el LLM sobre una transcripción, así
+        // que hay dos capas de incertidumbre en vez de una.
+        if (fromAudio) {
+          await this.askWrittenConfirmation(
+            clinic,
+            convo,
+            text,
+            this.copy(clinic).wordReschedule,
+          );
+          break;
+        }
         await this.handleReminderReply(clinic, convo, 'RESCHEDULE', phone);
         break;
 
@@ -906,6 +973,7 @@ export class BotService {
     convo: Conversation,
     normalized: string,
     originalText: string,
+    fromAudio: boolean,
   ): Promise<void> {
     const step = convo.flowStep as FlowStep;
     const data = ((convo.flowData as unknown) as FlowData) ?? {};
@@ -919,6 +987,19 @@ export class BotService {
       step !== 'AWAITING_NPS_COMMENT' &&
       isFlowAbort(normalized)
     ) {
+      // El efecto es el mismo que el de `NO`/`CANCELAR` en CONFIRM —tirar el
+      // flujo entero— así que la regla tiene que ser la misma. Que el paciente
+      // no haya llegado a comprometer una cita todavía no lo hace gratis:
+      // pierde el servicio, el profesional y el horario que ya había elegido.
+      if (fromAudio) {
+        await this.askWrittenConfirmation(
+          clinic,
+          convo,
+          originalText,
+          this.copy(clinic).wordCancel,
+        );
+        return;
+      }
       await this.resetFlow(convo.id);
       await this.reply(
         clinic.wahaSession,
@@ -943,10 +1024,24 @@ export class BotService {
         await this.handleAskName(clinic, convo, data, originalText);
         return;
       case 'CONFIRM':
-        await this.handleConfirm(clinic, convo, data, normalized, originalText);
+        await this.handleConfirm(
+          clinic,
+          convo,
+          data,
+          normalized,
+          originalText,
+          fromAudio,
+        );
         return;
       case 'AWAITING_NPS_SCORE':
-        await this.handleAwaitingNpsScore(clinic, convo, data, normalized);
+        await this.handleAwaitingNpsScore(
+          clinic,
+          convo,
+          data,
+          normalized,
+          originalText,
+          fromAudio,
+        );
         return;
       case 'AWAITING_NPS_COMMENT':
         await this.handleAwaitingNpsComment(clinic, convo, data, originalText);
@@ -1627,14 +1722,140 @@ export class BotService {
     );
   }
 
+  /**
+   * Repite lo que se entendió y pide que lo escriban, en vez de actuar.
+   *
+   * Por qué existe: la transcripción de una nota de voz entra al pipeline como
+   * si el paciente la hubiera escrito, y ahí deja de distinguirse de un
+   * mensaje que él leyó antes de mandar. Para casi todo da igual — si el bot
+   * entiende mal "quiero agendar", el paciente lo corrige en el siguiente
+   * mensaje. Pero para confirmar o cancelar una cita no: un "sí" es un golpe
+   * de voz de una sílaba, el proveedor no nos devuelve ninguna señal de
+   * confianza, y el resultado de equivocarse es una cita confirmada que el
+   * paciente nunca pidió o una cancelada que sí quería.
+   *
+   * La asimetría es la clave: pedir que lo escriban cuesta un mensaje; actuar
+   * sobre una transcripción dudosa cuesta una cita.
+   *
+   * No cambia el estado: la FSM se queda donde estaba y el recordatorio sigue
+   * pendiente, así que el siguiente mensaje escrito sigue el camino normal.
+   *
+   * **A la segunda vez deriva a una persona.** Sin eso esto es una trampa: el
+   * paciente que manda notas de voz suele ser el que peor escribe (mayores,
+   * gente manejando, baja alfabetización), y repetirle "escríbemelo" en bucle
+   * lo deja sin ningún camino hacia su cita — encima saltándose la escalera de
+   * rescate de la FSM, que este guard cortocircuita al hacer `return`.
+   */
+  /** La palabra que hay que escribir para cada acción, en el idioma de la clínica. */
+  private wordFor(clinic: Clinic, action: ReminderReplyAction): string {
+    const copy = this.copy(clinic);
+    if (action === 'YES') return copy.wordYes;
+    if (action === 'CANCEL') return copy.wordCancel;
+    return copy.wordReschedule;
+  }
+
+  private async askWrittenConfirmation(
+    clinic: Clinic,
+    convo: Conversation,
+    heard: string,
+    palabra: string,
+  ): Promise<void> {
+    if (!(await this.claimVoiceConfirmAttempt(clinic.id, convo.chatId))) {
+      await this.markNeedsHuman(convo.id, clinic.id);
+      await this.reply(
+        clinic.wahaSession,
+        convo.chatId,
+        convo.id,
+        this.copy(clinic).voiceConfirmHandoff,
+      );
+      return;
+    }
+
+    await this.reply(
+      clinic.wahaSession,
+      convo.chatId,
+      convo.id,
+      this.copy(clinic).voiceConfirmEcho(this.echoable(heard), palabra),
+    );
+  }
+
+  /**
+   * Deja el texto del paciente en condiciones de volver dentro de un mensaje.
+   *
+   * No es cosmética: este eco se persiste como `Message OUT` y
+   * `buildConversationContext` lo reinyecta al clasificador y al RAG etiquetado
+   * como **`Asistente:`**. Es la única ruta por la que texto del paciente se
+   * promueve a la voz del bot, así que se le quitan los caracteres de control y
+   * el marcado (`*`, `_`, backticks) que podrían fabricar énfasis o confundir
+   * al prompt, y se colapsan los saltos de línea.
+   */
+  private echoable(heard: string): string {
+    const limpio = heard
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\u0000-\u001f\u007f]/g, ' ')
+      .replace(/[*_`~]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return limpio.length > BotService.ECHO_MAX_CHARS
+      ? `${limpio.slice(0, BotService.ECHO_MAX_CHARS).trimEnd()}…`
+      : limpio;
+  }
+
+  /**
+   * Primera nota de voz de confirmación en la ventana: `true`. La segunda
+   * devuelve `false` y el caller deriva a una persona.
+   *
+   * Fail-closed **hacia la persona**: si Redis no responde no sabemos si es la
+   * primera o la quinta, y dejar a alguien dando vueltas en un bucle es peor
+   * que abrirle un hilo en la bandeja. Es lo contrario del throttle del aviso
+   * de espera, que ante la duda calla — allí el riesgo es el ruido, aquí es que
+   * el paciente se quede sin cita.
+   */
+  private async claimVoiceConfirmAttempt(
+    clinicId: string,
+    chatId: string,
+  ): Promise<boolean> {
+    try {
+      const result = await this.redis.set(
+        `bot:voice-confirm:${clinicId}:${chatId}`,
+        '1',
+        'EX',
+        BotService.VOICE_CONFIRM_TTL_SEC,
+        'NX',
+      );
+      return result !== null;
+    } catch (e) {
+      this.logger.warn(
+        `intento de confirmación por voz no contabilizado (redis) clinic=${clinicId}: ${(e as Error).message}`,
+      );
+      return false;
+    }
+  }
+
   private async handleConfirm(
     clinic: Clinic,
     convo: Conversation,
     data: FlowData,
     normalized: string,
-    _originalText: string,
+    originalText: string,
+    fromAudio: boolean,
   ): Promise<void> {
     const action = this.parseFlowConfirmReply(normalized);
+
+    // Desde una nota de voz, `SÍ` crea la cita y `NO`/`CANCELAR` tiran el flujo
+    // entero: las tres se piden por escrito. `REAGENDAR` no, porque no cierra
+    // nada — vuelve a ofrecer horarios conservando los datos, y el paciente
+    // todavía tiene que elegir uno. Ver `askWrittenConfirmation`.
+    if (fromAudio && action && action !== 'RESCHEDULE') {
+      const copy = this.copy(clinic);
+      await this.askWrittenConfirmation(
+        clinic,
+        convo,
+        originalText,
+        action === 'YES' ? copy.wordYes : copy.wordCancel,
+      );
+      return;
+    }
 
     if (!action) {
       await this.reply(
@@ -1994,6 +2215,12 @@ export class BotService {
     clinicId: string,
     convo: Pick<Conversation, 'id' | 'phone' | 'patientId'>,
   ): Promise<boolean> {
+    // Sólo el último, y por eso el eco del guard de notas de voz (M10) tiene
+    // que llevar la misma palabra en negrita que la pregunta a la que
+    // responde: ese eco se persiste como `OUT` y se interpone entre la
+    // pregunta que pedía confirmar y el "sí" que el paciente escribe después.
+    // Con la palabra dentro, el eco conserva el contexto en vez de borrarlo;
+    // sin ella, el guard invalidaba la respuesta que él mismo había pedido.
     const lastOut = await this.prisma.message.findFirst({
       where: { conversationId: convo.id, direction: 'OUT' },
       orderBy: { createdAt: 'desc' },
@@ -2268,6 +2495,8 @@ export class BotService {
     convo: Conversation,
     data: FlowData,
     normalized: string,
+    originalText: string,
+    fromAudio: boolean,
   ): Promise<void> {
     const apptId = data.feedbackAppointmentId;
     if (!apptId) {
@@ -2277,6 +2506,20 @@ export class BotService {
     }
 
     const score = this.parseNpsScore(normalized);
+
+    // `recordFeedback` es create-once: un "cinco" mal transcrito queda como la
+    // nota **permanente** de esa visita y el paciente ya no puede corregirla.
+    // Es más irreversible que una cita, que al menos se reagenda.
+    if (fromAudio && score !== null) {
+      await this.askWrittenConfirmation(
+        clinic,
+        convo,
+        originalText,
+        String(score),
+      );
+      return;
+    }
+
     if (score === null) {
       await this.reply(
         clinic.wahaSession,
