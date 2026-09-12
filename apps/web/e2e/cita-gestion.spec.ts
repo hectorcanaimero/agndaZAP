@@ -17,10 +17,23 @@ test.describe('Gestión de cita por link', () => {
   test('crea la cita, cambia el horario y la cancela desde el link', async ({
     page,
   }) => {
+    // `waitForFreshRateLimitBucket` puede esperar hasta 60 s (lo que falte
+    // para el siguiente minuto), y el presupuesto por test son 60 s: con el
+    // timeout por defecto el test se agotaba ANTES de la primera acción.
+    // El trace del run 34646321521 lo enseña sin ambigüedad — el primer clic
+    // sale en el segundo 60,3. El mensaje que se veía ("element is not
+    // stable") era sólo dónde pilló el reloj, no la causa.
+    test.setTimeout(150_000);
+
     await waitForFreshRateLimitBucket();
 
     // ── 1) Crear una cita por la página pública ──
     await page.goto(`/es/agendar/${CLINIC_SLUG}`);
+    // Esperar a que la página esté pintada antes de tocarla, igual que
+    // `agendar.spec.ts`: si se hace clic mientras el layout todavía se asienta,
+    // Radix abre el desplegable y la opción no llega a estar "stable".
+    await expect(page.getByText('Clínica Demo', { exact: true })).toBeVisible();
+
     await page.locator('#serviceId').click();
     await page.getByRole('option', { name: new RegExp(SEED.service) }).click();
     await page.locator('#professionalId').click();
@@ -38,13 +51,26 @@ test.describe('Gestión de cita por link', () => {
 
     await expect(page).toHaveURL(/\/gracias/);
 
-    // ── 2) El link de gestión llega por sessionStorage, no por la URL ──
-    const manageUrl = await page.evaluate(() =>
-      window.sessionStorage.getItem('agz.thanks.manageUrl'),
-    );
+    // ── 2) El link de gestión ──
+    //
+    // Se lee del enlace pintado, NO de `sessionStorage`: `ThanksManageLink`
+    // consume la clave al montarse (para no dejar un token bearer ahí
+    // indefinidamente), así que cuando el test miraba ya no estaba y el
+    // `manageUrl` salía `null`. Además, leer el href prueba lo que el paciente
+    // ve de verdad en vez de un detalle de implementación.
+    const manageLink = page.getByRole('link', { name: /ver o cambiar mi cita/i });
+    await expect(manageLink).toBeVisible();
+    const manageUrl = await manageLink.getAttribute('href');
     expect(manageUrl, 'el backend debe devolver manageUrl').toBeTruthy();
+
+    // El token es una credencial: no puede acabar en la URL de /gracias, que
+    // se queda en el historial y en el Referer. Se comprueba el VALOR concreto
+    // del token, no un patrón: buscar `t=` matchea `star t=` de `start=`, que
+    // es un parámetro legítimo de esa página.
+    const token = new URL(manageUrl!, page.url()).searchParams.get('t');
+    expect(token, 'el manageUrl debe llevar el token en `t`').toBeTruthy();
     expect(page.url(), 'el token no puede ir en la query de /gracias').not.toContain(
-      'manage',
+      token!,
     );
 
     // ── 3) La página de gestión muestra la cita ──
@@ -72,9 +98,14 @@ test.describe('Gestión de cita por link', () => {
 
     // El token viejo se invalida al reagendar: la URL tiene que haber quedado
     // con el nuevo, o un refresh mataría la página.
-    const refreshedUrl = page.url();
-    expect(refreshedUrl).toContain('?t=');
-    expect(refreshedUrl).not.toBe(manageUrl);
+    //
+    // Con `expect(page).toHaveURL`, que reintenta, y NO con un `page.url()`
+    // leído una sola vez: el aviso de éxito lo pinta el estado de React, pero
+    // la URL la cambia `router.replace` un instante después. Leyéndolo de
+    // golpe, el test pasaba aislado y fallaba en la suite completa — la
+    // diferencia era sólo la carga de la máquina.
+    await expect(page).toHaveURL(/\?t=/);
+    await expect(page).not.toHaveURL(manageUrl!);
 
     // ── 5) Cancelar, con confirmación ──
     await page.getByRole('button', { name: /cancelar cita/i }).click();

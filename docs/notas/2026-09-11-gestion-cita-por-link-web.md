@@ -110,6 +110,39 @@ foco sigue atrapado dentro del diálogo.
 - Los botones de slot llevan `data-slot`, la misma convención de selector que
   usa el picker de `ScheduleForm`, para que los E2E compartan locator.
 
+## El E2E: cuatro fallos por habilitarlo sin haberlo corrido
+
+El spec se escribió con la guarda `E2E_MANAGE` puesta, antes de que existiera
+el backend, y se habilitó razonando que "los endpoints ya están en main". La
+inferencia era correcta y aun así insuficiente: que el backend exista no
+significa que el test funcione. Al ejecutarse por primera vez en CI falló, y
+detrás había **cuatro** errores encadenados — **tres de ellos del test, no del
+producto**:
+
+1. **El presupuesto se agotaba antes de la primera acción.**
+   `waitForFreshRateLimitBucket` espera hasta 60 s y el timeout por test son
+   60 s: aritmética. El síntoma que se veía (`element is not stable` sobre una
+   opción de Radix) era sólo dónde pilló el reloj, y perseguirlo habría llevado
+   a "arreglar" un selector que nunca estuvo roto. El trace lo zanjó en un
+   minuto: primer clic en el segundo 60,3.
+2. **Leía el link de `sessionStorage` después de que la página lo consumiera.**
+   `ThanksManageLink` borra la clave al montarse —a propósito, es un token
+   bearer— así que el test miraba un hueco. Se lee del `href` del enlace
+   pintado, que además prueba lo que el paciente ve.
+3. **La corrección del punto 2 trajo un falso positivo**: comprobar que la URL
+   no contiene `t=` matchea `star`**`t=`**, un parámetro legítimo de
+   `/gracias`. Se comprueba el **valor** del token.
+4. **Leía `page.url()` una sola vez.** El aviso de éxito lo pinta React un
+   instante antes de que `router.replace` cambie la URL: pasaba aislado y
+   fallaba en la suite completa, y la única diferencia era la carga de la
+   máquina. Con `expect(page).toHaveURL`, que reintenta, deja de ser una
+   carrera.
+
+La lección: **un spec que no se ha visto pasar no está terminado**, aunque
+compile y aunque su dependencia ya esté desplegada. El coste no desaparece por
+no ejecutarlo; se difiere, y lo acaba pagando quien vea su PR en rojo por un
+test que no es suyo.
+
 ## Pendiente
 
 El E2E del flujo completo (`apps/web/e2e/cita-gestion.spec.ts`) está detrás de
