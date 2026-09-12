@@ -4,7 +4,7 @@
 /**
  * i18n-check — validador de traducciones de `apps/web`.
  *
- * Corre 2 chequeos:
+ * Corre 3 chequeos:
  *
  * 1. **Paridad estricta** de paths escalares entre `es.json` (source of truth)
  *    y todos los demás locales (`pt.json`). Falla si:
@@ -16,7 +16,11 @@
  *    `useTranslations('namespace')`, verifica que cada `t('key')` /
  *    `t.rich('key')` corresponda a un path existente en el source.
  *
- * Ambos chequeos son load-bearing: el patrón de MISSING_MESSAGE apareció 3+
+ * 3. **Tono del `es`** — tuteo LATAM neutro, nunca voseo. La convención la
+ *    fijó el owner y ya regresó una vez: la nota del repo la daba por migrada
+ *    y quedaban 55 cadenas en voseo, incluido el titular de la página pública.
+ *
+ * Los tres chequeos son load-bearing: el patrón de MISSING_MESSAGE apareció 3+
  * veces en agosto 2026, y el type-safe next-intl (PR #11) cubre la mayoría
  * pero no todos los casos (templates dinámicos `t(\`status.\${x}\`)` requieren
  * castings que el chequeo estructural atrapa).
@@ -103,6 +107,19 @@ async function walk(dir, exts) {
   }
   await inner(dir);
   return out;
+}
+
+/** Recorre todos los valores string del objeto de mensajes. */
+function walkStrings(node, fn, path = '') {
+  if (typeof node === 'string') {
+    fn(path, node);
+    return;
+  }
+  if (node && typeof node === 'object') {
+    for (const [k, v] of Object.entries(node)) {
+      walkStrings(v, fn, path ? `${path}.${k}` : k);
+    }
+  }
 }
 
 async function main() {
@@ -193,6 +210,102 @@ async function main() {
   }
   if (totalMissing === 0) {
     console.log(c.green(`  ✓ Sin missing keys`));
+  }
+
+  /* ─────────── 3. Tono: tuteo LATAM neutro, nunca voseo ─────────── */
+
+  console.log(c.bold('\n3. Tono (es): tuteo LATAM neutro'));
+
+  // El owner lo fijó el 2026-09-10 al ver el bot mezclando tuteo y voseo en el
+  // mismo saludo. La clínica piloto es venezolana y el producto apunta a toda
+  // Latinoamérica, donde "elegí" y "podés" suenan extranjeros.
+  //
+  // Se chequea aquí y no en una nota porque ya regresó una vez: la nota del
+  // repo daba el tono por migrado y quedaban 55 cadenas en voseo en `es.json`,
+  // incluido el titular de la página pública de agendamiento. Una convención
+  // de estilo que nadie verifica no es una convención.
+  //
+  // Se detecta por PATRÓN, no por lista de verbos. Enumerarlos ("elegí",
+  // "probá", "ingresá"…) parece más preciso y es justo lo contrario: la
+  // primera versión de este chequeo tenía 23 verbos y daba "✓ sin voseo" sobre
+  // un fichero cuyo titular decía "Agendá tu cita". Una lista de verbos no
+  // termina nunca; el patrón sí.
+  //
+  // El voseo rioplatense forma el imperativo y el presente con la tónica en la
+  // última sílaba: `elegí`, `probá`, `podés`. Así que se marca toda palabra
+  // acabada en á/é/í (o en -ás/-és/-ís) y se exime lo legítimo, que es una
+  // lista corta, estable y fácil de ampliar con un motivo.
+  //
+  // Ojo con `\b`: en JS las vocales acentuadas NO son caracteres de palabra,
+  // así que `\b` cae *dentro* de "clínica" y la primera versión reportaba
+  // "clí" como voseo. Los límites van con lookarounds explícitos.
+  const LETRA = 'a-záéíóúñ';
+  const ACENTO_FINAL = new RegExp(
+    `(?<![${LETRA}])[${LETRA}]{2,}(?:[áéí]|[áé]s|ís)(?![${LETRA}])`,
+    'gi',
+  );
+
+  /** Palabras que acaban igual y no son voseo. */
+  const LEGITIMAS = new Set([
+    // Adverbios, preposiciones y conjunciones.
+    'más', 'también', 'además', 'después', 'atrás', 'detrás', 'través',
+    'jamás', 'demás', 'quizá', 'ojalá', 'así', 'ahí', 'aquí', 'allá', 'sí',
+    // `acá` NO está: es rioplatense, va `aquí`.
+    // Interrogativos y relativos.
+    'qué', 'porqué', 'cuál', 'quién',
+    // Verbos en 3.ª persona o futuro de tuteo, que no son voseo.
+    'está', 'esté', 'están', 'estás', 'será', 'sería', 'habrá', 'tendrá',
+    'tendrás', 'podrá', 'podrás', 'verá', 'verás', 'irá', 'irás', 'hará',
+    'harás', 'dirá', 'vendrá', 'dejará', 'quedará', 'volverá', 'pasará',
+    'aparecerá', 'recibirá', 'llegará', 'enviará', 'seguirá', 'perderá',
+    // Sustantivos y nombres propios.
+    'país', 'café', 'interés', 'inglés', 'francés', 'portugués', 'mes',
+    'guaraní', 'andrés', 'josé', 'perú', 'panamá', 'bogotá', 'maracaibo',
+    // Abreviaturas de días.
+    'mié',
+  ]);
+
+  /** Reemplazo sugerido para los casos más frecuentes. */
+  const SUGERENCIAS = new Map([
+    ['elegí', 'elige'], ['probá', 'prueba'], ['ingresá', 'ingresa'],
+    ['podés', 'puedes'], ['usá', 'usa'], ['intentá', 'intenta'],
+    ['seleccioná', 'selecciona'], ['creá', 'crea'], ['cargá', 'carga'],
+    ['escribí', 'escribe'], ['tenés', 'tienes'], ['querés', 'quieres'],
+    ['preferís', 'prefieres'], ['agendá', 'agenda'], ['reservá', 'reserva'],
+    ['acá', 'aquí'], ['avisanos', 'avísanos'], ['contanos', 'cuéntanos'],
+  ]);
+
+  const tono = [];
+  walkStrings(source, (path, value) => {
+    for (const palabra of value.match(ACENTO_FINAL) ?? []) {
+      const clave = palabra.toLowerCase();
+      if (LEGITIMAS.has(clave)) continue;
+      tono.push({ path, hallado: palabra, sugerencia: SUGERENCIAS.get(clave) });
+    }
+  });
+
+  // El enclítico sin tilde no lo pilla el patrón: `avisanos` es llana escrita.
+  walkStrings(source, (path, value) => {
+    for (const palabra of value.match(/\b(avisanos|contanos|mandanos)\b/gi) ?? []) {
+      tono.push({
+        path,
+        hallado: palabra,
+        sugerencia: SUGERENCIAS.get(palabra.toLowerCase()),
+      });
+    }
+  });
+
+  if (tono.length > 0) {
+    hasErrors = true;
+    console.log(c.red(`  ✗ ${tono.length} cadena(s) sospechosas de voseo`));
+    for (const t of tono) {
+      const arreglo = t.sugerencia
+        ? `→ "${t.sugerencia}"`
+        : '→ escríbelo en tuteo (o añádelo a LEGITIMAS si no es voseo)';
+      console.log(`      - ${t.path}: "${t.hallado}" ${arreglo}`);
+    }
+  } else {
+    console.log(c.green(`  ✓ Sin voseo`));
   }
 
   /* ─────────── Resultado final ─────────── */
