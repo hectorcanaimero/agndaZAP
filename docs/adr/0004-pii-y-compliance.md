@@ -270,6 +270,34 @@ Si el cableado necesita salir antes de que este PR llegue a producción (deploy
 en Coolify), debe ir detrás de un flag por clínica apagado por defecto —
 recomendación del propio PR 2, decisión del owner.
 
+4. **PR 4** (`feat/stt-cableado`): el cableado. Ver
+   [[notas/2026-09-12-stt-cableado-notas-de-voz]].
+
+**Cómo se cumple este consent en el código** (PR 4):
+
+- `STT_ENABLED` apagado por defecto. Se comprueba al encolar **y** al procesar:
+  apagarlo tiene que parar también los jobs ya encolados y cualquier `retry`
+  desde el panel de BullMQ, o no sirve para responder a un incidente.
+- El aviso `voiceNoteFirstTime` se envía **antes** de que el audio salga hacia
+  OpenAI, y si no se puede enviar **no se transcribe**: se deriva a una persona.
+- La prueba de que se avisó es `Conversation.voiceConsentAt` +
+  `voiceConsentVersion`, columnas propias. No vale un `Message OUT` con el texto
+  del aviso: `BotService.reply` persiste la respuesta del LLM verbatim y el copy
+  es público, así que una inyección de prompt puede plantar una fila idéntica
+  sin que el aviso se haya mandado nunca — y desde la bandeja del panel se puede
+  escribir a mano. Una prueba que el sistema puede fabricar no se puede enseñar.
+  La versión se guarda para que un cambio sustantivo del texto vuelva a avisar.
+- Con la conversación en `HUMAN` no se transcribe: la grabación no sale hacia un
+  tercero para que la lea alguien que ya está leyendo el hilo.
+
+**Dónde vive el PHI de una nota de voz** (completa el inventario de §1): el
+fichero, en WAHA, hasta 900 s; el **texto** transcrito, en `Message.body` como
+cualquier mensaje; y, mientras el job está en cola, la URL del media y la
+transcripción viajan en `job.data` **en Redis** (sin cifrado at-rest), acotadas
+por `removeOnComplete: 900 s` / `removeOnFail: 900 s` para los jobs de audio.
+Esa retención corta es deliberada y es la razón de que las opciones de audio no
+reusen las de texto. El audio **nunca** se guarda en nuestra base de datos.
+
 **Por qué no Deepgram** (evaluado y descartado en la nota de exploración): mejor
 tecnología de audio de las tres comparadas, pero exigiría sumar un cuarto
 proveedor a la lista que el paciente ya aceptó (`OpenAI, DeepSeek, Google`) sin
