@@ -947,7 +947,28 @@ describe('WebhookController', () => {
         }
       });
 
-      it('audio, audio → NEEDS_HUMAN, limpia la FSM y avisa del handoff', async () => {
+      it('con un agendamiento a medias, el handoff NO borra la FSM', async () => {
+        // Le cobraba al paciente el precio más alto por el error más pequeño:
+        // dos notas de voz seguidas le borraban el servicio, el profesional y
+        // el horario que ya había elegido, y al volver del handoff tenía que
+        // empezar de cero. El bot no sigue solo de todas formas — el hilo
+        // queda en NEEDS_HUMAN y `BotService` se calla.
+        prisma.conversation.upsert.mockResolvedValue({
+          id: 'convo-1',
+          state: 'BOT',
+          flowStep: 'CONFIRM',
+        });
+
+        await post(audio('a-1'));
+        await post(audio('a-2'));
+
+        expect(prisma.conversation.update).toHaveBeenCalledWith({
+          where: { id: 'convo-1' },
+          data: { state: 'NEEDS_HUMAN' },
+        });
+      });
+
+      it('sin flujo activo, audio + audio → NEEDS_HUMAN y limpia la FSM', async () => {
         await post(audio('a-1'));
         await post(audio('a-2'));
 

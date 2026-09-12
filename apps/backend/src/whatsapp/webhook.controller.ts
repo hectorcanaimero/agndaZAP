@@ -646,8 +646,23 @@ export class WebhookController {
           where: { id: convo.id },
           data: {
             state: 'NEEDS_HUMAN',
-            flowStep: null,
-            flowData: Prisma.JsonNull,
+            // La FSM se conserva si hay un agendamiento a medias. Reiniciarla
+            // aquí le cobraba al paciente el precio más alto por el error más
+            // pequeño: mandar dos notas de voz seguidas le borraba el
+            // servicio, el profesional y el horario que ya había elegido, y al
+            // volver del handoff tenía que empezar de cero.
+            //
+            // No hay riesgo de que el bot siga solo: el hilo queda en
+            // NEEDS_HUMAN y `BotService` se calla hasta que una persona lo
+            // devuelva. Y si para entonces el horario ya no está, la propia
+            // FSM lo detecta y vuelve a ofrecer (`reofferSlotsAfterConflict`).
+            //
+            // Sin flujo activo se limpia igual que antes: no hay nada que
+            // conservar y dejar restos de un flujo muerto confunde al
+            // siguiente turno.
+            ...(convo.flowStep
+              ? {}
+              : { flowStep: null, flowData: Prisma.JsonNull }),
           },
         });
         await this.sendAndPersist(

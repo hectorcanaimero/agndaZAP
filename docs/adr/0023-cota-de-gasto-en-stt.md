@@ -76,11 +76,21 @@ devolviera la cadena `"Invalid DateTime"`, dejando una clave que no rota nunca
 **Agotada la cota, al paciente no se le deriva de entrada.** Cae al aviso de
 "solo puedo leer mensajes de texto". Quien puede escribir sigue siendo atendido
 por el bot sin ocupar a nadie; quien insista con audios acaba derivado igual por
-la racha de adjuntos que ya existía. Eso último tiene una consecuencia que
-conviene tener escrita: **dos notas de voz seguidas escalan a una persona y
-resetean la FSM de agendamiento**, así que un paciente a mitad de agendar que
-mande dos audios pierde el flujo. Con cota, esos dos audios se transcribían y la
-cita salía.
+la racha de adjuntos que ya existía.
+
+Eso último tenía una consecuencia fea, que este ADR corrige de paso: **esa racha
+escalaba a una persona Y reseteaba la FSM de agendamiento**, así que un paciente
+a mitad de agendar que mandara dos audios perdía el servicio, el profesional y
+el horario ya elegidos. Con cota disponible esos mismos audios se transcribían y
+la cita salía — o sea que quedarse sin cota le costaba el agendamiento: el
+precio más alto por el error más pequeño.
+
+Ahora el handoff **conserva `flowStep` y `flowData`** cuando hay un flujo
+activo. No hay riesgo de que el bot siga solo: el hilo queda en `NEEDS_HUMAN` y
+`BotService` se calla hasta que una persona lo devuelva; y si para entonces el
+horario ya no está, la FSM lo detecta y vuelve a ofrecer
+(`reofferSlotsAfterConflict`). Sin flujo activo se limpia igual que antes,
+porque dejar restos de un flujo muerto confunde al siguiente turno.
 
 **Lo que la clínica ve.** El evento `bot.turn` lleva
 `reasonCode: 'stt-sin-presupuesto'` y `inputKind: 'audio'`, y los dos se cuentan

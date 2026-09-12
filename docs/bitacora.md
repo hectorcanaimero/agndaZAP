@@ -31,7 +31,18 @@
   `recordBotStats` no copiaba `reasonCode`. Ahora se cuenta (`reason:*`), y el
   turno lleva `inputKind: 'audio'` aunque no se transcriba — si no, el contador
   de audio bajaba a cero justo al agotarse la cota.
-- 68 suites, 1504 tests (el fallo restante es el flaky del dashboard, #104).
+- **De paso**: el handoff por dos adjuntos seguidos ya no resetea la FSM cuando
+  hay un agendamiento a medias. Le cobraba al paciente el precio más alto por el
+  error más pequeño — dos notas de voz le borraban servicio, profesional y
+  horario ya elegidos. El hilo queda en NEEDS_HUMAN igual, así que el bot no
+  sigue solo.
+- **De paso**: el handoff por dos adjuntos seguidos ya no resetea la FSM cuando
+  hay un agendamiento a medias. Le cobraba al paciente el precio más alto por el
+  error más pequeño — dos notas de voz le borraban servicio, profesional y
+  horario ya elegidos, y con cota disponible esos mismos audios se transcribían
+  y la cita salía. El hilo queda en NEEDS_HUMAN igual, así que el bot no sigue
+  solo.
+- 68 suites, 1506 tests (el fallo restante es el flaky del dashboard, #104).
 
 ## 2026-09-12 — B6: el aviso de "asistente automático" deja de repetirse en cada saludo (rama `feat/bot-disclosure-24h`)
 - **Antes**: `resolveBotMessage('greeting')` concatenaba `aiDisclosure` SIEMPRE. Un paciente que saluda tres veces en la semana leía tres veces que habla con un bot. **Ahora**: el primer saludo de la conversación siempre lo lleva, y después como mucho una vez cada 24 h.
