@@ -220,10 +220,10 @@ Cada item de deuda debe:
 2. Al cerrar, actualizar la sección correspondiente de este ADR con
    `**Estado (YYYY-MM-DD)**: cerrado — ver commit / PR / migración`.
 
-### §7.1 Copy del aviso en el bot (actualizado 2026-09-10)
+### §7.1 Copy y frecuencia del aviso en el bot (actualizado 2026-09-12)
 
 El saludo del bot de WhatsApp ya **no** lista los proveedores de IA. El
-`AI_DISCLOSURE` que se concatena a todo greeting quedó en una línea:
+`AI_DISCLOSURE` quedó en una línea:
 
 > "Soy un asistente automático. Si prefieres hablar con una persona, escribe *humano*."
 
@@ -235,3 +235,22 @@ El texto legal completo sigue siendo el de §7.
 
 Además, todos los textos que ven pacientes van en **español latinoamericano
 neutro (tuteo)**, nunca voseo. Ver [[notas/2026-09-10-tono-espanol-neutro]].
+
+**Frecuencia (decidido 2026-09-12, aprobado por el owner)**: el aviso ya no se
+concatena a *cada* saludo. Se manda **en el primer contacto** y después **como
+mucho una vez cada 24 h** por conversación. La implementación no guarda estado
+propio: `BotService.shouldSendAiDisclosure` mira si la conversación tiene algún
+`Message` con `direction = OUT` en las últimas 24 h; una conversación recién
+creada no tiene ninguno, así que el primer contacto queda cubierto por
+construcción. Si la consulta falla, el aviso **se manda igual** (fail-open):
+repetirlo es ruido, omitirlo sería incumplir.
+
+Encuadre de la decisión: el requisito de compliance es que el paciente **sepa
+que habla con un asistente automático y cómo salir de él**, no que se lo
+repitan en cada mensaje. Quien saluda tres veces en la misma semana ya lo sabe;
+quien vuelve al día siguiente abre lo que para él es una conversación nueva, y
+por eso la ventana se reabre a las 24 h. El consentimiento explícito con la
+lista de proveedores sigue recogiéndose donde dice §7 (form público y política
+de privacidad), que es lo que tiene valor legal — el aviso del saludo es
+transparencia, no consentimiento. Ítem B6 del
+[[analisis/2026-09-11-chatbot-analisis-tecnico]].

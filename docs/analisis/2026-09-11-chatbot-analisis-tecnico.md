@@ -277,7 +277,7 @@ copy en tuteo LATAM, `security-auditor` en todo lo que toque `Patient`/`Appointm
 - [x] **M2-c** Bot: **PR #69**. Link de gestión en la intención detectada de cancelar/reagendar, en la confirmación y en el recordatorio; la palabra `CANCELAR` explícita sigue cancelando directo (evita doble confirmación); `REAGENDAR` ya no apaga recordatorios. `common/web-url.util.ts` y `SchedulingSessionService.issueManageUrl` como única fuente del link (mover dominio = un env).
 - [x] **B5** Reagendar por chat: **PR #71**, FSM desde `ASK_SLOT` con `rescheduleOf`, `rescheduleAppointment` in-place; tope de movimientos deriva a recepción.
 - [ ] **M3** Clasificador: prompt con definiciones + ejemplos + contexto de 3 mensajes, salida JSON con confianza, `parse` exacto, intenciones `AGRADECER` y `CONSULTA_CITA`. Set de 30 frases en tests.
-- [ ] **B6** `AI_DISCLOSURE` una vez por conversación cada 24 h; siempre en el primer contacto.
+- [x] **B6** `AI_DISCLOSURE` una vez por conversación cada 24 h; siempre en el primer contacto (**rama `feat/bot-disclosure-24h`**). Sin columna nueva: se mira si hay `Message OUT` en las últimas 24 h, y una conversación recién creada no tiene ninguno. Encuadre de compliance aprobado por el owner en [[adr/0004-pii-y-compliance]] §7.1.
 
 ### P2
 - [ ] **M4** FSM: "ver más horarios", "otro día", "cualquier profesional", filtro mañana/tarde y día de semana; link tokenizado tras dos fallos en el mismo paso.

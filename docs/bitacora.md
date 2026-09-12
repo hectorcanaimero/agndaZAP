@@ -1,5 +1,13 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-12 — B6: el aviso de "asistente automático" deja de repetirse en cada saludo (rama `feat/bot-disclosure-24h`)
+- **Antes**: `resolveBotMessage('greeting')` concatenaba `aiDisclosure` SIEMPRE. Un paciente que saluda tres veces en la semana leía tres veces que habla con un bot. **Ahora**: primer contacto siempre, y después como mucho una vez cada 24 h por conversación.
+- **Sin estado nuevo**: no hay columna `disclosureShownAt` ni flag en `flowData`. `shouldSendAiDisclosure` pregunta si la conversación tiene algún `Message OUT` en las últimas 24 h; una conversación recién creada no tiene ninguno, así que **el primer contacto queda cubierto por construcción** y no por un caso especial que alguien pueda romper. La query cae en el índice `[conversationId, createdAt]` que ya existe.
+- **Fail-open**: si la consulta al historial falla, el aviso se manda igual. Repetirlo es ruido; omitirlo sería incumplir.
+- **Un solo sitio concatena el aviso**: `resolveBotMessage` y `greetingWithAppointment` ahora devuelven el saludo pelado y `buildGreeting` decide. Era la única forma de que la ventana no se saltara por un call-site nuevo, y de paso las dos ramas del saludo (genérico y con cita próxima) comparten la regla en vez de copiarla.
+- **Encuadre de compliance** (aprobado por el owner, anotado en [[adr/0004-pii-y-compliance]] §7.1): el requisito es que el paciente sepa que habla con un bot y cómo salir, no que se lo repitan. El consentimiento con la lista de proveedores sigue viviendo en el form público y la política de privacidad, que es lo que tiene valor legal.
+- **Tests**: 1379 verdes, 7 nuevos (primer contacto, 2 h, 23 h 59 m, 25 h, saludo con cita próxima, locale `pt`, fallo de DB). El mock de `message.count` aplica el filtro de verdad, así que los tests comprueban la ventana que manda el servicio y no el valor que devuelve el mock; verificado con una mutación (`return true`) que tumba 4 de ellos.
+
 ## 2026-09-11 — S8-bis: revisión de los pares `clinicId` + FK restantes (nota, sin migración)
 - Nota en [[notas/2026-09-11-revision-fks-compuestas-restantes]] con la decisión pareja por pareja y un plan de un solo PR.
 - **Comprobado contra la base**: cero filas cruzadas en los ocho pares. La query queda escrita para correrla contra producción antes de migrar.
