@@ -2,7 +2,7 @@
   "common": {
     "error": {
       "title": "Algo salió mal",
-      "description": "No pudimos cargar esta sección. Probá de nuevo; si el problema sigue, avisanos.",
+      "description": "No pudimos cargar esta sección. Prueba de nuevo; si el problema sigue, avísanos.",
       "retry": "Reintentar",
       "reference": "Referencia: {digest}"
     },
@@ -17,14 +17,14 @@
     "loading": "Cargando…"
   },
   "page": {
-    "title": "Agendá tu cita",
-    "subtitle": "Elegí servicio, profesional y horario. Te confirmamos por WhatsApp.",
+    "title": "Agenda tu cita",
+    "subtitle": "Elige servicio, profesional y horario. Te confirmamos por WhatsApp.",
     "clinicNotFound": "Clínica no encontrada",
     "clinicNotFoundDescription": "El enlace no corresponde a ninguna clínica activa.",
     "poweredBy": "Agendamiento online",
     "features": {
       "title": "Rápido y por WhatsApp",
-      "quick": "Reservá en menos de un minuto.",
+      "quick": "Reserva en menos de un minuto.",
       "whatsapp": "Confirmación y recordatorios por WhatsApp."
     },
     "summary": {
@@ -51,26 +51,26 @@
       "name": "María González",
       "phone": "+58 4141234567",
       "notes": "Ej: consulta general de rutina",
-      "selectService": "Elegí un servicio",
-      "selectProfessional": "Elegí un profesional"
+      "selectService": "Elige un servicio",
+      "selectProfessional": "Elige un profesional"
     },
     "hints": {
-      "phone": "Usá el formato internacional: +58, +55, etc.",
+      "phone": "Usa el formato internacional: +58, +55, etc.",
       "phoneFromWhatsapp": "Tomamos tu número desde WhatsApp — dejalo así para que sigamos en contacto por este chat.",
       "selectServiceFirst": "Primero elige un servicio."
     },
     "errors": {
       "required": "Este campo es obligatorio.",
-      "nameMin": "Ingresá tu nombre completo (mínimo 2 caracteres).",
+      "nameMin": "Ingresa tu nombre completo (mínimo 2 caracteres).",
       "phoneInvalid": "El teléfono no tiene formato válido (ej: +584141234567).",
       "consent": "Necesitamos tu autorización para agendar la cita.",
-      "slotRequired": "Elegí un horario disponible.",
-      "genericError": "Algo salió mal. Intentá de nuevo.",
-      "slotTaken": "Ese horario acaba de ocuparse. Elegí otro.",
-      "rateLimit": "Demasiados intentos. Probá en un minuto."
+      "slotRequired": "Elige un horario disponible.",
+      "genericError": "Algo salió mal. Intenta de nuevo.",
+      "slotTaken": "Ese horario acaba de ocuparse. Elige otro.",
+      "rateLimit": "Demasiados intentos. Prueba en un minuto."
     },
     "noSlots": "No hay horarios disponibles esta semana.",
-    "chooseCombination": "Elegí servicio y profesional para ver horarios.",
+    "chooseCombination": "Elige servicio y profesional para ver horarios.",
     "emptyDescription": "No encontramos horarios en los próximos 7 días.",
     "tryNextWeek": "Probar la próxima semana",
     "tryOtherProfessional": "Cambiar profesional",
@@ -171,8 +171,8 @@
     }
   },
   "login": {
-    "title": "Iniciá sesión",
-    "subtitle": "Ingresá con tu email y contraseña.",
+    "title": "Inicia sesión",
+    "subtitle": "Ingresa con tu email y contraseña.",
     "labels": {
       "email": "Email",
       "password": "Contraseña"
@@ -183,14 +183,14 @@
     "submit": "Entrar",
     "submitting": "Ingresando...",
     "recovery": {
-      "hint": "¿Olvidaste tu contraseña? Contactá al admin de tu clínica."
+      "hint": "¿Olvidaste tu contraseña? Contacta al admin de tu clínica."
     },
     "errors": {
       "email": "Email inválido.",
-      "password": "Ingresá tu contraseña (mínimo 8 caracteres).",
+      "password": "Ingresa tu contraseña (mínimo 8 caracteres).",
       "invalidCredentials": "Credenciales inválidas.",
-      "tooManyAttempts": "Demasiados intentos. Probá en 15 minutos.",
-      "generic": "No pudimos ingresar. Probá de nuevo."
+      "tooManyAttempts": "Demasiados intentos. Prueba en 15 minutos.",
+      "generic": "No pudimos ingresar. Prueba de nuevo."
     },
     "brand": {
       "tagline": "Agendamiento por WhatsApp para clínicas.",
@@ -413,7 +413,7 @@
         "title": "Resumen del día",
         "appointments": "citas agendadas",
         "emptyStats": "Sin actividad todavía.",
-        "pendingHint": "{count, plural, one {# cita} other {# citas}} sin confirmar — activá el bot o llamá para asegurar el turno."
+        "pendingHint": "{count, plural, one {# cita} other {# citas}} sin confirmar — activa el bot o llama para asegurar el turno."
       },
       "filters": {
         "status": "Estados",
@@ -460,15 +460,15 @@
         "patientName": "Nombre del paciente",
         "patientPhone": "Teléfono (WhatsApp)",
         "service": "Servicio",
-        "servicePlaceholder": "Elegí un servicio",
+        "servicePlaceholder": "Elige un servicio",
         "professional": "Profesional",
-        "professionalPlaceholder": "Elegí un profesional",
+        "professionalPlaceholder": "Elige un profesional",
         "notes": "Notas internas",
         "optional": "opcional",
-        "slotPickerLabel": "Elegí un horario",
-        "slotsHint": "Seleccioná servicio y profesional para ver horarios disponibles.",
-        "slotsError": "No se pudieron cargar los horarios. Reintentá en un momento.",
-        "noSlots": "Sin horarios disponibles en la semana. Probá con la siguiente.",
+        "slotPickerLabel": "Elige un horario",
+        "slotsHint": "Selecciona servicio y profesional para ver horarios disponibles.",
+        "slotsError": "No se pudieron cargar los horarios. Reintenta en un momento.",
+        "noSlots": "Sin horarios disponibles en la semana. Prueba con la siguiente.",
         "prevWeek": "Semana anterior",
         "nextWeek": "Semana siguiente",
         "consentLabel": "El paciente autorizó el uso de sus datos para agendar y recibir recordatorios, incluido el procesamiento de sus mensajes con servicios de IA de terceros (DeepSeek, Google, OpenAI) (LGPD/GDPR).",
@@ -479,10 +479,10 @@
         "createFailed": "No se pudo crear la cita.",
         "rescheduleOk": "Cita reagendada.",
         "rescheduleFailed": "No se pudo reagendar la cita.",
-        "slotTakenReload": "Ese horario ya se ocupó. Elegí otro.",
+        "slotTakenReload": "Ese horario ya se ocupó. Elige otro.",
         "errName": "El nombre es obligatorio (mínimo 2 caracteres).",
-        "errPhone": "Teléfono inválido. Usá formato internacional (ej: +54 9 11 5555 5555).",
-        "errServiceOrProfessional": "Elegí servicio y profesional.",
+        "errPhone": "Teléfono inválido. Usa formato internacional (ej: +54 9 11 5555 5555).",
+        "errServiceOrProfessional": "Elige servicio y profesional.",
         "errConsent": "El consentimiento del paciente es obligatorio."
       },
       "dayAriaLabel": "{date} · {count, plural, one {# cita} other {# citas}}"
@@ -513,7 +513,7 @@
       "noConversation": "Este paciente todavía no ha escrito por WhatsApp.",
       "noMessages": "Sin mensajes",
       "empty": {
-        "title": "Elegí un paciente",
+        "title": "Elige un paciente",
         "description": "Vas a ver su ficha, historial de citas y última conversación por WhatsApp."
       },
       "sections": {
@@ -532,7 +532,7 @@
       "hints": {
         "phone": "El teléfono es el identificador del paciente. Para cambiarlo, la persona tiene que crear una ficha nueva desde el bot.",
         "consent": "Marca cuando el paciente lo confirme por WhatsApp o de forma presencial. Una vez otorgado no se puede revocar desde aquí.",
-        "consentGranted": "El paciente ya otorgó consent. Para revocarlo, contactá a soporte."
+        "consentGranted": "El paciente ya otorgó consent. Para revocarlo, contacta a soporte."
       },
       "convState": {
         "BOT": "El bot está atendiendo",
@@ -592,7 +592,7 @@
       },
       "empty": {
         "title": "Todavía no recibiste respuestas de satisfacción",
-        "description": "Prendé follow-up en algún profesional para empezar a recibir puntuaciones de tus pacientes. Cada vez que marques una cita como ATENDIDA se manda un mensaje pidiendo 1-5 estrellas."
+        "description": "Activa follow-up en algún profesional para empezar a recibir puntuaciones de tus pacientes. Cada vez que marques una cita como ATENDIDA se manda un mensaje pidiendo 1-5 estrellas."
       },
       "detail": {
         "backLabel": "Volver a la lista",
@@ -608,7 +608,7 @@
         "patientLabel": "Paciente"
       },
       "panelEmpty": {
-        "title": "Elegí una respuesta",
+        "title": "Elige una respuesta",
         "description": "Selecciona una respuesta de la lista para ver el detalle. Abajo tienes el resumen agregado de todas las puntuaciones recibidas."
       },
       "stats": {
@@ -647,7 +647,7 @@
         "unnamed": "Paciente sin nombre",
         "metaLine": "{professional} · {service}"
       },
-      "selectHint": "Seleccioná una respuesta en la lista para ver el detalle."
+      "selectHint": "Selecciona una respuesta en la lista para ver el detalle."
     },
     "conversations": {
       "title": "Bandeja",
@@ -655,9 +655,9 @@
       "loadError": "No se pudieron cargar las conversaciones ({status}).",
       "empty": "No hay conversaciones.",
       "emptyList": "Bandeja vacía",
-      "emptyDetail": "Elegí una conversación de la bandeja para ver los mensajes y responder.",
+      "emptyDetail": "Elige una conversación de la bandeja para ver los mensajes y responder.",
       "emptyDetailTitle": "Sin conversación seleccionada",
-      "pickOne": "Elegí una conversación para ver el detalle.",
+      "pickOne": "Elige una conversación para ver el detalle.",
       "messagesCount": "{n, plural, one {# mensaje} other {# mensajes}}",
       "searchPlaceholder": "Buscar por teléfono o mensaje…",
       "noResults": "Sin resultados",
@@ -679,8 +679,8 @@
         "HUMAN": "Humano"
       },
       "stateDescription": {
-        "BOT": "El asistente responde automáticamente. Podés tomar la conversación cuando quieras.",
-        "NEEDS_HUMAN": "El bot pidió intervención humana. Tomá la conversación para responder.",
+        "BOT": "El asistente responde automáticamente. Puedes tomar la conversación cuando quieras.",
+        "NEEDS_HUMAN": "El bot pidió intervención humana. Toma la conversación para responder.",
         "HUMAN": "Vos estás respondiendo. Devolvela al bot cuando termines."
       },
       "takeover": "Tomar",
@@ -689,18 +689,18 @@
       "release": "Devolver al bot",
       "releaseOk": "Conversación devuelta al bot.",
       "releaseFailed": "No se pudo devolver la conversación.",
-      "replyPlaceholder": "Escribí una respuesta…",
+      "replyPlaceholder": "Escribe una respuesta…",
       "replyEmpty": "El mensaje está vacío.",
       "replyFailed": "No se pudo enviar el mensaje.",
       "send": "Enviar",
       "sending": "Enviando…",
       "sendHint": "Máximo 1500 caracteres.",
-      "takeoverBeforeReply": "Tomá la conversación para poder responder.",
+      "takeoverBeforeReply": "Toma la conversación para poder responder.",
       "lastRefresh": "Hace {seconds}s",
       "refreshing": "Actualizando…",
-      "autoTakeoverHint": "Al enviar, tomás la conversación automáticamente.",
+      "autoTakeoverHint": "Al enviar, tomas la conversación automáticamente.",
       "contactPanelTitle": "Detalle del contacto",
-      "contactPanelEmpty": "Seleccioná una conversación para ver los datos del contacto.",
+      "contactPanelEmpty": "Selecciona una conversación para ver los datos del contacto.",
       "unknownContact": "Contacto sin identificar",
       "openInWhatsApp": "Abrir en WhatsApp",
       "sectionState": "Estado",
@@ -736,7 +736,7 @@
       "deleteFailed": "No se pudo eliminar el servicio.",
       "confirmDelete": {
         "title": "¿Desactivar servicio?",
-        "description": "Vas a desactivar <name>{name}</name>. Podés reactivarlo después."
+        "description": "Vas a desactivar <name>{name}</name>. Puedes reactivarlo después."
       },
       "cancel": "Cancelar",
       "noProfessionals": "No hay profesionales cargados.",
@@ -748,8 +748,8 @@
       "selectedCount": "{n} seleccionados",
       "professionalCount": "{n, plural, one {# profesional} other {# profesionales}}",
       "empty": {
-        "title": "Elegí un servicio o creá uno nuevo",
-        "description": "Los servicios definen qué ofrecés, cuánto dura cada turno y qué profesionales lo atienden.",
+        "title": "Elige un servicio o crea uno nuevo",
+        "description": "Los servicios definen qué ofreces, cuánto dura cada turno y qué profesionales lo atienden.",
         "cta": "Crear servicio"
       },
       "fields": {
@@ -796,7 +796,7 @@
       "deleteFailed": "No se pudo eliminar el profesional.",
       "confirmDelete": {
         "title": "¿Desactivar profesional?",
-        "description": "Vas a desactivar <name>{name}</name>. Podés reactivarlo después."
+        "description": "Vas a desactivar <name>{name}</name>. Puedes reactivarlo después."
       },
       "cancel": "Cancelar",
       "noServices": "No hay servicios cargados todavía.",
@@ -808,7 +808,7 @@
       "servicesCount": "{n, plural, one {# servicio} other {# servicios}}",
       "selectedCount": "{n} seleccionados",
       "empty": {
-        "title": "Elegí un profesional o cargá uno nuevo",
+        "title": "Elige un profesional o carga uno nuevo",
         "description": "Cada profesional puede tener email para acceder a la app, foto, especialidad y matrícula.",
         "cta": "Cargar profesional"
       },
@@ -854,7 +854,7 @@
       },
       "followUp": {
         "toggleLabel": "Pedir feedback al paciente después de atender",
-        "toggleHint": "Cuando marcás una cita como ATENDIDA, se manda automáticamente un mensaje pidiéndole al paciente que puntúe la experiencia del 1 al 5.",
+        "toggleHint": "Cuando marcas una cita como ATENDIDA, se manda automáticamente un mensaje pidiéndole al paciente que puntúe la experiencia del 1 al 5.",
         "delayLabel": "Enviar mensaje N horas después",
         "delaySuffix": "horas después",
         "delayError": "El delay debe estar entre 0 y 168 horas (7 días).",
@@ -863,7 +863,7 @@
       "errors": {
         "required": "Requerido.",
         "email": "Email inválido.",
-        "phone": "Teléfono inválido. Usá formato internacional (ej. +54 9 11 5555 5555).",
+        "phone": "Teléfono inválido. Usa formato internacional (ej. +54 9 11 5555 5555).",
         "avatarUrl": "URL inválida (debe empezar con http o https).",
         "color": "Color debe ser hex (ej. #3b82f6)."
       }
@@ -904,8 +904,8 @@
         "clinicOnly": "Solo horarios de la clínica"
       },
       "empty": {
-        "title": "Elegí un horario o cargá uno nuevo",
-        "description": "Definí cuándo abre la clínica o cada profesional. Los pacientes solo verán slots dentro de estos rangos.",
+        "title": "Elige un horario o carga uno nuevo",
+        "description": "Define cuándo abre la clínica o cada profesional. Los pacientes solo verán slots dentro de estos rangos.",
         "cta": "Cargar horario"
       },
       "hints": {
@@ -968,7 +968,7 @@
         "past": "Pasados"
       },
       "empty": {
-        "title": "Elegí un bloqueo o cargá uno nuevo",
+        "title": "Elige un bloqueo o carga uno nuevo",
         "description": "Vacaciones, feriados o cualquier franja donde la clínica o un profesional no atiende.",
         "cta": "Cargar bloqueo"
       },
@@ -996,7 +996,7 @@
       "subtitle": "Preguntas frecuentes para el bot.",
       "subtitleKb": "Artículos que el bot usa para responder a tus pacientes.",
       "loadError": "No se pudieron cargar las FAQs ({status}).",
-      "emptyList": "Sin artículos cargados. Creá el primero para que el bot pueda responder.",
+      "emptyList": "Sin artículos cargados. Crea el primero para que el bot pueda responder.",
       "noSearchResults": "Sin resultados para tu búsqueda.",
       "searchPlaceholder": "Buscar en título o contenido…",
       "createFirst": "Crear el primero",
@@ -1027,17 +1027,17 @@
       "back": "Volver",
       "untitled": "Sin título",
       "empty": {
-        "title": "Elegí un artículo o creá uno nuevo",
+        "title": "Elige un artículo o crea uno nuevo",
         "description": "Los artículos son la base de conocimiento del bot. Cuando un paciente pregunta algo, el bot busca aquí para responder.",
         "cta": "Crear artículo"
       },
-      "selectOrCreate": "Seleccioná un artículo o creá uno nuevo.",
+      "selectOrCreate": "Selecciona un artículo o crea uno nuevo.",
       "preview": "Vista previa",
       "indexed": "Indexada",
       "notIndexed": "Sin indexar",
       "notIndexedAriaLabel": "FAQ sin indexar — el bot no puede responderla.",
       "notIndexedBanner": "{count, plural, =1 {# artículo sin indexar. El bot no puede responderlo.} other {# artículos sin indexar. El bot no puede responderlos.}}",
-      "notIndexedHint": "Verificá `OPENAI_API_KEY` en el servidor o corré `pnpm prisma:reindex-faq`.",
+      "notIndexedHint": "Verifica `OPENAI_API_KEY` en el servidor o corre `pnpm prisma:reindex-faq`.",
       "embeddingSkippedToast": "Guardado sin embedding (falta OPENAI_API_KEY). El bot aún no puede responderlo.",
       "fields": {
         "title": "Título (opcional)",
@@ -1048,8 +1048,8 @@
         "content": "¿Cuánto dura la consulta? La consulta dura 30 minutos..."
       },
       "hints": {
-        "title": "Ayuda a organizar la lista. Si no ponés uno, se usa la primera línea del contenido.",
-        "content": "Podés usar markdown (negrita, listas, enlaces, etc.)."
+        "title": "Ayuda a organizar la lista. Si no pones uno, se usa la primera línea del contenido.",
+        "content": "Puedes usar markdown (negrita, listas, enlaces, etc.)."
       },
       "errors": {
         "title": "El título no puede exceder 200 caracteres.",
@@ -1085,11 +1085,11 @@
       },
       "bot": {
         "title": "Bot",
-        "description": "Personalizá los mensajes que el bot envía a tus pacientes por WhatsApp."
+        "description": "Personaliza los mensajes que el bot envía a tus pacientes por WhatsApp."
       },
       "whatsapp": {
         "title": "Conexión de WhatsApp",
-        "description": "Estado de la sesión del bot. Escaneá el QR desde tu teléfono para conectar."
+        "description": "Estado de la sesión del bot. Escanea el QR desde tu teléfono para conectar."
       },
       "fields": {
         "name": "Nombre de la clínica",
@@ -1110,7 +1110,7 @@
         "timezone": "Todas las horas del panel se muestran en esta TZ. Formato IANA.",
         "currency": "Se usa en los precios de tus servicios y en las métricas del dashboard (facturación, top servicios).",
         "autoConfirm": "Si está activo, las citas nacen confirmadas — no se pide confirmación explícita al paciente.",
-        "offsets": "Podés configurar hasta 5 recordatorios. Ej: 24 (un día antes) y 3 (tres horas antes).",
+        "offsets": "Puedes configurar hasta 5 recordatorios. Ej: 24 (un día antes) y 3 (tres horas antes).",
         "threshold": "Horas antes de la cita sin confirmar tras las cuales la cita pasa a EN_RIESGO.",
         "tone": "Modula el estilo de las respuestas del bot (solo afecta el cómo, no el qué).",
         "botGreeting": "Cuando el paciente saluda (\"hola\", \"buenas\"). Placeholders: {clinicName}, {patientName}. El aviso de que atiende un asistente con IA de terceros se agrega siempre al final (compliance).",
@@ -1147,7 +1147,7 @@
         "thresholdRange": "El umbral debe estar entre 1h y 72h."
       },
       "warnings": {
-        "timezoneChange": "Cambiar la zona horaria afecta cómo se ven las citas futuras. Verificá antes de guardar."
+        "timezoneChange": "Cambiar la zona horaria afecta cómo se ven las citas futuras. Verifica antes de guardar."
       },
       "timezoneCustom": "Otra (personalizada)",
       "offsetChip": "{h}h antes",
@@ -1165,7 +1165,7 @@
         "label": "WhatsApp público",
         "hint": "Se muestra al paciente al confirmar la cita para que pueda escribirte. Formato internacional, ej. +58 412 1234567. Vacío = no se muestra.",
         "placeholder": "+58 412 1234567",
-        "invalid": "Número inválido. Usá formato internacional (ej. +58 412 1234567)."
+        "invalid": "Número inválido. Usa formato internacional (ej. +58 412 1234567)."
       }
     },
     "whatsapp": {
@@ -1183,11 +1183,11 @@
       },
       "qr": {
         "alt": "Código QR para escanear con WhatsApp",
-        "help": "Escaneá con el WhatsApp del número dedicado de la clínica."
+        "help": "Escanea con el WhatsApp del número dedicado de la clínica."
       },
       "empty": {
         "title": "Sin QR activo",
-        "help": "Presioná Conectar para iniciar la sesión."
+        "help": "Presiona Conectar para iniciar la sesión."
       },
       "actions": {
         "connect": "Conectar",
@@ -1479,7 +1479,7 @@
     "cta": {
       "headline": "Recupera las horas que tu equipo gasta en WhatsApp.",
       "subheadline": "En menos de una hora tu clínica está agendando y confirmando por WhatsApp. Sin cambiar de número.",
-      "trust": "No pedimos tarjeta. No instalás nada. Onboarding acompañado por el equipo.",
+      "trust": "No pedimos tarjeta. No instalas nada. Onboarding acompañado por el equipo.",
       "form": {
         "labels": {
           "name": "Tu nombre",
@@ -1490,7 +1490,7 @@
         "placeholders": {
           "name": "Ej: María González",
           "phone": "+52 55 1234 5678",
-          "clinicType": "Elegí una opción"
+          "clinicType": "Elige una opción"
         },
         "clinicTypes": {
           "consultorio": "Consultorio individual",
@@ -1505,12 +1505,12 @@
         "successTitle": "Listo. Te contactamos en menos de 24 horas.",
         "successBody": "Vamos a escribirte por WhatsApp para coordinar la demo y responder tus dudas.",
         "errors": {
-          "nameMin": "Ingresá al menos 2 caracteres.",
+          "nameMin": "Ingresa al menos 2 caracteres.",
           "phoneInvalid": "Formato inválido. Ej: +52 55 1234 5678.",
           "consent": "Necesitamos tu autorización para contactarte.",
-          "rateLimit": "Recibimos muchas solicitudes. Probá de nuevo en un minuto.",
+          "rateLimit": "Recibimos muchas solicitudes. Prueba de nuevo en un minuto.",
           "validation": "Revisa los datos e intenta de nuevo.",
-          "generic": "No pudimos enviar el mensaje. Probá de nuevo."
+          "generic": "No pudimos enviar el mensaje. Prueba de nuevo."
         }
       },
       "whatsappCta": "Escribinos por WhatsApp",
@@ -1591,12 +1591,12 @@
           "emailInvalid": "Email inválido.",
           "slugTaken": "Ese slug ya está en uso.",
           "wahaSessionTaken": "Esa sesión WhatsApp ya está en uso.",
-          "generic": "No se pudo crear la clínica. Intentá de nuevo."
+          "generic": "No se pudo crear la clínica. Intenta de nuevo."
         },
         "submit": "Crear clínica",
         "cancel": "Cancelar",
         "success": "Clínica creada. Invitación enviada a {email}.",
-        "successMailFail": "Clínica creada, pero el email no pudo enviarse. Copiá el enlace y pásalo por otro canal.",
+        "successMailFail": "Clínica creada, pero el email no pudo enviarse. Copia el enlace y pásalo por otro canal.",
         "linkDialog": {
           "title": "Enlace de activación",
           "description": "El email a {email} no pudo enviarse. Este enlace le permite activar la cuenta y elegir su contraseña. Vence en 7 días.",
@@ -1666,10 +1666,10 @@
       },
       "suspendDialog": {
         "title": "Suspender clínica",
-        "description": "La clínica {name} dejará de operar. Sus usuarios no podrán entrar al panel hasta que la reactives. Explicá el motivo — quedará en la auditoría.",
+        "description": "La clínica {name} dejará de operar. Sus usuarios no podrán entrar al panel hasta que la reactives. Explica el motivo — quedará en la auditoría.",
         "reasonLabel": "Motivo",
         "reasonPlaceholder": "Ej: falta de pago, incumplimiento de términos, solicitud del cliente…",
-        "reasonError": "Ingresá al menos 3 caracteres.",
+        "reasonError": "Ingresa al menos 3 caracteres.",
         "submit": "Suspender clínica",
         "cancel": "Cancelar"
       },
@@ -1749,10 +1749,10 @@
     }
   },
   "invite": {
-    "title": "Activá tu cuenta",
-    "subtitle": "Elegí una contraseña para entrar a Showly.",
+    "title": "Activa tu cuenta",
+    "subtitle": "Elige una contraseña para entrar a Showly.",
     "greeting": "Hola {name},",
-    "context": "Fuiste invitado a administrar {clinic}. Elegí tu contraseña para activar la cuenta.",
+    "context": "Fuiste invitado a administrar {clinic}. Elige tu contraseña para activar la cuenta.",
     "expires": "Este enlace vence el {date}.",
     "labels": {
       "email": "Email",
@@ -1765,7 +1765,7 @@
     "errors": {
       "passwordMin": "La contraseña debe tener al menos 8 caracteres.",
       "passwordMismatch": "Las contraseñas no coinciden.",
-      "generic": "No se pudo activar la cuenta. Intentá de nuevo."
+      "generic": "No se pudo activar la cuenta. Intenta de nuevo."
     },
     "submit": "Activar cuenta",
     "submitting": "Activando…",
@@ -1802,7 +1802,7 @@
     },
     "errors": {
       "cannotImpersonateNonActive": "No se puede impersonar una clínica que no está activa.",
-      "startFailed": "No se pudo iniciar la impersonación. Intentá de nuevo."
+      "startFailed": "No se pudo iniciar la impersonación. Intenta de nuevo."
     }
   },
   "legal": {
@@ -1822,7 +1822,7 @@
       "metaDescription": "Qué datos trata Showly, para qué, con quién los comparte, cuánto los conserva y cómo ejercer tus derechos (LGPD / GDPR). Versión piloto.",
       "eyebrow": "Privacidad",
       "title": "Política de privacidad",
-      "intro": "Showly es un sistema de agendamiento por WhatsApp para clínicas. Acá te contamos, sin letra chica, qué datos pasan por el sistema y qué hacemos con ellos.",
+      "intro": "Showly es un sistema de agendamiento por WhatsApp para clínicas. Aquí te contamos, sin letra chica, qué datos pasan por el sistema y qué hacemos con ellos.",
       "sections": {
         "controller": {
           "title": "Quién es responsable",
