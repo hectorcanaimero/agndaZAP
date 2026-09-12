@@ -40,6 +40,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[adr/0019-rag-hechos-de-bd|0019 — Hechos de BD como fuente del RAG (sin embeddings)]]
 - [[adr/0020-gestion-cita-por-link|0020 — Gestión de cita por link (cancelar y reagendar sin escribir)]]
 - [[adr/0022-fk-compuestas-multi-tenant|0022 — FKs compuestas para que el aislamiento entre clínicas no dependa del código]]
+- [[adr/0023-cota-de-gasto-en-stt|ADR 0023 — La cota de transcripción falla cerrada, y el ADR 0007 no]]
 - [[adr/0021-cola-bot-inbound|ADR 0021 — Cola `bot-inbound` entre el webhook de WAHA y el bot]]
 
 ## Specs de sprint (implementación)
@@ -93,7 +94,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[notas/2026-09-11-revision-fks-compuestas-restantes|2026-09-11 — Los otros 9 pares del ADR 0022: cuáles merecen FK compuesta]]
 - [[notas/2026-09-12-stt-descarga-segura|2026-09-12 — Transcribir notas de voz: por qué el servicio desconfía de su propia URL]]
 - [[notas/2026-09-12-stt-cableado-notas-de-voz|2026-09-12 — Cablear la transcripción: quién decide qué, y qué pasa cuando algo falla]]
-- [[notas/2026-09-12-presupuesto-stt-por-clinica|2026-09-12 — Cota diaria de transcripciones: por qué no bastaba el rate-limit]]
+- [[notas/2026-09-12-presupuesto-stt-por-clinica|2026-09-12 — Cota diaria de transcripciones: detalles de implementación]]
 - [[notas/2026-09-12-waha-media-storage|2026-09-12 — WAHA no descarga los adjuntos si no se lo pides, y cuánto vive el fichero]]
 
 ## Análisis

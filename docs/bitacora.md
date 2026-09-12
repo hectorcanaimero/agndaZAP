@@ -1,26 +1,37 @@
 # Bitácora de sesiones — AgendaZap
 
-## 2026-09-12 — S38 (1/3): cota diaria de transcripciones por clínica (rama `feat/presupuesto-stt`)
-- El rate-limit del ADR 0007 es **fail-open** a propósito, y con texto eso
-  significaba "más llamadas al LLM". Con audio significa gasto por minuto y
-  grabaciones de pacientes saliendo del perímetro — y su techo de 500 mensajes/h
-  por clínica son ~12.000 transcripciones al día. Cota propia y **fail-closed**.
-- El día se calcula en la **TZ de la clínica**: en UTC, una clínica en Caracas
-  vería su cota reiniciarse a las 20:00 hora local.
-- Leer y apuntar van separados (`withinSttBudget` / `consumeSttBudget`): entre
-  comprobar y encolar todavía puede aparecer un motivo para no mandar el audio,
-  y cobrar por lo que no se transcribió haría que la cota mintiera.
-- Agotada la cota **no se deriva de entrada a una persona**, que era la
-  propuesta: cae al aviso de "solo leo texto", que ya deriva por la racha de
-  adjuntos si el paciente insiste. Quien puede escribir sigue siendo atendido
-  por el bot sin ocupar a nadie, y la bandeja no se llena el día en que algo se
-  disparó. El motivo va al evento (`stt-sin-presupuesto`) para que se vea.
-- Al añadirlo, 4 tests del webhook se pusieron rojos porque su fake de Redis no
-  tenía `get`: es la propia lógica fail-closed funcionando.
-- **Flaky encontrado de paso (no es de este PR)**: `dashboard.controller.spec`
-  → "agrega counts por status" falla cuando en la clínica son más de las ~22:30,
-  porque sus citas `now.plus({hours})` se salen del día y el filtro
-  `endAt < endOfToday` las descarta. Va en PR aparte.
+## 2026-09-12 — S38 (1/3): cota diaria de transcripciones (rama `feat/presupuesto-stt`)
+- Decisión y porqué en [[adr/0023-cota-de-gasto-en-stt]]; implementación en
+  [[notas/2026-09-12-presupuesto-stt-por-clinica]].
+- El rate-limit del ADR 0007 es **fail-open** a propósito; con audio el signo
+  del error cambia (dinero y grabaciones saliendo del perímetro), así que esta
+  cota es **fail-closed** y su techo de 500 msg/h —12.000 transcripciones/día—
+  no servía de tope.
+- **Tres cosas cambiaron después de auditar la primera versión**, y las tres
+  eran agujeros de verdad:
+  1. Leer con `GET` y apuntar aparte **no era fail-closed**: con Redis
+     aceptando lecturas y rechazando escrituras (disco lleno, el default de
+     `stop-writes-on-bgsave-error`) el contador se congelaba y la cota quedaba
+     desactivada en silencio. Ahora la autoridad es el `INCR`.
+  2. Se comprobaba al encolar, no donde se gasta: no paraba los jobs ya
+     encolados ni un `retry` de BullMQ al bajar el límite, y cobraba por todo
+     lo que aborta en medio. La reserva vive en el worker.
+  3. Sin sub-cota por chat, **un solo número agotaba la cota de la clínica en
+     ~14 minutos**: la clínica paga las transcripciones del atacante y sus
+     pacientes se quedan sin el feature el resto del día.
+- **El día pasa a ser UTC**, contra mi propio razonamiento inicial. La regla de
+  la TZ de la clínica es para fechas que alguien lee; esta la edita el tenant,
+  y con la fecha local dentro de la clave rotar la zona triplicaba la cota. De
+  paso desaparece el caso de la zona inválida, que dejaba una clave que no
+  rotaba nunca.
+- **El fail-closed no puede ser silencio**: con Redis mudo se fuerza el aviso,
+  porque su throttle vive en el mismo Redis que acabó de fallar y es también
+  fail-closed. Sin eso el paciente se quedaba sin transcripción y sin respuesta.
+- Yo había escrito que el motivo "se ve en el panel" y **era falso**:
+  `recordBotStats` no copiaba `reasonCode`. Ahora se cuenta (`reason:*`), y el
+  turno lleva `inputKind: 'audio'` aunque no se transcriba — si no, el contador
+  de audio bajaba a cero justo al agotarse la cota.
+- 68 suites, 1504 tests (el fallo restante es el flaky del dashboard, #104).
 
 ## 2026-09-12 — B6: el aviso de "asistente automático" deja de repetirse en cada saludo (rama `feat/bot-disclosure-24h`)
 - **Antes**: `resolveBotMessage('greeting')` concatenaba `aiDisclosure` SIEMPRE. Un paciente que saluda tres veces en la semana leía tres veces que habla con un bot. **Ahora**: el primer saludo de la conversación siempre lo lleva, y después como mucho una vez cada 24 h.

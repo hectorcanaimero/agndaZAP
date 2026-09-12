@@ -1,61 +1,58 @@
-# 2026-09-12 — Cota diaria de transcripciones: por qué no bastaba el rate-limit
+# 2026-09-12 — Cota de transcripciones: detalles de implementación
 
-S38, primera tanda. Seguimiento que dejó abierto el cableado de M10
-([[notas/2026-09-12-stt-cableado-notas-de-voz]]).
+La decisión y su porqué están en [[adr/0023-cota-de-gasto-en-stt]]. Aquí queda
+lo que hay que saber para tocar el código sin romperlo.
 
-## El rate-limit del ADR 0007 no sirve para esto, y es a propósito
+## Dónde está cada pieza
 
-`withinBotRateLimit` es **fail-open**: con Redis caído deja pasar todo. Es la
-decisión correcta para lo que protege — el coste de bloquear a un paciente por
-un blip de Redis es peor que el de una llamada de más al LLM.
+| Pieza | Dónde | Qué hace |
+|---|---|---|
+| `withinSttBudget` | `stt/stt-budget.ts` | **Sólo lee.** Filtro barato en el webhook, para decidir ya si al paciente se le manda el aviso o se le encola el audio |
+| `claimSttBudget` | `stt/stt-budget.ts` | **Reserva.** `INCR` y compara el valor devuelto. La autoridad |
+| Llamada a `withinSttBudget` | `whatsapp/webhook.controller.ts` | Antes de `handleUnsupportedMessage`, porque decide `transcribable` |
+| Llamada a `claimSttBudget` | `bot/bot-inbound.processor.ts` | Después del consent, justo antes de `stt.transcribe` |
 
-Con las notas de voz el signo del error cambia:
+## Tres estados, no un booleano
 
-- una llamada de más se paga en **dinero**, por minuto de audio;
-- y cada llamada manda **la voz de un paciente** fuera del perímetro.
+`withinSttBudget` devuelve `'ok' | 'agotado' | 'indeterminado'`, y la diferencia
+entre los dos últimos decide si al paciente se le fuerza el aviso
+(`forceNotice`). Si alguien lo colapsa a booleano, el caso "Redis mudo" vuelve a
+ser silencio absoluto para el paciente.
 
-Además el techo que dejaba el ADR 0007 —500 mensajes/h por clínica— son unas
-12.000 transcripciones al día por clínica. Eso no es un techo, es el cielo.
+## El orden de los dos `INCR` importa
 
-## La cota
+Primero el del chat, después el de la clínica. Al revés, quien ya agotó su cota
+de chat seguiría quemando la de todos — que es justo lo que la sub-cota viene a
+impedir.
 
-`stt:quota:{clinicId}:{YYYY-MM-DD}` en Redis, TTL de 48 h, límite por
-`STT_DAILY_LIMIT` (default 200, suficiente para el piloto).
+Si el `INCR` del chat pasa y el de la clínica falla, se ha consumido una unidad
+de chat de más. Es un tope de gasto, no contabilidad: se autocorrige al día
+siguiente.
 
-Tres decisiones que no se ven leyendo el código:
+## Cuidado al tocar los fakes de Redis en los tests
 
-**El día es el de la clínica, no el del proceso.** El backend corre en UTC; una
-clínica en Caracas vería su cota reiniciarse a las 20:00 hora local, en plena
-tarde de consulta. Luxon con la TZ de la clínica, como todo lo que alguien lee.
+Esta cota se apoya en tres cosas que los mocks de este repo suelen dar por
+buenas, y cada una ya ha escondido un bug:
 
-**Fail-closed**, al revés que el rate-limit. Si no se puede contar, no se
-transcribe. El paciente no se queda sin atención: cae al camino de siempre, el
-aviso de "solo puedo leer mensajes de texto", que ya deriva a una persona si
-insiste con audios.
+- **`SET NX`**: el fake por defecto devuelve siempre `'OK'`, así que un throttle
+  es inobservable — la primera vez y la quinta dan lo mismo. El aviso al
+  operador (uno por clínica y día) necesita un fake con estado.
+- **`pipeline().exec()`**: no rechaza por errores de comandos sueltos, los
+  devuelve dentro del array. Un fake que devuelva `[]` hace que la reserva lea
+  "respuesta inesperada" y **nada se transcriba**.
+- **`mget`**: si falta en el fake, el estado sale `indeterminado` y ninguna nota
+  de voz se transcribe. Cuando lo añadí, cuatro tests del webhook se pusieron
+  rojos: era el fail-closed funcionando.
 
-**Leer y apuntar están separados.** `withinSttBudget` solo lee; `consumeSttBudget`
-apunta, y se llama **después** de encolar. Entre una cosa y otra todavía puede
-aparecer un motivo para no mandar el audio —que la conversación la haya tomado
-una persona— y cobrar por lo que no se transcribió haría que la cota mintiera
-justo cuando importa. La carrera que eso abre (dos webhooks leyendo el mismo
-valor) puede pasarse del límite por uno o dos: da igual, esto es un tope de
-gasto, no contabilidad.
+Ver [[notas/2026-09-11-cola-bot-inbound]] para el mismo patrón con BullMQ: un
+mock nunca valida el contrato de la librería.
 
-## Qué ve el paciente y qué ve la clínica
+## Lo que queda pendiente
 
-El paciente recibe exactamente lo de antes de M10. **No se le deriva de entrada
-a una persona**, aunque era lo primero que se propuso: quien puede escribir
-sigue siendo atendido por el bot sin ocupar a nadie, y la bandeja no se llena
-justo el día en que algo se disparó. Quien insista con audios acaba derivado
-igual, por la racha de adjuntos que ya existía.
-
-La clínica lo ve en el panel: el evento `bot.turn` lleva
-`reasonCode: 'stt-sin-presupuesto'`. Sin eso, quedarse sin cota es invisible —
-se ve una caída de transcripciones y ninguna explicación.
-
-## Un env inválido no apaga el feature en silencio
-
-`STT_DAILY_LIMIT=doscientos` daría `NaN`, y un `!limite` lo leería como cero:
-transcripción apagada para todas las clínicas, con pinta de bug del feature en
-vez de errata de configuración. Se avisa y se usa el default. Un `0` explícito
-sí apaga, porque eso sí es una decisión.
+- **Mostrarlo en el panel.** El motivo ya se cuenta (`reason:*` en el hash del
+  día) y se puede consultar; el gráfico no existe.
+- **La validación IANA de `timezone` falta en los DTO de admin**
+  (`admin/dto/create-clinic.dto.ts`, `update-clinic.dto.ts`), que sólo piden
+  `@IsString() @MaxLength(60)`. `clinics/dto/update-clinic.dto.ts` sí la valida.
+  A esta cota ya no le afecta (usa UTC), pero `botStatsKey` sigue expuesto: con
+  una zona inválida, `toISODate()` devuelve `null`.
