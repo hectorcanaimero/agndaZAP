@@ -29,6 +29,21 @@ export interface BotInboundJobData {
    * la zona del proceso (UTC) y caería en el día equivocado.
    */
   timezone: string;
+  /**
+   * Nota de voz pendiente de transcribir (M10). Cuando viene, `text` llega
+   * vacío y lo rellena el worker con la transcripción.
+   *
+   * La URL **caduca a los 900 s** (`WHATSAPP_FILES_LIFETIME` de WAHA), así que
+   * este job corre con prioridad y backoff corto: ver `BOT_INBOUND_AUDIO_OPTS`.
+   */
+  audio?: { url: string; durationSec?: number };
+  /**
+   * Transcripción ya obtenida, guardada en el job tras la primera llamada al
+   * proveedor. Si un reintento la encuentra, no se vuelve a transcribir: cada
+   * llamada se paga y el audio puede haber caducado ya.
+   */
+  transcript?: string;
+  transcriptModel?: string;
   /** Para correlacionar el job con la request del webhook en los logs. */
   requestId?: string;
 }
@@ -42,6 +57,16 @@ export const BOT_INBOUND_JOB = 'inbound-message';
  * sin castigar al paciente con respuestas repetidas si el fallo es duro.
  */
 export const BOT_INBOUND_JOB_OPTIONS = {
+  /**
+   * Los de texto también llevan prioridad, aunque sea la baja.
+   *
+   * No es cosmético: BullMQ mete los jobs CON `priority` en un ZSET aparte
+   * (`prioritized`) y los que no la llevan en la lista `wait`, y
+   * `moveToActive` vacía **la lista entera** antes de mirar el ZSET. O sea que
+   * un job "prioritario" entre jobs sin prioridad va el ÚLTIMO. Con los dos en
+   * el ZSET, el orden lo decide el score y el audio sí adelanta.
+   */
+  priority: 10,
   attempts: 3,
   backoff: { type: 'exponential' as const, delay: 2_000 },
   // Retención **por edad**, no por cantidad. Un `removeOnComplete: 1000` suena
@@ -86,3 +111,46 @@ export const MAX_INBOUND_TEXT_CHARS = 4_000;
   exports: [BOT_INBOUND_QUEUE_TOKEN],
 })
 export class BotInboundQueueModule {}
+
+/**
+ * Opciones del job de audio. Se separan de las normales porque la ventana es
+ * corta: WAHA borra el fichero a los 900 s, así que un job que espere su turno
+ * detrás de una cola larga, o que reintente con backoff exponencial de 2 s → 4 s
+ * → 8 s, puede llegar tarde y encontrarse un 404.
+ *
+ * `priority: 1` (la más alta en BullMQ) lo pone por delante de los mensajes de
+ * texto, que no caducan. El backoff es fijo y corto por el mismo motivo, y los
+ * intentos bajan a 2: si el audio ya no está, reintentar no lo trae de vuelta —
+ * el `MediaExpiredError` corta antes de gastar el segundo.
+ */
+export const BOT_INBOUND_AUDIO_OPTS = {
+  ...BOT_INBOUND_JOB_OPTIONS,
+  /** Menor score = antes. Adelanta al texto (10) dentro del mismo ZSET. */
+  priority: 1,
+  attempts: 2,
+  backoff: { type: 'fixed' as const, delay: 3_000 },
+  /**
+   * Los fallidos de audio se retienen **lo que vive el fichero**, no 24 h: el
+   * job lleva un enlace de descarga a la grabación real del paciente, y
+   * guardar ese identificador en Redis después de que el audio ya no exista no
+   * aporta nada y sí alarga la exposición.
+   */
+  removeOnFail: { age: 900, count: 200 },
+};
+
+/**
+ * Transcripción de notas de voz: apagada por defecto.
+ *
+ * No es un flag de rollout, es un gate de cumplimiento. El texto del consent
+ * (ADR 0004 §7) dice que "tus mensajes" se procesan con IA; mandar
+ * **grabaciones** es un salto que ese texto no explica, y el ADR exige consent
+ * explícito o handoff. Se enciende cuando el texto nuevo esté publicado y
+ * versionado (PR 3 de M10), no antes.
+ *
+ * Con el flag apagado, el comportamiento es exactamente el de hoy: el paciente
+ * recibe el aviso de "solo puedo leer texto" y, al segundo audio seguido, se le
+ * deriva a una persona.
+ */
+export function isSttEnabled(): boolean {
+  return process.env.STT_ENABLED === 'true';
+}
