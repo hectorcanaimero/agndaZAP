@@ -33,7 +33,9 @@ export type BotTurnReason =
   /** Nota de voz que no se pudo transcribir: caducada o demasiado larga. */
   | 'audio-no-transcrito'
   /** Nota de voz de un hilo que ya lleva una persona: no se transcribe. */
-  | 'conversacion-humana';
+  | 'conversacion-humana'
+  /** Se agotó la cota diaria de transcripciones de la clínica (S38). */
+  | 'stt-sin-presupuesto';
 
 /**
  * Campos que el turno rellena desde dentro y que se copian al evento.
