@@ -115,9 +115,9 @@ export interface BotCopy {
   /**
    * Aviso de transcripción de notas de voz (M10, PR3). Se envía una sola vez
    * por paciente, antes de procesar su primera nota de voz como si fuera
-   * texto (ver docs/adr/0004-pii-y-compliance.md §7.2). Depende de que M10
-   * PR1 (WAHA descarga el audio) y PR2 (SttService transcribe) estén en
-   * producción: hasta entonces esta clave no se usa desde el bot.
+   * texto (ver docs/adr/0004-pii-y-compliance.md §7.2). `SttService` (PR2)
+   * existe pero todavía no está cableado a `bot.service.ts`, así que esta
+   * clave no se usa desde el bot hasta que ese cableado exista.
    */
   voiceNoteFirstTime: string;
 }

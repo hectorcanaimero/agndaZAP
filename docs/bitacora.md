@@ -1,5 +1,18 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-12 — M10 PR 3: listo para mergear ahora que PR 2 está en `main`
+- #99 (`feat/stt-notas-de-voz`, `SttService`) se mergeó en `9b8d814`. Mergeé
+  `main` en PR 3 y corregí el ADR 0004 §7.2 para reflejarlo: PR 1 y PR 2 ya
+  están en `main`, ninguno desplegado/cableado todavía.
+- El propio PR 2 marcó el orden correcto: cablear `SttService` al bot **antes**
+  de que este PR 3 esté en `main` abriría una ventana real donde se mandan
+  notas de voz a OpenAI bajo un consent que solo habla de texto. Quedó anotado
+  en el ADR como "orden de encendido, no solo de merge", con la recomendación
+  de un flag por clínica si el cableado necesita salir antes del deploy del
+  copy nuevo.
+- Quito el borrador: `pnpm --filter @showly/backend test:ci` sigue en verde
+  tras el merge.
+
 ## 2026-09-12 — M10 PR 3 (borrador): copy de consent para notas de voz (rama `feat/consent-notas-de-voz-ia`)
 - Actualiza el texto de consent (form público, política de privacidad `es`/`pt`) y agrega
   `BotCopy.voiceNoteFirstTime` en `bot.messages.ts` para el aviso que el bot manda la primera vez

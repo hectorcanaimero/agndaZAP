@@ -249,13 +249,26 @@ mensajes de texto"*) y recomienda un plan de 3 PRs:
    transcripción) ni `0` (retención indefinida de audio de pacientes, PHI sin
    política ni cifrado at-rest, ver §1). A los 15 minutos WAHA borra el fichero
    por su cuenta, sin intervención del backend.
-2. **PR 2** (`feat/stt-notas-de-voz`, en curso): `SttService` transcribe con
-   `gpt-4o-mini-transcribe` de OpenAI y descarta el fichero apenas obtiene el
-   texto — no espera a que WAHA lo borre, lo hace de inmediato.
+2. **PR 2** (#99, `feat/stt-notas-de-voz`, **ya en `main`**): `SttService`
+   transcribe con `gpt-4o-mini-transcribe` de OpenAI y descarta el fichero
+   apenas obtiene el texto — no espera a que WAHA lo borre, lo hace de
+   inmediato. **Todavía sin cablear a `bot.service.ts`/`webhook.controller.ts`**:
+   el servicio y sus tests existen, pero nadie lo invoca aún desde el flujo del
+   bot (ver `docs/notas/2026-09-12-stt-descarga-segura.md`).
 3. **PR 3** (esta sección; rama `feat/consent-notas-de-voz-ia`): el copy que
-   describe lo anterior. Es **PR borrador**: describe lo que el sistema hace,
-   así que no se mergea hasta que PR 2 esté en main (el owner coordina el orden
-   de merge; ver regla 0 del reparto en `docs/plans/2026-09-11-p0-bot-reparto.md`).
+   describe lo anterior.
+
+**Orden de encendido, no solo de merge**: el propio PR 2 marca esto como
+bloqueante — el texto vigente antes de esta sección decía que "tus mensajes"
+se procesan con IA, y mandar **grabaciones** es un salto que ese texto no
+cubría; cablear PR 2 antes de que este PR 3 esté en `main` abriría una ventana
+real (no solo teórica) en la que se envían notas de voz de pacientes a OpenAI
+bajo un consent que solo habla de texto. Por eso PR 3 se mergea **antes** de
+cablear PR 2 al bot, no simplemente "después de que PR 2 exista": el orden que
+importa es el de qué corre en producción, no el de qué PR se abrió primero.
+Si el cableado necesita salir antes de que este PR llegue a producción (deploy
+en Coolify), debe ir detrás de un flag por clínica apagado por defecto —
+recomendación del propio PR 2, decisión del owner.
 
 **Por qué no Deepgram** (evaluado y descartado en la nota de exploración): mejor
 tecnología de audio de las tres comparadas, pero exigiría sumar un cuarto
@@ -290,7 +303,9 @@ aceptó cada paciente — solo el `boolean`. Cuando esa tabla exista, esta secci
 es la referencia de qué dice "versión 2".
 
 **Riesgo residual**: hasta que #98 (PR 1) se despliegue en Coolify, `WAHA_MEDIA_STORAGE`
-no está configurado y WAHA sigue sin descargar el audio (`media: null`); el aviso
-al paciente y este copy no cambian de comportamiento real hasta ese momento. El
-copy de esta sección describe el estado una vez PR 1 y PR 2 estén en producción,
-no el estado en el momento de escribir esto.
+no está configurado y WAHA sigue sin descargar el audio (`media: null`); y hasta
+que alguien cablee `SttService` (PR 2, ya en `main` pero sin invocar) a
+`bot.service.ts`/`webhook.controller.ts`, el aviso al paciente sigue siendo
+*"Por ahora solo puedo leer mensajes de texto"* y el copy de esta sección no
+cambia de comportamiento real. Ese cableado es intencionalmente **otro PR**, no
+parte de este: PR 3 solo deja el texto listo para cuando ese cableado exista.
