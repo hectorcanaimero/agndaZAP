@@ -220,10 +220,10 @@ Cada item de deuda debe:
 2. Al cerrar, actualizar la sección correspondiente de este ADR con
    `**Estado (YYYY-MM-DD)**: cerrado — ver commit / PR / migración`.
 
-### §7.1 Copy del aviso en el bot (actualizado 2026-09-10)
+### §7.1 Copy y frecuencia del aviso en el bot (actualizado 2026-09-12)
 
 El saludo del bot de WhatsApp ya **no** lista los proveedores de IA. El
-`AI_DISCLOSURE` que se concatena a todo greeting quedó en una línea:
+`AI_DISCLOSURE` quedó en una línea:
 
 > "Soy un asistente automático. Si prefieres hablar con una persona, escribe *humano*."
 
@@ -235,6 +235,35 @@ El texto legal completo sigue siendo el de §7.
 
 Además, todos los textos que ven pacientes van en **español latinoamericano
 neutro (tuteo)**, nunca voseo. Ver [[notas/2026-09-10-tono-espanol-neutro]].
+
+**Frecuencia (decidido 2026-09-12, aprobado por el owner)**: el aviso ya no se
+concatena a *cada* saludo. Se manda **en el primer saludo de la conversación** y
+después **como mucho una vez cada 24 h**. `BotService.shouldSendAiDisclosure` no
+guarda estado propio: pregunta si hay algún `Message` `OUT` de esa conversación
+en las últimas 24 h **cuyo cuerpo contenga el aviso**. Filtra por el texto y no
+por "¿hubo tráfico?" a propósito: la conversación no la crea solo el bot —el
+aviso de adjuntos, el prompt de NPS, la alerta a recepción y el retorno del
+handoff escriben `OUT` sobre conversaciones que ellos mismos acaban de crear—,
+así que contar tráfico dejaba sin aviso a quien manda una foto antes de saludar.
+Si la consulta falla, el aviso **se manda igual** (fail-open): repetirlo es
+ruido, omitirlo sería incumplir.
+
+Encuadre de la decisión: el requisito de compliance es que el paciente **sepa
+que habla con un asistente automático y cómo salir de él**, no que se lo
+repitan en cada mensaje. Quien saluda tres veces en la misma semana ya lo sabe;
+quien vuelve al día siguiente abre lo que para él es una conversación nueva, y
+por eso la ventana se reabre a las 24 h. El consentimiento explícito con la
+lista de proveedores sigue recogiéndose donde dice §7 (form público y política
+de privacidad), que es lo que tiene valor legal — el aviso del saludo es
+transparencia, no consentimiento. Ítem B6 del
+[[analisis/2026-09-11-chatbot-analisis-tecnico]].
+
+**Deuda conocida (anterior a B6, no la cierra este cambio)**: el aviso solo
+viaja en las dos ramas del SALUDO. Un primer contacto que entra directo a la FSM
+("quiero agendar una cita"), al RAG ("¿cuánto cuesta la limpieza?") o al handoff
+nunca ve el aviso, ni antes ni ahora. Cerrarlo bien es moverlo al primer `OUT`
+de la conversación, dentro de `BotService.reply`, de modo que ninguna rama lo
+pueda saltar; cambia el copy de varios flujos, así que es un ítem propio.
 
 ### §7.2 Notas de voz: transcripción con IA y no retención del audio (agregado 2026-09-12)
 
@@ -329,6 +358,15 @@ versión 2 la extiende, no la reemplaza.
 IP no existe todavía, así que seguimos sin poder demostrar qué versión del texto
 aceptó cada paciente — solo el `boolean`. Cuando esa tabla exista, esta sección
 es la referencia de qué dice "versión 2".
+
+**Cruce con §7.1 — leer antes de cablear `SttService`**: cuando el cableado
+exista, la nota de voz pasa a ser el **primer `OUT`** de muchísimas
+conversaciones, y el copy de arriba le dice al paciente que hay IA de por medio
+pero **no cómo salir** — `*humano*` solo vive en el `aiDisclosure` de §7.1, que
+hoy únicamente viaja en las ramas del saludo. Ese es exactamente el caso de la
+deuda anotada al final de §7.1: cerrarla (mover el aviso al primer `OUT` de la
+conversación, dentro de `BotService.reply`) cubre de una vez las notas de voz,
+los adjuntos y el primer contacto que entra directo a la FSM o al RAG.
 
 **Riesgo residual**: hasta que #98 (PR 1) se despliegue en Coolify, `WAHA_MEDIA_STORAGE`
 no está configurado y WAHA sigue sin descargar el audio (`media: null`); y hasta

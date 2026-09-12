@@ -205,14 +205,25 @@ export class BotService {
    * además: `{status}`, `{when}`, `{address}`, `{service}`, `{professional}`.
    */
   /**
-   * Aviso de asistente automático (ADR 0004 §7). Se agrega SIEMPRE al final
-   * del greeting — también cuando la clínica personaliza `botGreeting` —
-   * porque es un requisito de compliance (LGPD/GDPR), no un texto editable.
-   * Es corto a propósito: la lista de proveedores de IA vive en el texto de
-   * consentimiento del form público y en la política de privacidad, no en el
-   * saludo. Incluye el escape a humano para que el paciente sepa salir del bot.
+   * Aviso de asistente automático (ADR 0004 §7.1). Se agrega al final del
+   * greeting — también cuando la clínica personaliza `botGreeting` — porque es
+   * un requisito de compliance (LGPD/GDPR), no un texto editable. Es corto a
+   * propósito: la lista de proveedores de IA vive en el texto de consentimiento
+   * del form público y en la política de privacidad, no en el saludo. Incluye
+   * el escape a humano para que el paciente sepa salir del bot.
+   *
+   * No va en CADA saludo: se manda en el primer contacto y después como mucho
+   * una vez cada `AI_DISCLOSURE_WINDOW_H` horas (B6). Ver
+   * `shouldSendAiDisclosure`.
    */
   static readonly AI_DISCLOSURE = botCopy('es').aiDisclosure;
+
+  /**
+   * Ventana del aviso de asistente automático (B6). Quien saluda tres veces en
+   * la misma semana no necesita leer tres veces que habla con un bot; quien
+   * vuelve al día siguiente, sí — es una conversación nueva para él.
+   */
+  private static readonly AI_DISCLOSURE_WINDOW_H = 24;
 
   /** Horas entre avisos mientras la conversación espera a una persona (S29). */
   private static readonly WAITING_NOTICE_TTL_SEC = 4 * 60 * 60;
@@ -292,9 +303,89 @@ export class BotService {
       .replace(/\{clinicName\}/g, clinic.name)
       .replace(/\{patientName\}/g, ctx?.patientName ?? '')
       .replace(/\{link\}/g, this.publicSchedulingUrl(clinic));
-    return key === 'greeting'
-      ? `${rendered}\n\n${copy.aiDisclosure}`
-      : rendered;
+    return rendered;
+  }
+
+  /**
+   * ¿Toca mandar el aviso de asistente automático? (ADR 0004 §7.1 · B6)
+   *
+   * Sí cuando NO le mandamos el aviso a esta conversación en las últimas
+   * `AI_DISCLOSURE_WINDOW_H` horas. La pregunta es por el AVISO, no por el
+   * tráfico: buscamos mensajes `OUT` cuyo cuerpo lo contenga.
+   *
+   * WHY el filtro por cuerpo y no "¿hay algún OUT reciente?": la conversación
+   * no la crea solo el bot. El aviso de adjuntos (B4,
+   * `WebhookController.sendAndPersist`), el prompt de NPS
+   * (`follow-ups.processor`), la alerta a recepción y el retorno del handoff
+   * escriben `OUT` sobre conversaciones que ellos mismos acaban de crear. Un
+   * paciente cuyo primer mensaje es una foto recibe «solo puedo leer texto»,
+   * saluda después, y con el conteo de tráfico se quedaba sin aviso EN SU
+   * PRIMER CONTACTO — justo la garantía del ADR. Y no es solo compliance: el
+   * aviso es el único sitio donde se le dice que escriba *humano*.
+   *
+   * Sigue sin necesitar columna nueva ni estado en `flowData`: una
+   * conversación sin aviso previo devuelve `true` por construcción. La
+   * consulta cae en el índice `[conversationId, createdAt]` de `Message`; el
+   * `contains` solo recheca las pocas filas de esa ventana.
+   *
+   * El texto se resuelve con el `locale` de la clínica, igual que al mandarlo.
+   * Si la clínica cambia de idioma, el aviso vuelve una vez: preferible a que
+   * no vuelva nunca.
+   *
+   * Fail-open a propósito: si la consulta falla, mandamos el aviso. Repetirlo
+   * es ruido; omitirlo sería incumplir.
+   */
+  private async shouldSendAiDisclosure(
+    clinic: Pick<Clinic, 'locale'>,
+    conversationId: string,
+  ): Promise<boolean> {
+    const since = DateTime.now()
+      .minus({ hours: BotService.AI_DISCLOSURE_WINDOW_H })
+      .toJSDate();
+    try {
+      // Sin `clinicId` en el where: `Message` no tiene esa columna y no hace
+      // falta — `conversationId` sale del upsert por `clinicId_chatId`, así
+      // que ya viene acotado al tenant. Mismo patrón que
+      // `hasConfirmationContext`.
+      const alreadySent = await this.prisma.message.count({
+        where: {
+          conversationId,
+          direction: 'OUT',
+          createdAt: { gte: since },
+          body: { contains: this.copy(clinic).aiDisclosure },
+        },
+      });
+      return alreadySent === 0;
+    } catch (e) {
+      this.logger.warn(
+        `no se pudo leer el historial OUT de convoId=${conversationId}: ${(e as Error).message}`,
+      );
+      return true;
+    }
+  }
+
+  /**
+   * Saludo listo para enviar: contextual si el número tiene una cita próxima,
+   * genérico si no, más el aviso de asistente automático cuando toca (B6).
+   *
+   * Es el ÚNICO lugar que concatena `aiDisclosure`: `resolveBotMessage` y
+   * `greetingWithAppointment` devuelven el saludo pelado a propósito, así la
+   * regla de las 24 h no se puede saltar por un call-site nuevo.
+   *
+   * Alcance: cubre las dos ramas del SALUDO. Un primer contacto que entra
+   * directo a la FSM ("quiero agendar"), al RAG o al handoff nunca pasa por
+   * aquí y sigue sin ver el aviso — es anterior a B6 y queda anotado como
+   * deuda en ADR 0004 §7.1.
+   */
+  private async buildGreeting(
+    clinic: Clinic,
+    convo: Conversation,
+  ): Promise<string> {
+    const base =
+      (await this.greetingWithAppointment(clinic, convo)) ??
+      this.resolveBotMessage(clinic, 'greeting');
+    if (!(await this.shouldSendAiDisclosure(clinic, convo.id))) return base;
+    return `${base}\n\n${this.copy(clinic).aiDisclosure}`;
   }
 
   /** Tope del bloque de contexto que viaja al LLM. */
@@ -453,6 +544,9 @@ export class BotService {
    * Saludo con contexto: el número ya tiene una cita próxima. Ofrece las
    * acciones sobre esa cita (confirmar / reagendar / cancelar) en vez del
    * menú genérico. Devuelve null si no hay cita (→ saludo normal).
+   *
+   * Sin el aviso de asistente automático: lo agrega `buildGreeting` cuando
+   * toca (B6).
    */
   private async greetingWithAppointment(
     clinic: Clinic,
@@ -471,7 +565,7 @@ export class BotService {
     const rendered = this.pickVariant(copy.pools.greetingWithAppointment)
       .replace(/\{patientName\}/g, patientName)
       .replace(/\{statusLine\}/g, statusLine);
-    return `${rendered}\n\n${copy.aiDisclosure}`;
+    return rendered;
   }
 
   /**
@@ -657,12 +751,11 @@ export class BotService {
     }
 
     if (greeted && isBareGreeting(effectiveNormalized)) {
-      const contextual = await this.greetingWithAppointment(clinic, convo);
       await this.reply(
         clinic.wahaSession,
         chatId,
         convo.id,
-        contextual ?? this.resolveBotMessage(clinic, 'greeting'),
+        await this.buildGreeting(clinic, convo),
       );
       return;
     }
