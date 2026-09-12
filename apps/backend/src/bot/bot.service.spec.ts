@@ -2759,19 +2759,30 @@ describe('BotService — FSM de agendamiento', () => {
   // ── B6: el aviso de asistente automático no se repite en cada "hola" ──
   describe('aviso de asistente automático cada 24 h (B6)', () => {
     /**
-     * Simula el historial OUT de la conversación: un mensaje enviado hace
-     * `hoursAgo` horas, o ninguno con `null`. El mock aplica el filtro de
-     * verdad (`direction` + `createdAt.gte`), así el test verifica la ventana
-     * que manda el servicio y no solo el valor que devolvemos.
+     * Historial OUT de la conversación como una lista en memoria. `count`
+     * aplica los filtros DE VERDAD (`conversationId`, `direction`,
+     * `createdAt.gte` y `body.contains`), así los tests comprueban la consulta
+     * que manda el servicio y no el valor que devolvería un mock fijo.
      */
-    function lastOutSentHoursAgo(hoursAgo: number | null) {
+    let outbox: Array<{ body: string; hoursAgo: number }>;
+
+    beforeEach(() => {
+      outbox = [];
       prisma.message.count.mockImplementation(async ({ where }: any) => {
-        if (hoursAgo === null) return 0;
-        expect(where.conversationId).toBe(convoState.id);
-        const sentAt = Date.now() - hoursAgo * 60 * 60 * 1000;
         const since: Date = where.createdAt.gte;
-        return where.direction === 'OUT' && sentAt >= since.getTime() ? 1 : 0;
+        return outbox.filter(
+          (m) =>
+            where.conversationId === convoState.id &&
+            where.direction === 'OUT' &&
+            Date.now() - m.hoursAgo * 60 * 60 * 1000 >= since.getTime() &&
+            (!where.body?.contains || m.body.includes(where.body.contains)),
+        ).length;
       });
+    });
+
+    /** Anota que el bot mandó el aviso hace `hoursAgo` horas. */
+    function disclosureSentHoursAgo(hoursAgo: number, locale: 'es' | 'pt' = 'es') {
+      outbox.push({ body: `Hola.\n\n${botCopy(locale).aiDisclosure}`, hoursAgo });
     }
 
     async function greet(text = 'hola') {
@@ -2784,21 +2795,20 @@ describe('BotService — FSM de agendamiento', () => {
       return waha.sendText.mock.calls.at(-1)![2] as string;
     }
 
-    it('primer contacto: la conversación no tiene OUT y el saludo lleva el aviso', async () => {
-      lastOutSentHoursAgo(null);
-
+    it('primer contacto: la conversación no tiene aviso previo y el saludo lo lleva', async () => {
       expect(await greet()).toContain(BotService.AI_DISCLOSURE);
       expect(prisma.message.count).toHaveBeenCalledWith({
         where: {
           conversationId: convoState.id,
           direction: 'OUT',
           createdAt: { gte: expect.any(Date) },
+          body: { contains: BotService.AI_DISCLOSURE },
         },
       });
     });
 
     it('segundo "hola" 2 h después: saluda igual pero sin repetir el aviso', async () => {
-      lastOutSentHoursAgo(2);
+      disclosureSentHoursAgo(2);
 
       const msg = await greet();
       expect(msg).toContain('Clínica A'); // sí saluda
@@ -2806,13 +2816,38 @@ describe('BotService — FSM de agendamiento', () => {
     });
 
     it('"hola" 25 h después: el aviso vuelve (la ventana es de 24 h)', async () => {
-      lastOutSentHoursAgo(25);
+      disclosureSentHoursAgo(25);
 
       expect(await greet()).toContain(BotService.AI_DISCLOSURE);
     });
 
     it('justo dentro de la ventana (23 h 59 m) todavía no repite el aviso', async () => {
-      lastOutSentHoursAgo(23.9);
+      disclosureSentHoursAgo(23 + 59 / 60);
+
+      expect(await greet()).not.toContain(BotService.AI_DISCLOSURE);
+    });
+
+    /**
+     * El caso que tumbaba la garantía del primer contacto: la conversación no
+     * la crea solo el bot. Un `OUT` de otro subsistema NO es el aviso y no
+     * puede suprimirlo. Ver el WHY de `shouldSendAiDisclosure`.
+     */
+    it.each([
+      ['aviso de adjuntos (B4)', 'Por ahora solo puedo leer mensajes de texto.'],
+      ['prompt de NPS', '¿Cómo fue tu experiencia? Responde del 1 al 5.'],
+      ['alerta a recepción', 'Ya avisé al equipo, en breve te escriben.'],
+    ])(
+      'un OUT de otro subsistema (%s) 2 h antes NO suprime el aviso del primer saludo',
+      async (_caso, body) => {
+        outbox.push({ body, hoursAgo: 2 });
+
+        expect(await greet()).toContain(BotService.AI_DISCLOSURE);
+      },
+    );
+
+    it('el aviso propio suprime, el ruido de al lado no: ambos en la misma ventana', async () => {
+      outbox.push({ body: 'Por ahora solo puedo leer mensajes de texto.', hoursAgo: 3 });
+      disclosureSentHoursAgo(2);
 
       expect(await greet()).not.toContain(BotService.AI_DISCLOSURE);
     });
@@ -2832,12 +2867,11 @@ describe('BotService — FSM de agendamiento', () => {
         patient: { name: 'Ana' },
       });
 
-      lastOutSentHoursAgo(null);
       const first = await greet();
       expect(first).toContain('Limpieza dental');
       expect(first).toContain(BotService.AI_DISCLOSURE);
 
-      lastOutSentHoursAgo(2);
+      disclosureSentHoursAgo(2);
       const second = await greet();
       expect(second).toContain('Limpieza dental');
       expect(second).not.toContain(BotService.AI_DISCLOSURE);
@@ -2849,12 +2883,11 @@ describe('BotService — FSM de agendamiento', () => {
       prisma.clinic.findUnique.mockResolvedValue(clinicPt);
       const avisoPt = botCopy('pt').aiDisclosure;
 
-      lastOutSentHoursAgo(null);
       const first = await greet('oi');
       expect(first).toContain(avisoPt);
       expect(first).not.toContain(BotService.AI_DISCLOSURE); // no cae al es
 
-      lastOutSentHoursAgo(2);
+      disclosureSentHoursAgo(2, 'pt');
       expect(await greet('oi')).not.toContain(avisoPt);
     });
 

@@ -309,26 +309,53 @@ export class BotService {
   /**
    * ¿Toca mandar el aviso de asistente automático? (ADR 0004 §7.1 · B6)
    *
-   * Sí cuando la conversación no tiene ningún `Message` `OUT` en las últimas
-   * `AI_DISCLOSURE_WINDOW_H` horas. Una conversación recién creada no tiene
-   * ninguno, así que el PRIMER CONTACTO siempre lo lleva: el requisito de
-   * compliance se mantiene sin columna nueva ni estado en `flowData`, y la
-   * consulta cae en el índice `[conversationId, createdAt]` de `Message`.
+   * Sí cuando NO le mandamos el aviso a esta conversación en las últimas
+   * `AI_DISCLOSURE_WINDOW_H` horas. La pregunta es por el AVISO, no por el
+   * tráfico: buscamos mensajes `OUT` cuyo cuerpo lo contenga.
+   *
+   * WHY el filtro por cuerpo y no "¿hay algún OUT reciente?": la conversación
+   * no la crea solo el bot. El aviso de adjuntos (B4,
+   * `WebhookController.sendAndPersist`), el prompt de NPS
+   * (`follow-ups.processor`), la alerta a recepción y el retorno del handoff
+   * escriben `OUT` sobre conversaciones que ellos mismos acaban de crear. Un
+   * paciente cuyo primer mensaje es una foto recibe «solo puedo leer texto»,
+   * saluda después, y con el conteo de tráfico se quedaba sin aviso EN SU
+   * PRIMER CONTACTO — justo la garantía del ADR. Y no es solo compliance: el
+   * aviso es el único sitio donde se le dice que escriba *humano*.
+   *
+   * Sigue sin necesitar columna nueva ni estado en `flowData`: una
+   * conversación sin aviso previo devuelve `true` por construcción. La
+   * consulta cae en el índice `[conversationId, createdAt]` de `Message`; el
+   * `contains` solo recheca las pocas filas de esa ventana.
+   *
+   * El texto se resuelve con el `locale` de la clínica, igual que al mandarlo.
+   * Si la clínica cambia de idioma, el aviso vuelve una vez: preferible a que
+   * no vuelva nunca.
    *
    * Fail-open a propósito: si la consulta falla, mandamos el aviso. Repetirlo
    * es ruido; omitirlo sería incumplir.
    */
   private async shouldSendAiDisclosure(
+    clinic: Pick<Clinic, 'locale'>,
     conversationId: string,
   ): Promise<boolean> {
-    const since = new Date(
-      Date.now() - BotService.AI_DISCLOSURE_WINDOW_H * 60 * 60 * 1000,
-    );
+    const since = DateTime.now()
+      .minus({ hours: BotService.AI_DISCLOSURE_WINDOW_H })
+      .toJSDate();
     try {
-      const recentOut = await this.prisma.message.count({
-        where: { conversationId, direction: 'OUT', createdAt: { gte: since } },
+      // Sin `clinicId` en el where: `Message` no tiene esa columna y no hace
+      // falta — `conversationId` sale del upsert por `clinicId_chatId`, así
+      // que ya viene acotado al tenant. Mismo patrón que
+      // `hasConfirmationContext`.
+      const alreadySent = await this.prisma.message.count({
+        where: {
+          conversationId,
+          direction: 'OUT',
+          createdAt: { gte: since },
+          body: { contains: this.copy(clinic).aiDisclosure },
+        },
       });
-      return recentOut === 0;
+      return alreadySent === 0;
     } catch (e) {
       this.logger.warn(
         `no se pudo leer el historial OUT de convoId=${conversationId}: ${(e as Error).message}`,
@@ -344,6 +371,11 @@ export class BotService {
    * Es el ÚNICO lugar que concatena `aiDisclosure`: `resolveBotMessage` y
    * `greetingWithAppointment` devuelven el saludo pelado a propósito, así la
    * regla de las 24 h no se puede saltar por un call-site nuevo.
+   *
+   * Alcance: cubre las dos ramas del SALUDO. Un primer contacto que entra
+   * directo a la FSM ("quiero agendar"), al RAG o al handoff nunca pasa por
+   * aquí y sigue sin ver el aviso — es anterior a B6 y queda anotado como
+   * deuda en ADR 0004 §7.1.
    */
   private async buildGreeting(
     clinic: Clinic,
@@ -352,7 +384,7 @@ export class BotService {
     const base =
       (await this.greetingWithAppointment(clinic, convo)) ??
       this.resolveBotMessage(clinic, 'greeting');
-    if (!(await this.shouldSendAiDisclosure(convo.id))) return base;
+    if (!(await this.shouldSendAiDisclosure(clinic, convo.id))) return base;
     return `${base}\n\n${this.copy(clinic).aiDisclosure}`;
   }
 
