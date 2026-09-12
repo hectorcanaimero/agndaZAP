@@ -91,6 +91,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[notas/2026-09-11-dashboard-actividad-bot|2026-09-11 — Actividad del bot en el panel: criterios de agregación]]
 - [[notas/2026-09-11-exploracion-stt-notas-de-voz|2026-09-11 — Notas de voz: comparativa de STT, privacidad y plan de 3 PRs]]
 - [[notas/2026-09-11-revision-fks-compuestas-restantes|2026-09-11 — Los otros 9 pares del ADR 0022: cuáles merecen FK compuesta]]
+- [[notas/2026-09-12-waha-media-storage|2026-09-12 — WAHA no descarga los adjuntos si no se lo pides, y cuánto vive el fichero]]
 
 ## Análisis
 - [[analisis/2026-09-11-chatbot-analisis-tecnico|2026-09-11 — Análisis técnico del asistente de WhatsApp]] — premisas, bugs (B1-B10), mejoras (M1-M10), seguimiento (S1-S5) y checklist por prioridad
