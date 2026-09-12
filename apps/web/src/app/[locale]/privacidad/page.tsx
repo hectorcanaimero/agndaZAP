@@ -15,7 +15,7 @@ const SECTIONS: readonly LegalSectionDef[] = [
   { key: 'controller' },
   {
     key: 'data',
-    items: ['name', 'phone', 'messages', 'appointments', 'health'],
+    items: ['name', 'phone', 'messages', 'voice', 'appointments', 'health'],
   },
   { key: 'purpose' },
   { key: 'sharing', items: ['whatsapp', 'ai', 'hosting'] },

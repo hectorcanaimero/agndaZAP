@@ -1,5 +1,30 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-12 — M10 PR 3: listo para mergear ahora que PR 2 está en `main`
+- #99 (`feat/stt-notas-de-voz`, `SttService`) se mergeó en `9b8d814`. Mergeé
+  `main` en PR 3 y corregí el ADR 0004 §7.2 para reflejarlo: PR 1 y PR 2 ya
+  están en `main`, ninguno desplegado/cableado todavía.
+- El propio PR 2 marcó el orden correcto: cablear `SttService` al bot **antes**
+  de que este PR 3 esté en `main` abriría una ventana real donde se mandan
+  notas de voz a OpenAI bajo un consent que solo habla de texto. Quedó anotado
+  en el ADR como "orden de encendido, no solo de merge", con la recomendación
+  de un flag por clínica si el cableado necesita salir antes del deploy del
+  copy nuevo.
+- Quito el borrador: `pnpm --filter @showly/backend test:ci` sigue en verde
+  tras el merge.
+
+## 2026-09-12 — M10 PR 3 (borrador): copy de consent para notas de voz (rama `feat/consent-notas-de-voz-ia`)
+- Actualiza el texto de consent (form público, política de privacidad `es`/`pt`) y agrega
+  `BotCopy.voiceNoteFirstTime` en `bot.messages.ts` para el aviso que el bot manda la primera vez
+  que un paciente envía una nota de voz. Versión 2 del texto de consent del ADR 0004 §7
+  (documentado en la nueva §7.2): agrega que las notas de voz se transcriben con IA (OpenAI) y que
+  el audio se elimina en minutos.
+- **PR abierto como borrador a propósito**: el texto describe lo que hace M10 PR 1 (#98, ya en
+  `main`, WAHA descarga y borra el audio a los 15 min) y PR 2 (`SttService` transcribe y descarta
+  el audio, todavía no mergeado). No se mergea hasta que PR 2 lo esté.
+- No toca `bot.service.ts` ni `webhook.controller.ts`: es copy y documentación, según el reparto de
+  `docs/plans/2026-09-11-p0-bot-reparto.md`.
+
 ## 2026-09-12 — M10 PR 1: que WAHA descargue los adjuntos (rama `feat/waha-media-storage`)
 - **El gotcha**: NOWEB entrega `hasMedia: true` con `media: null` si el contenedor no tiene `WAHA_MEDIA_STORAGE`. Detecta el adjunto y no lo descarga, así que no hay nada que transcribir ni que escuchar. Las variables van al servicio `waha`, no al backend.
 - **La decisión de verdad es `WHATSAPP_FILES_LIFETIME`**, que el encargo no contemplaba. El default de WAHA son **180 s**, que deja sin audio a cualquier reintento de la cola de transcripción; y `0` desactiva la limpieza, convirtiendo la base en un archivo permanente de grabaciones de pacientes — PHI sin retención ni cifrado at-rest. Elegimos **900 s**, explícito en los tres compose.

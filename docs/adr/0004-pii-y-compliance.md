@@ -235,3 +235,77 @@ El texto legal completo sigue siendo el de §7.
 
 Además, todos los textos que ven pacientes van en **español latinoamericano
 neutro (tuteo)**, nunca voseo. Ver [[notas/2026-09-10-tono-espanol-neutro]].
+
+### §7.2 Notas de voz: transcripción con IA y no retención del audio (agregado 2026-09-12)
+
+**Contexto**: [[notas/2026-09-11-exploracion-stt-notas-de-voz]] evalúa transcribir
+las notas de voz que llegan por WhatsApp (hoy reciben *"Por ahora solo puedo leer
+mensajes de texto"*) y recomienda un plan de 3 PRs:
+
+1. **PR 1** (#98, `feat/waha-media-storage`, **ya en `main`, pendiente de
+   desplegar en Coolify**): que WAHA descargue el audio. Fija
+   `WHATSAPP_FILES_LIFETIME=900` (15 min) explícito en
+   los tres compose — ni el default de WAHA (180 s, muy corto para la cola de
+   transcripción) ni `0` (retención indefinida de audio de pacientes, PHI sin
+   política ni cifrado at-rest, ver §1). A los 15 minutos WAHA borra el fichero
+   por su cuenta, sin intervención del backend.
+2. **PR 2** (#99, `feat/stt-notas-de-voz`, **ya en `main`**): `SttService`
+   transcribe con `gpt-4o-mini-transcribe` de OpenAI y descarta el fichero
+   apenas obtiene el texto — no espera a que WAHA lo borre, lo hace de
+   inmediato. **Todavía sin cablear a `bot.service.ts`/`webhook.controller.ts`**:
+   el servicio y sus tests existen, pero nadie lo invoca aún desde el flujo del
+   bot (ver `docs/notas/2026-09-12-stt-descarga-segura.md`).
+3. **PR 3** (esta sección; rama `feat/consent-notas-de-voz-ia`): el copy que
+   describe lo anterior.
+
+**Orden de encendido, no solo de merge**: el propio PR 2 marca esto como
+bloqueante — el texto vigente antes de esta sección decía que "tus mensajes"
+se procesan con IA, y mandar **grabaciones** es un salto que ese texto no
+cubría; cablear PR 2 antes de que este PR 3 esté en `main` abriría una ventana
+real (no solo teórica) en la que se envían notas de voz de pacientes a OpenAI
+bajo un consent que solo habla de texto. Por eso PR 3 se mergea **antes** de
+cablear PR 2 al bot, no simplemente "después de que PR 2 exista": el orden que
+importa es el de qué corre en producción, no el de qué PR se abrió primero.
+Si el cableado necesita salir antes de que este PR llegue a producción (deploy
+en Coolify), debe ir detrás de un flag por clínica apagado por defecto —
+recomendación del propio PR 2, decisión del owner.
+
+**Por qué no Deepgram** (evaluado y descartado en la nota de exploración): mejor
+tecnología de audio de las tres comparadas, pero exigiría sumar un cuarto
+proveedor a la lista que el paciente ya aceptó (`OpenAI, DeepSeek, Google`) sin
+que su ventaja — latencia de streaming — aplique a un audio que llega entero.
+OpenAI ya está en el consent (lo usamos para embeddings del RAG): cero
+superficie legal nueva.
+
+**Decisión**: transcribir y no guardar el audio, con redundancia en dos capas —
+WAHA lo borra solo a los 15 minutos (PR 1) y el backend lo descarta apenas
+transcribe (PR 2). No es solo intención de diseño: el texto de consent puede
+afirmarlo con precisión ("el archivo se elimina en minutos") porque está
+forzado por configuración en ambas capas, no solo por costumbre del código.
+
+**Copy actualizado — versión 2 del texto de §7** (agregado a `form.labels.consent`,
+`legal.privacy.sections.data.items.voice`, `legal.privacy.sections.sharing.items.ai`
+y `legal.privacy.sections.changes.body` en `apps/web/messages/{es,pt}.json`, y a
+`BotCopy.voiceNoteFirstTime` en `apps/backend/src/bot/bot.messages.ts` — mensaje
+que el bot manda la primera vez que un paciente envía una nota de voz):
+
+> "Las notas de voz se transcriben automáticamente con inteligencia artificial
+> (OpenAI). No guardamos el audio: el archivo se elimina en minutos: lo hace el
+> propio proveedor de WhatsApp automáticamente, y el backend lo descarta apenas
+> obtiene el texto."
+
+La versión 1 (2026-08-09, §7 arriba) sigue vigente para el resto del texto: esta
+versión 2 la extiende, no la reemplaza.
+
+**Deuda que esto NO cierra** (sigue igual que §7): `ConsentEvent` con versión e
+IP no existe todavía, así que seguimos sin poder demostrar qué versión del texto
+aceptó cada paciente — solo el `boolean`. Cuando esa tabla exista, esta sección
+es la referencia de qué dice "versión 2".
+
+**Riesgo residual**: hasta que #98 (PR 1) se despliegue en Coolify, `WAHA_MEDIA_STORAGE`
+no está configurado y WAHA sigue sin descargar el audio (`media: null`); y hasta
+que alguien cablee `SttService` (PR 2, ya en `main` pero sin invocar) a
+`bot.service.ts`/`webhook.controller.ts`, el aviso al paciente sigue siendo
+*"Por ahora solo puedo leer mensajes de texto"* y el copy de esta sección no
+cambia de comportamiento real. Ese cableado es intencionalmente **otro PR**, no
+parte de este: PR 3 solo deja el texto listo para cuando ese cableado exista.
