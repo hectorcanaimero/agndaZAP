@@ -29,7 +29,11 @@ export type BotTurnReason =
   | 'rate-limit'
   | 'clinica-no-activa'
   | 'bot-error'
-  | 'job-desconocido';
+  | 'job-desconocido'
+  /** Nota de voz que no se pudo transcribir: caducada o demasiado larga. */
+  | 'audio-no-transcrito'
+  /** Nota de voz de un hilo que ya lleva una persona: no se transcribe. */
+  | 'conversacion-humana';
 
 /**
  * Campos que el turno rellena desde dentro y que se copian al evento.
@@ -44,6 +48,7 @@ export const TURN_KEYS = [
   'source',
   'handoff',
   'rag',
+  'inputKind',
 ] as const satisfies ReadonlyArray<keyof BotTurnData>;
 
 export interface BotTurnEvent extends Pick<BotTurnData, (typeof TURN_KEYS)[number]> {

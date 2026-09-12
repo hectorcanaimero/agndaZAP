@@ -86,6 +86,8 @@ export async function recordBotStats(
       if (f) fields.push(f, '1');
     }
     if (event.handoff) fields.push('handoff', '1');
+    // Sólo el audio: el texto es el caso normal y `turns` ya lo cuenta.
+    if (event.inputKind === 'audio') fields.push('audio', '1');
     if (event.rag) {
       fields.push('rag', '1');
       if (event.rag.nullAnswer) fields.push('nullAnswer', '1');

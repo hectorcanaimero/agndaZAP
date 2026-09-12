@@ -1,5 +1,52 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-12 — M10 PR 4: la transcripción cableada de verdad (rama `feat/stt-cableado`)
+- Cierra M10. El webhook decide si hay algo que transcribir y el worker lo
+  transcribe: el proceso que responde el webhook no manda audio a nadie.
+  Detalles y decisiones en [[notas/2026-09-12-stt-cableado-notas-de-voz]].
+- **`STT_ENABLED` apagado por defecto, y comprobado dos veces** (al encolar y al
+  procesar). Solo en el webhook no habría parado los jobs ya encolados ni un
+  `retry` desde el panel de BullMQ: un kill switch que no mata no sirve para
+  responder a un incidente de cumplimiento.
+- **Sin `voiceNoteFirstTime` entregado no se transcribe.** El aviso de #100 sale
+  una vez por conversación antes de mandar nada a OpenAI, y si no se puede
+  enviar se deriva a una persona.
+- **La prueba del consent es una columna, no un mensaje** (`voiceConsentAt` +
+  `voiceConsentVersion`). La primera versión usaba el `Message OUT` con el texto
+  del aviso; el auditor mostró que es falsificable — `reply` persiste la
+  respuesta del LLM verbatim y el copy es público, así que una inyección de
+  prompt planta una fila idéntica sin que el aviso salga nunca. Una prueba que
+  el propio sistema puede fabricar no se puede enseñar.
+- **`NEEDS_HUMAN` dejaba al paciente en silencio absoluto**, el hallazgo en el
+  que coincidieron auditor y revisor. El gate era `=== 'BOT'`, pero el aviso de
+  "solo leo texto" ya se había suprimido arriba: ni transcripción ni respuesta,
+  peor que antes de M10. Corta `HUMAN` y solo `HUMAN`; `NEEDS_HUMAN` es justo
+  donde más ayuda transcribir. El estado pasa a tiparse con el enum de Prisma.
+- **El error que se relanza sale saneado.** BullMQ escribe `message` y
+  `stacktrace` en el `failedReason` del job, en Redis sin cifrado at-rest: lo
+  que ya se cuidaba para el log y para Sentry se estaba escribiendo ahí entero,
+  y desde M10 puede llevar la transcripción dentro.
+- **Conversación en `HUMAN` → no se transcribe.** Se pagaría la llamada y se
+  mandaría la grabación a un tercero para que la lea alguien que ya está
+  leyendo el hilo.
+- **El gotcha de BullMQ que invertía la prioridad**: los jobs sin `priority` van
+  a `wait` y `moveToActive` la vacía entera antes de mirar el ZSET
+  `prioritized`. El job "prioritario" de audio iba el último. Los de texto
+  llevan ahora prioridad baja para que el audio adelante de verdad.
+- La transcripción se guarda en el job (`updateData`): un fallo aguas abajo ya
+  no hace que el reintento pague otra vez la llamada sobre un audio que además
+  pudo caducar.
+- Pendiente de decisión del owner **antes de encender el flag**: la FSM se fía
+  de la transcripción como si fuera texto escrito (un "sí" mal transcrito
+  confirma una cita que el paciente nunca leyó) y el flag es global, no por
+  clínica.
+- Tres pasadas de `security-auditor` y una de `code-reviewer`. De la última:
+  copy de fallo localizado (`pt` recibía español), `botLocale()` sobre el
+  `Clinic.locale` crudo, `latencyMs` en los eventos de fallo, la URL del media
+  entera o nada (un `slice` dejaba un enlace roto en la bandeja) y tres tests
+  que pasaban por el motivo equivocado.
+- `pnpm --filter @showly/backend test` en verde: 68 suites, 1464 tests.
+
 ## 2026-09-12 — M10 PR 3: listo para mergear ahora que PR 2 está en `main`
 - #99 (`feat/stt-notas-de-voz`, `SttService`) se mergeó en `9b8d814`. Mergeé
   `main` en PR 3 y corregí el ADR 0004 §7.2 para reflejarlo: PR 1 y PR 2 ya

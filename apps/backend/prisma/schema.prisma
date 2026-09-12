@@ -379,6 +379,14 @@ model Conversation {
   // conversaciones sin cita, ej. dudas de FAQ).
   patientId  String?
   patient    Patient? @relation(fields: [patientId], references: [id])
+  // Aviso de transcripción de notas de voz (M10): cuándo se le dijo al
+  // paciente que su voz la transcribe una IA de un tercero, y qué versión del
+  // texto se le dijo. Es la PRUEBA del consent, por eso es una columna propia
+  // y no un `Message OUT` con el texto: ese lo puede plantar el propio LLM si
+  // alguien le pide que responda con ese string exacto, o un usuario del panel
+  // a mano. Ver docs/adr/0004-pii-y-compliance.md §7.2.
+  voiceConsentAt      DateTime?
+  voiceConsentVersion String?
   state      ConversationState @default(BOT)
   // paso del flujo (FSM) serializado
   flowStep   String?

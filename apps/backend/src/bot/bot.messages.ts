@@ -120,7 +120,27 @@ export interface BotCopy {
    * clave no se usa desde el bot hasta que ese cableado exista.
    */
   voiceNoteFirstTime: string;
+
+  /**
+   * No se pudo transcribir y el fallo es definitivo (M10, PR4). Dos textos
+   * porque el motivo cambia lo que el paciente puede hacer: "es muy larga"
+   * tiene arreglo por su parte, "caducó" no.
+   */
+  voiceNoteTooLong: string;
+  voiceNoteFailed: string;
 }
+
+/**
+ * Versión del aviso de `voiceNoteFirstTime`, tal y como la numera el
+ * ADR 0004 §7 ("v2" es la que añade las notas de voz). Se guarda junto al
+ * consent en `Conversation.voiceConsentVersion`: si el texto cambia de versión
+ * el aviso se repite, en vez de darse por avisado con el consent viejo.
+ *
+ * Súbela **a mano** al cambiar `voiceNoteFirstTime` de forma sustantiva. Que no
+ * se derive del texto es a propósito: una errata corregida no debería volver a
+ * interrumpir a todos los pacientes.
+ */
+export const VOICE_CONSENT_VERSION = 'v2';
 
 const es: BotCopy = {
   pools: {
@@ -280,6 +300,10 @@ const es: BotCopy = {
 
   voiceNoteFirstTime:
     'Recibí tu nota de voz. La transcribo automáticamente con inteligencia artificial (OpenAI) para poder ayudarte; el audio se elimina en minutos, solo guardo el texto. Si prefieres, también puedes escribirme directo.',
+  voiceNoteTooLong:
+    'Tu nota de voz es un poco larga para que la entienda. ¿Me la resumes en un mensaje? Mientras tanto, le aviso a alguien del equipo.',
+  voiceNoteFailed:
+    'No pude escuchar tu nota de voz. Le aviso a alguien del equipo para que te atienda.',
 };
 
 const pt: BotCopy = {
@@ -439,6 +463,10 @@ const pt: BotCopy = {
 
   voiceNoteFirstTime:
     'Recebi sua nota de voz. Transcrevo automaticamente com inteligência artificial (OpenAI) para poder ajudar você; o áudio é apagado em minutos, só guardo o texto. Se preferir, você também pode escrever direto.',
+  voiceNoteTooLong:
+    'Sua nota de voz é um pouco longa para eu entender. Você me resume em uma mensagem? Enquanto isso, aviso alguém da equipe.',
+  voiceNoteFailed:
+    'Não consegui escutar sua nota de voz. Vou avisar alguém da equipe para te atender.',
 };
 
 /** Si alguien añade una clave a `es` y se olvida de `pt`, esto no compila. */

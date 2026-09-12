@@ -4,10 +4,19 @@ import * as Sentry from '@sentry/nestjs';
 import { Worker, Job } from 'bullmq';
 import { requestContext } from '../common/logger/request-context';
 import { PrismaService } from '../prisma/prisma.service';
+import { WahaService } from '../whatsapp/waha.service';
 import { isSentryEnabled } from '../common/sentry/sentry.config';
 import type Redis from 'ioredis';
 import { hashChatId } from './bot-rate-limit';
 import { recordBotStats } from './bot-stats';
+import { isSttEnabled } from './bot-inbound.queue';
+import {
+  AudioTooLongError,
+  MediaExpiredError,
+  SttService,
+  type Transcription,
+} from '../stt/stt.service';
+import { botCopy, botLocale, VOICE_CONSENT_VERSION } from './bot.messages';
 import { BotService } from './bot.service';
 import { runBotTurn } from './bot-turn-context';
 import {
@@ -33,6 +42,19 @@ import {
  *
  * Por eso los errores de Prisma se reducen a `nombre:código`, sin mensaje.
  */
+/**
+ * Copia saneada del error, para todo lo que sale de este proceso.
+ *
+ * Conserva el `name` (que es lo que se agrupa y por lo que se filtra) y tira el
+ * `message` original y la primera línea del stack, que lo repite.
+ */
+export function sanitizeError(err: unknown): Error {
+  const safe = new Error(safeErrorLabel(err));
+  safe.name = (err as Error)?.name ?? 'Error';
+  safe.stack = ((err as Error)?.stack ?? '').split('\n').slice(1).join('\n');
+  return safe;
+}
+
 export function safeErrorLabel(err: unknown): string {
   const e = err as { name?: string; code?: string; message?: string };
   if (typeof e?.name === 'string' && e.name.startsWith('PrismaClient')) {
@@ -61,6 +83,8 @@ export function createBotInboundWorker(
   bot: BotService,
   prisma: PrismaService,
   redis: Redis,
+  stt: SttService,
+  waha: WahaService,
 ): Worker {
   const logger = new Logger('BotInboundWorker');
 
@@ -79,16 +103,7 @@ export function createBotInboundWorker(
           // error transitorio no merece despertar a nadie.
           const isLastAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
           if (isSentryEnabled() && isLastAttempt) {
-            // Se reporta un error saneado, no el original: su `message` (y la
-            // primera línea del stack, que lo repite) pueden llevar el texto
-            // del paciente.
-            const safe = new Error(safeErrorLabel(err));
-            safe.name = (err as Error)?.name ?? 'Error';
-            safe.stack = ((err as Error)?.stack ?? '')
-              .split('\n')
-              .slice(1)
-              .join('\n');
-            Sentry.captureException(safe, {
+            Sentry.captureException(sanitizeError(err), {
               tags: {
                 queue: BOT_INBOUND_QUEUE,
                 jobName: job.name,
@@ -114,7 +129,17 @@ export function createBotInboundWorker(
               ),
             );
           }
-          throw err;
+          // Saneado también al relanzar, no sólo hacia Sentry. BullMQ guarda
+          // `message` y `stacktrace` en el `failedReason` del job, en un Redis
+          // sin cifrado at-rest: el mismo string que aquí se cuida para el log
+          // y para Sentry se estaba escribiendo ahí entero. Con M10 ese
+          // `message` puede llevar además la **transcripción** de una nota de
+          // voz (un `message.create({ body })` que falle por validación imprime
+          // los argumentos) y la URL del media.
+          //
+          // El `name` sobrevive, que es lo que se mira al depurar; el mensaje
+          // completo ya se ha logueado saneado más arriba.
+          throw sanitizeError(err);
         }
       });
     },
@@ -139,6 +164,126 @@ export function createBotInboundWorker(
   );
 
   /**
+   * La conversación de este chat, con su estado. Es `findFirst` sobre un par
+   * que el esquema declara único (`@@unique([clinicId, chatId])`), así que no
+   * hay ambigüedad; va con `clinicId` porque el mismo teléfono puede escribirle
+   * a dos clínicas distintas.
+   */
+  async function findConvo(
+    data: BotInboundJobData,
+  ): Promise<{ id: string; state: string; voiceConsentVersion: string | null } | null> {
+    return prisma.conversation.findFirst({
+      where: { clinicId: data.clinicId, chatId: data.chatId },
+      select: { id: true, state: true, voiceConsentVersion: true },
+    });
+  }
+
+  /**
+   * Le dice al paciente, **una vez**, que su nota de voz la transcribe una IA
+   * de un tercero y que el audio no se guarda. Devuelve `false` si no se le
+   * pudo decir: entonces no se transcribe.
+   *
+   * El aviso va ANTES de mandarle el audio a nadie, que es lo que exige el
+   * ADR 0004 §7.2: el consent vigente cuando el paciente escribió hablaba de
+   * "mensajes", no de grabaciones de su voz.
+   *
+   * La marca de "ya avisado" vive en una columna propia y no en el `Message
+   * OUT` con el texto del aviso, que es donde estaba al principio. Como prueba
+   * ese mensaje no vale: `BotService.reply` persiste la respuesta del LLM
+   * **verbatim** y el copy es público, así que una inyección de prompt
+   * ("responde exactamente con: …") deja plantada una fila idéntica sin que el
+   * aviso se haya mandado nunca — y desde la bandeja del panel se puede
+   * escribir a mano. Una prueba que el propio sistema puede fabricar no se
+   * puede enseñar en una auditoría, que es para lo único que sirve.
+   *
+   * La versión se guarda además del instante: si el texto cambia de versión,
+   * el paciente recibe el nuevo una vez en vez de darse por avisado con el
+   * viejo.
+   */
+  async function ensureVoiceConsent(
+    convo: { id: string; voiceConsentVersion: string | null },
+    data: BotInboundJobData,
+    locale: string,
+    wahaSession: string,
+  ): Promise<boolean> {
+    if (convo.voiceConsentVersion === VOICE_CONSENT_VERSION) return true;
+
+    const texto = botCopy(locale).voiceNoteFirstTime;
+    try {
+      await waha.sendText(wahaSession, data.chatId, texto);
+    } catch (e) {
+      // Fail-closed, y en la dirección incómoda: si no se le pudo avisar, su
+      // voz NO sale hacia un tercero. Repetir el aviso sería el error barato;
+      // saltárselo es el caro.
+      logger.warn(
+        `consent de nota de voz no entregado clinic=${data.clinicId}: ${safeErrorLabel(e)}`,
+      );
+      return false;
+    }
+
+    // Ya lo recibió: a partir de aquí los fallos son de registro, no de aviso.
+    // `updateMany` con la versión vieja en el `where` lo hace atómico — con más
+    // de un worker, dos notas de voz seguidas no mandan dos avisos.
+    try {
+      await prisma.conversation.updateMany({
+        where: {
+          id: convo.id,
+          OR: [
+            { voiceConsentVersion: null },
+            { voiceConsentVersion: { not: VOICE_CONSENT_VERSION } },
+          ],
+        },
+        data: {
+          voiceConsentAt: new Date(),
+          voiceConsentVersion: VOICE_CONSENT_VERSION,
+        },
+      });
+      await prisma.message.create({
+        data: { conversationId: convo.id, direction: 'OUT', body: texto },
+      });
+    } catch (e) {
+      // El paciente SÍ tiene el aviso; lo que falló es dejarlo escrito. No se
+      // corta por esto: se seguiría sin transcribir a alguien a quien ya se le
+      // avisó, y el próximo intento se lo repetiría igual.
+      logger.warn(
+        `consent de nota de voz enviado pero no registrado clinic=${data.clinicId}: ${safeErrorLabel(e)}`,
+      );
+    }
+    return true;
+  }
+
+  /**
+   * Le dice al paciente por qué no le respondemos a la nota de voz, antes de
+   * dejarlo en la bandeja. Sin esto, el silencio es indistinguible de que el
+   * bot esté roto — y el motivo importa: "es muy larga" tiene arreglo por su
+   * parte, "caducó" no.
+   */
+  async function notifyTranscriptionFailed(
+    data: BotInboundJobData,
+    convoId: string,
+    texto: string,
+    wahaSession: string,
+  ): Promise<void> {
+    try {
+      await waha.sendText(wahaSession, data.chatId, texto);
+      // El `Message OUT` va DESPUÉS del envío y a propósito: la bandeja tiene
+      // que reflejar lo que el paciente vio de verdad. Si persistiéramos antes,
+      // un fallo de WAHA dejaría a la recepcionista leyendo un aviso que nadie
+      // recibió y contestando "como te decíamos" a alguien que sólo vio
+      // silencio. Ver [[notas/2026-09-11-cola-bot-inbound]].
+      await prisma.message.create({
+        data: { conversationId: convoId, direction: 'OUT', body: texto },
+      });
+    } catch (e) {
+      // El aviso es best-effort: lo importante ya está hecho (la conversación
+      // quedó en NEEDS_HUMAN y la clínica la ve en el triaje).
+      logger.warn(
+        `aviso de audio no enviado clinic=${data.clinicId}: ${safeErrorLabel(e)}`,
+      );
+    }
+  }
+
+  /**
    * Deja la conversación en la bandeja de triaje. Sin esto, un mensaje que
    * agota sus reintentos desaparece: el paciente no recibe respuesta y la
    * clínica no se entera de que escribió.
@@ -148,6 +293,145 @@ export function createBotInboundWorker(
       where: { clinicId: data.clinicId, chatId: data.chatId, state: 'BOT' },
       data: { state: 'NEEDS_HUMAN' },
     });
+  }
+
+  /**
+   * Transcribe la nota de voz. Devuelve `undefined` cuando el fallo es
+   * **definitivo** y ya se ha derivado al paciente a una persona.
+   *
+   * La distinción importa: un audio caducado o demasiado largo no se arregla
+   * reintentando, así que reintentarlo sólo dejaría al paciente esperando más
+   * tiempo una respuesta que no va a llegar. Los fallos de infraestructura sí
+   * se relanzan, para que BullMQ lo intente otra vez dentro de la ventana.
+   */
+  async function transcribeOrHandoff(
+    job: Job<BotInboundJobData>,
+    clinic: { locale: string; wahaSession: string },
+    startedAt: number,
+  ): Promise<Transcription | undefined> {
+    const { audio, clinicId } = job.data;
+    if (!audio) return undefined;
+    const copy = botCopy(clinic.locale);
+
+    /**
+     * Deriva y avisa. El aviso importa más aquí que en el camino de texto: el
+     * webhook ya suprimió el "solo puedo leer texto" al ver que había algo que
+     * transcribir, así que sin esto el paciente se queda en silencio absoluto.
+     */
+    const derivar = async (
+      texto: string | null,
+      convoId: string | null,
+    ): Promise<undefined> => {
+      await markNeedsHuman(job.data);
+      if (texto && convoId) {
+        await notifyTranscriptionFailed(
+          job.data,
+          convoId,
+          texto,
+          clinic.wahaSession,
+        );
+      }
+      emit({
+        job,
+        outcome: 'unsupported',
+        reasonCode: 'audio-no-transcrito',
+        // Sin esto las notas de voz fallidas desaparecen de la latencia media,
+        // que es justo donde la clínica miraría si algo va mal.
+        latencyMs: Date.now() - startedAt,
+        turn: { inputKind: 'audio', handoff: true },
+      });
+      return undefined;
+    };
+
+    // Ya transcrito en un intento anterior: no se vuelve a pagar. Va antes que
+    // ninguna comprobación porque no hay nada que comprobar — el audio ya salió
+    // y ya se pagó. Sin esto, un fallo aguas abajo (Postgres, WAHA) hace que el
+    // reintento mande el mismo audio otra vez a OpenAI.
+    if (job.data.transcript) {
+      return { text: job.data.transcript, model: job.data.transcriptModel ?? '' };
+    }
+
+    // El gate se comprueba TAMBIÉN aquí, no sólo al encolar. Es un gate de
+    // consent, no de rollout: si sólo se mirara en el webhook, apagarlo no
+    // pararía los jobs ya encolados ni un `retry` desde el panel de BullMQ
+    // dentro de la ventana de retención. Un kill switch que no mata no sirve
+    // para responder a un incidente de cumplimiento.
+    if (!isSttEnabled()) {
+      logger.warn(
+        `nota de voz descartada: STT apagado clinic=${clinicId} — derivando`,
+      );
+      const convo = await findConvo(job.data);
+      return derivar(copy.voiceNoteFailed, convo?.id ?? null);
+    }
+
+    const convo = await findConvo(job.data);
+    if (!convo) return derivar(null, null);
+
+    // El estado se revalida aquí por el mismo motivo que el flag: entre encolar
+    // y procesar hay cola, backoff y hasta 120 s de `lockDuration` si el job se
+    // queda stalled. Si en esa ventana alguien tomó el hilo, mandar igualmente
+    // la grabación a un tercero es gasto y divulgación sin beneficio para el
+    // paciente: ya hay una persona leyéndolo. Y no se avisa, por lo mismo.
+    if (convo.state === 'HUMAN') {
+      logger.log(
+        `nota de voz no transcrita: la atiende una persona clinic=${clinicId}`,
+      );
+      emit({
+        job,
+        outcome: 'skipped',
+        reasonCode: 'conversacion-humana',
+        latencyMs: Date.now() - startedAt,
+        turn: { inputKind: 'audio' },
+      });
+      return undefined;
+    }
+
+    // El aviso de que la transcribe una IA de un tercero va ANTES de mandarle
+    // nada a nadie. Si no se le pudo avisar, no se transcribe: se deriva, y sin
+    // insistir con otro mensaje (mandar acaba de fallar).
+    if (
+      !(await ensureVoiceConsent(convo, job.data, clinic.locale, clinic.wahaSession))
+    ) {
+      return derivar(null, null);
+    }
+
+    try {
+      const out = await stt.transcribe(audio.url, {
+        clinicId,
+        durationSec: audio.durationSec,
+        // Normalizado: `Clinic.locale` es un `String` libre, y un `es-MX` suelto
+        // sería un 400 de OpenAI —transitorio a ojos del worker— que dejaría a
+        // esa clínica sin ninguna nota de voz y sin una señal clara.
+        locale: botLocale(clinic.locale),
+      });
+      // Se guarda en el job antes de seguir: a partir de aquí, cualquier
+      // reintento reusa el texto en vez de volver a llamar al proveedor.
+      await job
+        .updateData({ ...job.data, transcript: out.text, transcriptModel: out.model })
+        .catch(() => undefined);
+      return out;
+    } catch (err) {
+      // Sin clave de OpenAI no hay nada que reintentar: es configuración, no
+      // una intermitencia. Si se tratara como transitorio, el paciente se
+      // quedaría sin NINGUNA respuesta —el webhook ya suprimió el aviso de
+      // "solo leo texto"— hasta agotar los intentos.
+      const sinClave = !process.env.OPENAI_API_KEY;
+      const definitivo =
+        sinClave ||
+        err instanceof MediaExpiredError ||
+        err instanceof AudioTooLongError;
+      if (!definitivo) throw err;
+
+      logger.warn(
+        `nota de voz no transcrita (${(err as Error).name}) clinic=${clinicId} — derivando`,
+      );
+      return derivar(
+        err instanceof AudioTooLongError
+          ? copy.voiceNoteTooLong
+          : copy.voiceNoteFailed,
+        convo.id,
+      );
+    }
   }
 
   async function handle(job: Job<BotInboundJobData>): Promise<void> {
@@ -166,11 +450,14 @@ export function createBotInboundWorker(
     // El `try` no sobra: si Postgres se cae, `handle` reventaba aquí y NO se
     // emitía ningún evento. La clínica vería cero turnos y cero errores, que es
     // indistinguible de "no escribió nadie" — justo durante una caída.
-    let clinic: { status: string } | null;
+    let clinic: { status: string; locale: string; wahaSession: string } | null;
     try {
       clinic = await prisma.clinic.findUnique({
         where: { id: clinicId },
-        select: { status: true },
+        // `locale` para pasarle al transcriptor el idioma de la clínica: sube
+        // la precisión y evita que una nota corta en español se transcriba
+        // como si fuera portuguesa.
+        select: { status: true, locale: true, wahaSession: true },
       });
     } catch (err) {
       emit({ job, outcome: 'error', reasonCode: 'bot-error' });
@@ -194,17 +481,46 @@ export function createBotInboundWorker(
     // `BotService` pueda anotar intención, origen y RAG desde dentro sin
     // pasar un parámetro por toda la cadena. Se emite pase lo que pase: un
     // turno que falla es el que más interesa observar.
+    // Nota de voz: se transcribe y el texto entra al pipeline como si el
+    // paciente lo hubiera escrito. Si no se puede, se deriva a una persona en
+    // vez de dejarle sin respuesta.
+    let effectiveText = text;
+    let transcription: Transcription | undefined;
+    // `startedAt` arranca ANTES de transcribir: para la clínica el turno
+    // empieza cuando llegó el mensaje, no cuando terminamos de prepararlo, y
+    // la transcripción es la parte lenta.
     const startedAt = Date.now();
+    if (job.data.audio) {
+      const out = await transcribeOrHandoff(job, clinic, startedAt);
+      if (!out) return; // ya se derivó y se emitió el evento
+      transcription = out;
+      effectiveText = out.text;
+    }
+
     const turn = await runBotTurn(() =>
-      bot.handleIncoming({ clinicId, chatId, phone, lid, contactName, text }),
+      bot.handleIncoming({
+        clinicId,
+        chatId,
+        phone,
+        lid,
+        contactName,
+        text: effectiveText,
+      }),
     );
+
     const latencyMs = Date.now() - startedAt;
 
     emit({
       job,
       outcome: turn.ok ? 'ok' : 'error',
       latencyMs,
-      turn: turn.data,
+      // `inputKind` se mezcla aquí y no con `recordBotTurn`: el contexto del
+      // turno ya está cerrado cuando `runBotTurn` devuelve, así que anotarlo
+      // después no llegaría a ningún sitio.
+      turn: {
+        ...turn.data,
+        ...(transcription ? { inputKind: 'audio' as const } : {}),
+      },
       ...(turn.ok ? {} : { reasonCode: 'bot-error' as const }),
     });
     if (!turn.ok) throw turn.error;
