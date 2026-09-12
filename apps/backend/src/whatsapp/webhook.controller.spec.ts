@@ -1088,4 +1088,174 @@ describe('WebhookController', () => {
       );
     });
   });
+
+  /**
+   * M10: con la transcripción encendida, una nota de voz deja de ser un
+   * adjunto que se rechaza y pasa a ser un mensaje que se atiende.
+   */
+  describe('notas de voz (M10)', () => {
+    const audioEvent = (over: Record<string, unknown> = {}) =>
+      mediaEvent({
+        type: 'ptt',
+        hasMedia: true,
+        media: { url: 'https://waha.internal/api/files/a.oga' },
+        ...over,
+      });
+
+    afterEach(() => {
+      delete process.env.STT_ENABLED;
+    });
+
+    /**
+     * El flag apagado NO es un rollout a medias: es el gate de cumplimiento.
+     * El consent vigente habla de "mensajes", no de grabaciones.
+     */
+    it('con el flag apagado el comportamiento es el de siempre', async () => {
+      await post(audioEvent());
+
+      expect(inbound.add).not.toHaveBeenCalled();
+      expect(waha.sendText).toHaveBeenCalledWith(
+        'clinic-a',
+        FROM,
+        expect.stringContaining('solo puedo leer'),
+      );
+    });
+
+    it('encendido, encola para transcribir y NO le dice que solo lee texto', async () => {
+      process.env.STT_ENABLED = 'true';
+
+      await post(audioEvent());
+
+      expect(waha.sendText).not.toHaveBeenCalled();
+      const [, data] = inbound.add.mock.calls[0];
+      expect(data).toMatchObject({
+        clinicId: 'clinic-A',
+        text: '',
+        audio: { url: 'https://waha.internal/api/files/a.oga' },
+      });
+    });
+
+    it('el job va con prioridad y backoff corto: la URL caduca a los 900 s', async () => {
+      process.env.STT_ENABLED = 'true';
+      await post(audioEvent());
+
+      const [, , opts] = inbound.add.mock.calls[0];
+      // El `jobId` de dedup tiene que sobrevivir al spread de las opciones de
+      // audio. Sin él, una reentrega de WAHA después de que expire el `SET NX`
+      // crea una segunda transcripción: se paga dos veces y el paciente recibe
+      // dos respuestas.
+      expect(opts.jobId).toEqual(expect.any(String));
+      expect(opts.priority).toBe(1);
+      expect(opts.backoff).toEqual({ type: 'fixed', delay: 3_000 });
+      // Menos intentos: si el audio ya no está, insistir sólo retrasa el
+      // fallback a una persona.
+      expect(opts.attempts).toBe(2);
+    });
+
+    it('el audio queda en la bandeja igual, aunque no se le responda', async () => {
+      process.env.STT_ENABLED = 'true';
+      await post(audioEvent());
+
+      expect(prisma.message.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          direction: 'IN',
+          body: expect.stringContaining('[audio]'),
+        }),
+      });
+    });
+
+    it('sin URL de media sigue el camino de siempre', async () => {
+      // Pasa si el contenedor no tiene WAHA_MEDIA_STORAGE: no hay nada que
+      // transcribir.
+      process.env.STT_ENABLED = 'true';
+      await post(mediaEvent({ type: 'ptt', hasMedia: true, media: null }));
+
+      expect(inbound.add).not.toHaveBeenCalled();
+      expect(waha.sendText).toHaveBeenCalled();
+    });
+
+    it('una imagen no se manda a transcribir', async () => {
+      process.env.STT_ENABLED = 'true';
+      await post(
+        mediaEvent({
+          type: 'image',
+          hasMedia: true,
+          media: { url: 'https://waha.internal/api/files/x.jpg' },
+        }),
+      );
+
+      expect(inbound.add).not.toHaveBeenCalled();
+      expect(waha.sendText).toHaveBeenCalled();
+    });
+
+    it('una url que no es http(s) no se encola', async () => {
+      process.env.STT_ENABLED = 'true';
+      await post(audioEvent({ media: { url: 'file:///etc/passwd' } }));
+
+      expect(inbound.add).not.toHaveBeenCalled();
+    });
+
+    it('una url desmedida no se encola ni entra entera en la bandeja', async () => {
+      // La URL viene de un tercero: sin tope acaba entera en `Message.body`,
+      // en la bandeja del panel y en la ventana de contexto del LLM.
+      process.env.STT_ENABLED = 'true';
+      const larga = `https://waha.internal/api/files/${'a'.repeat(5_000)}.oga`;
+      await post(audioEvent({ media: { url: larga } }));
+
+      expect(inbound.add).not.toHaveBeenCalled();
+      const body = prisma.message.create.mock.calls[0][0].data.body as string;
+      expect(body.length).toBeLessThan(1_000);
+    });
+
+    it('con la conversación tomada por una persona (HUMAN) NO se transcribe', async () => {
+      // Se pagaría la llamada y se mandaría la grabación del paciente a un
+      // tercero para que la lea alguien que ya está leyendo el hilo. Y en
+      // HUMAN no sale nada automático hacia el paciente, tampoco el aviso.
+      process.env.STT_ENABLED = 'true';
+      prisma.conversation.upsert.mockResolvedValueOnce({
+        id: 'convo-1',
+        state: 'HUMAN',
+      });
+
+      await post(audioEvent());
+
+      expect(inbound.add).not.toHaveBeenCalled();
+      expect(waha.sendText).not.toHaveBeenCalled();
+    });
+
+    it('esperando a una persona (NEEDS_HUMAN) SÍ se transcribe', async () => {
+      // NEEDS_HUMAN no es HUMAN: nadie lo ha tomado todavía, y es donde más
+      // ayuda transcribir — la recepcionista abre el hilo y lee lo que el
+      // paciente dijo, en vez de un `[audio]` que no puede escuchar.
+      //
+      // Cortando aquí, el paciente se quedaba sin NADA: el aviso de "solo leo
+      // texto" ya se suprime al detectar que hay algo que transcribir.
+      process.env.STT_ENABLED = 'true';
+      prisma.conversation.upsert.mockResolvedValueOnce({
+        id: 'convo-1',
+        state: 'NEEDS_HUMAN',
+      });
+
+      await post(audioEvent());
+
+      expect(inbound.add).toHaveBeenCalled();
+    });
+
+    it('no emite bot.turn: lo emite el worker con el desenlace de verdad', async () => {
+      // Emitir en los dos sitios contaba cada nota de voz dos veces en el
+      // panel de la clínica y metía el tiempo de encolar en la latencia media.
+      process.env.STT_ENABLED = 'true';
+      const spy = jest
+        .spyOn(Logger.prototype, 'log')
+        .mockImplementation(() => undefined);
+
+      await post(audioEvent());
+
+      const turnos = spy.mock.calls
+        .map((c) => c[0])
+        .filter((a: any) => typeof a === 'object' && a?.event === 'bot.turn');
+      expect(turnos).toHaveLength(0);
+      spy.mockRestore();
+    });
+  });
 });

@@ -9,12 +9,14 @@ import {
   Req,
 } from '@nestjs/common';
 import { createHash } from 'node:crypto';
-import { Prisma } from '@prisma/client';
+import { Prisma, type ConversationState } from '@prisma/client';
 import type Redis from 'ioredis';
 import { Public } from '../auth/decorators/public.decorator';
 import { Queue } from 'bullmq';
 import {
+  BOT_INBOUND_AUDIO_OPTS,
   BOT_INBOUND_JOB,
+  isSttEnabled,
   BOT_INBOUND_QUEUE_TOKEN,
   MAX_INBOUND_TEXT_CHARS,
   type BotInboundJobData,
@@ -125,6 +127,12 @@ export class WebhookController {
 
   /** TTL del marcador de dedup: WAHA reintenta en minutos, 24h es de sobra. */
   private static readonly DEDUP_TTL_SEC = 86_400;
+
+  /** Tope de la URL del media que se guarda y se encola. */
+  private static readonly MAX_MEDIA_URL_CHARS = 300;
+
+  /** Tipos que son una nota de voz y por tanto transcribibles. */
+  private static readonly AUDIO_TYPES = new Set(['ptt', 'audio', 'voice']);
 
   /** Tipos de `payload.type` que sí traen el texto en `payload.body`. */
   private static readonly TEXT_TYPES = new Set(['chat', 'text']);
@@ -289,18 +297,30 @@ export class WebhookController {
   }
 
   /**
-   * ¿Este mensaje trae texto que el bot pueda leer? Devuelve `null` si sí
-   * (camino normal) y la etiqueta para la bandeja si no.
+   * ¿Esta nota de voz se puede transcribir? Devuelve la URL y la duración, o
+   * `null` para que siga el camino de siempre (aviso de "solo leo texto").
    *
-   * Tres señales, cualquiera basta para descartarlo:
-   * 1. `type` (o `_data.type`) fuera de {chat, text} — un `ptt`, una `image`…
-   * 2. `hasMedia === true` — adjunto; el binario no viaja en el webhook.
-   * 3. `body` vacío — no hay nada que clasificar ni que pasarle al LLM.
-   *
-   * Una imagen con pie de foto entra por (2) aunque `body` traiga texto: el
-   * pie casi nunca se entiende sin la imagen, así que va a la bandeja con el
-   * texto conservado detrás de la etiqueta en vez de al bot.
+   * Tres condiciones, y las tres tienen que darse: que el flag esté encendido
+   * —ver `isSttEnabled`, es un gate de cumplimiento, no de rollout—, que sea
+   * audio de verdad, y que WAHA haya dejado una URL http(s). Sin
+   * `WAHA_MEDIA_STORAGE` la URL no existe y el comportamiento es el de antes.
    */
+  private transcribableAudio(
+    msg: WahaMessagePayload | undefined,
+  ): { url: string; durationSec?: number } | null {
+    if (!isSttEnabled()) return null;
+
+    const type = (msg?.type ?? msg?._data?.type ?? '').toLowerCase();
+    if (!WebhookController.AUDIO_TYPES.has(type)) return null;
+
+    const url = msg?.media?.url;
+    if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) return null;
+    if (url.length > WebhookController.MAX_MEDIA_URL_CHARS) return null;
+
+    const durationSec = this.mediaDurationSeconds(msg) ?? undefined;
+    return { url, durationSec };
+  }
+
   /**
    * Duración del adjunto en segundos, si WAHA la manda.
    *
@@ -344,13 +364,36 @@ export class WebhookController {
     const url = msg?.media?.url;
     // Solo http(s): el campo viene de un tercero y acaba en la bandeja del
     // panel, así que no queremos un `javascript:` ni un `data:` ahí.
-    if (typeof url === 'string' && /^https?:\/\//i.test(url)) {
+    // Acotada, y **entera o nada**: el `caption` se trunca a 500 por venir de
+    // un tercero y esta URL viene del mismo sitio, pero un `slice` dejaría un
+    // enlace roto en la bandeja, que no le sirve a nadie. Sin tope entra
+    // completa en `Message.body`, en el panel y en la ventana de contexto del
+    // LLM. El fichero muere a los 900 s: un enlace de más no vale lo que
+    // cuesta.
+    if (
+      typeof url === 'string' &&
+      /^https?:\/\//i.test(url) &&
+      url.length <= WebhookController.MAX_MEDIA_URL_CHARS
+    ) {
       partes.push(url);
     }
 
     return partes.length > 0 ? ` (${partes.join(' · ')})` : '';
   }
 
+  /**
+   * ¿Este mensaje trae texto que el bot pueda leer? Devuelve `null` si sí
+   * (camino normal) y la etiqueta para la bandeja si no.
+   *
+   * Tres señales, cualquiera basta para descartarlo:
+   * 1. `type` (o `_data.type`) fuera de {chat, text} — un `ptt`, una `image`…
+   * 2. `hasMedia === true` — adjunto; el binario no viaja en el webhook.
+   * 3. `body` vacío — no hay nada que clasificar ni que pasarle al LLM.
+   *
+   * Una imagen con pie de foto entra por (2) aunque `body` traiga texto: el
+   * pie casi nunca se entiende sin la imagen, así que va a la bandeja con el
+   * texto conservado detrás de la etiqueta en vez de al bot.
+   */
   private mediaLabel(
     msg: WahaMessagePayload | undefined,
     body: string,
@@ -498,11 +541,23 @@ export class WebhookController {
      */
     trace: string;
     /**
+     * `true` cuando el mensaje se va a atender por otra vía (transcripción):
+     * se registra en la bandeja pero no se le responde "solo leo texto" ni
+     * cuenta para la racha que dispara el handoff.
+     *
+     * Es una intención, no una decisión: el aviso se suprime sólo si el estado
+     * de la conversación —que únicamente se conoce aquí dentro, después del
+     * upsert— permite que la transcripción llegue a ocurrir. Cuando se pasaba
+     * la decisión ya tomada desde fuera, un hilo en `HUMAN` se quedaba sin
+     * aviso Y sin transcripción: silencio absoluto para el paciente.
+     */
+    transcribable?: boolean;
+    /**
      * `true` si el mensaje acabó derivando la conversación a una persona.
      * Lo devuelve para que el evento `bot.turn` lo refleje: es una derivación
      * de verdad y cuenta para la tasa que ve la clínica en su panel.
      */
-  }): Promise<{ handoff: boolean }> {
+  }): Promise<{ handoff: boolean; state: ConversationState }> {
     const { clinic, chatId, phone, lid, contactName, label, caption, trace } =
       params;
 
@@ -532,7 +587,12 @@ export class WebhookController {
       },
     });
 
-    if (convo.state === 'HUMAN') return { handoff: false };
+    if (convo.state === 'HUMAN') return { handoff: false, state: convo.state };
+    // Llegados aquí el estado ya no es `HUMAN` (el return de arriba), que es
+    // justo la condición que hace que suprimir el aviso sea seguro: el mensaje
+    // se va a transcribir de verdad. Tipar el estado con el enum de Prisma es
+    // lo que deja esto demostrado en vez de supuesto.
+    if (params.transcribable) return { handoff: false, state: convo.state };
 
     // Segundo adjunto seguido: el paciente no está escribiendo, y repetirle el
     // mismo aviso cada 6 h lo deja sin atención (el hilo se queda en BOT y no
@@ -561,11 +621,11 @@ export class WebhookController {
         );
         escalated = true;
       }
-      return { handoff: escalated };
+      return { handoff: escalated, state: convo.state };
     }
 
     if (!(await this.claimMediaNotice(clinic.id, chatId))) {
-      return { handoff: false };
+      return { handoff: false, state: convo.state };
     }
 
     const text = caption
@@ -580,7 +640,7 @@ export class WebhookController {
     if (!(await this.sendAndPersist(clinic, chatId, convo.id, text))) {
       await this.releaseMediaNotice(clinic.id, chatId);
     }
-    return { handoff: false };
+    return { handoff: false, state: convo.state };
   }
 
   /**
@@ -823,9 +883,18 @@ export class WebhookController {
           return { ok: true };
         }
         const mediaStartedAt = Date.now();
+        // Nota de voz transcribible: se registra en la bandeja igual, pero en
+        // vez del aviso de "solo leo texto" se encola para transcribir. El
+        // paciente acaba recibiendo la respuesta del bot a lo que dijo, como
+        // si lo hubiera escrito.
+        const audio = this.transcribableAudio(msg);
         let handoff = false;
+        let convoState: ConversationState = 'BOT';
         try {
-          ({ handoff } = await this.handleUnsupportedMessage({
+          ({ handoff, state: convoState } = await this.handleUnsupportedMessage({
+            // El mensaje no se está rechazando, se está atendiendo por otra
+            // vía: ni aviso ni contador de racha hacia el handoff.
+            transcribable: audio !== null,
             clinic,
             chatId: from,
             phone,
@@ -841,6 +910,50 @@ export class WebhookController {
         } catch (e) {
           if (dedupKey) await this.releaseMessage(dedupKey);
           throw e;
+        }
+
+        // `HUMAN` —no `NEEDS_HUMAN`— es lo que corta. Con el hilo ya tomado por
+        // una persona se pagaría la llamada y se mandaría la grabación del
+        // paciente a un tercero para que la lea alguien que ya lo está leyendo:
+        // divulgar una grabación sin beneficio para el paciente es el peor
+        // intercambio posible en un camino que existe por consent.
+        //
+        // `NEEDS_HUMAN` es lo contrario: nadie lo ha tomado TODAVÍA, y es donde
+        // más ayuda transcribir — la recepcionista abre el hilo y lee lo que el
+        // paciente dijo en vez de un `[audio]` que no puede escuchar. El bot no
+        // contesta encima: `BotService` registra el mensaje y se calla.
+        // Cortando aquí por `!== 'BOT'` el paciente se quedaba sin NADA, porque
+        // el aviso de "solo leo texto" ya se suprimió más arriba.
+        if (audio && convoState !== 'HUMAN') {
+          const jobData: BotInboundJobData = {
+            clinicId: clinic.id,
+            chatId: from,
+            phone,
+            lid,
+            contactName,
+            // Lo rellena el worker con la transcripción.
+            text: '',
+            audio,
+            timezone: clinic.timezone,
+            requestId: this.ctx.get('requestId'),
+          };
+          try {
+            await this.inbound.add(BOT_INBOUND_JOB, jobData, {
+              ...(jobId ? { jobId } : {}),
+              // La URL caduca a los 900 s: este job no puede esperar turno
+              // detrás de la cola de texto. Ver BOT_INBOUND_AUDIO_OPTS.
+              ...BOT_INBOUND_AUDIO_OPTS,
+            });
+          } catch (e) {
+            if (dedupKey) await this.releaseMessage(dedupKey);
+            throw e;
+          }
+          // Sin `recordTurn` aquí: lo emite el worker cuando procesa el job,
+          // con la latencia y el desenlace de verdad. Emitir en los dos sitios
+          // contaba cada nota de voz dos veces en el panel de la clínica —el
+          // camino de texto no lo hace justamente por eso— y metía el tiempo
+          // de encolar en la latencia media.
+          return { ok: true };
         }
         // Un adjunto es un turno igual: el paciente escribió y le
         // respondimos. Sin esto, las notas de voz serían un agujero en las

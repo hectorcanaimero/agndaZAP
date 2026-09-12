@@ -10,6 +10,7 @@ import { SchedulingModule } from './scheduling/scheduling.module';
 import { RemindersModule } from './reminders/reminders.module';
 import { FollowUpsModule } from './follow-ups/follow-ups.module';
 import { BotModule } from './bot/bot.module';
+import { SttModule } from './stt/stt.module';
 import { PublicModule } from './public/public.module';
 import { AuthModule } from './auth/auth.module';
 import { ServicesModule } from './services/services.module';
@@ -40,6 +41,9 @@ import { MailModule } from './mail/mail.module';
  */
 @Module({
   imports: [
+    // Transcripción de notas de voz (M10). Apagada por defecto: el gate está
+    // en `isSttEnabled` (bot-inbound.queue.ts), no aquí.
+    SttModule,
     LoggerModule,
     SentryAppModule,
     RedisModule,
