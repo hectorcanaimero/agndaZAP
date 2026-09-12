@@ -1,5 +1,38 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-12 — M10 PR 5: por voz no se confirma ni se cancela (rama `feat/confirmacion-escrita-audio`)
+- Cierra el riesgo que el PR 4 dejó anotado como condición para encender
+  `STT_ENABLED`. Detalle en [[notas/2026-09-12-confirmacion-escrita-por-voz]].
+- **El criterio acabó siendo "muta una cita o secuestra el estado de forma no
+  obvia"**, no el "muta una cita" con el que empecé. La revisión mostró que
+  `REAGENDAR` no toca la cita pero pone la FSM en `ASK_SLOT`, y desde ahí el
+  parser de recordatorios queda inalcanzable: un reagendar mal transcrito
+  secuestra la conversación. Con ese criterio entraron también `isFlowAbort`,
+  `Intent.REPROGRAMAR` y el score de NPS (`recordFeedback` es create-once: un
+  "cinco" mal transcrito es la nota permanente de esa visita).
+- **El guard era una trampa.** Voz → eco → voz → eco, sin salida, y encima
+  cortocircuitando la escalera de rescate de la FSM. Quien manda notas de voz
+  suele ser quien peor escribe. A la segunda va a `NEEDS_HUMAN`, y el contador
+  es fail-closed **hacia la persona**: ante un Redis mudo, mejor un hilo en la
+  bandeja que un bucle.
+- **El eco se comía su propio contexto.** Se persiste como `Message OUT` y
+  `hasConfirmationContext` mira el último `OUT` buscando `*SÍ*` — sin la palabra
+  dentro, el paciente escribía lo que se le pidió y le salía el menú. Ahora el
+  eco lleva la palabra en negrita y en el idioma de la clínica (`*SIM*` en pt,
+  que es la que usa el recordatorio al que responde).
+- **En `NEEDS_HUMAN` no se ecoa**: el bot está callado a propósito y el eco se
+  saltaba el throttle de 4 h del aviso de espera.
+- El eco va saneado: es la única ruta por la que texto del paciente se promueve
+  a la voz del bot (`buildConversationContext` lo reinyecta como `Asistente:`).
+- **El fake de Redis del spec mentía**: `set` devolvía siempre `'OK'`, así que
+  cualquier throttle o contador basado en `SET NX` era inobservable — el primer
+  intento y el quinto daban lo mismo. Ahora honra NX.
+- Tres tests pasaban por el motivo equivocado y están arreglados; el del
+  cableado (`handleIncoming` recibe `inputKind`) faltaba por completo: sin él se
+  podía borrar el cable y los doce tests del guard seguían verdes con el guard
+  muerto.
+- `pnpm --filter @showly/backend test` en verde: 68 suites, 1487 tests.
+
 ## 2026-09-12 — M10 PR 4: la transcripción cableada de verdad (rama `feat/stt-cableado`)
 - Cierra M10. El webhook decide si hay algo que transcribir y el worker lo
   transcribe: el proceso que responde el webhook no manda audio a nadie.
