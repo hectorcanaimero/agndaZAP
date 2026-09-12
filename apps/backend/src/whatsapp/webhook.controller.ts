@@ -68,6 +68,20 @@ interface WahaMessagePayload {
    */
   hasMedia?: boolean;
   /**
+   * Datos del adjunto YA descargado por WAHA. Solo viene si el contenedor
+   * tiene `WAHA_MEDIA_STORAGE` configurado; sin eso llega `hasMedia: true` con
+   * `media: null` — WAHA detecta el adjunto pero no lo baja.
+   *
+   * `url` apunta al propio WAHA y **caduca**: `WHATSAPP_FILES_LIFETIME`
+   * (900 s en nuestros compose) es cuánto vive el fichero antes de que WAHA lo
+   * borre solo. Quien la consuma tiene que asumir que puede estar muerta.
+   */
+  media?: {
+    url?: string;
+    mimetype?: string;
+    filename?: string;
+  } | null;
+  /**
    * Tipo del mensaje. El engine NOWEB manda `chat` para texto y `ptt`,
    * `audio`, `image`, `video`, `sticker`, `location`, `document`, `vcard`…
    * para el resto. Algunas versiones sólo lo traen dentro de `_data`.
@@ -77,6 +91,16 @@ interface WahaMessagePayload {
     notifyName?: string;
     pushName?: string;
     type?: string;
+    /**
+     * Duración en segundos. NOWEB la anida bajo el tipo de mensaje concreto y
+     * el nombre cambia entre versiones, así que se leen varias rutas y se
+     * acepta que no venga.
+     */
+    message?: {
+      audioMessage?: { seconds?: number };
+      videoMessage?: { seconds?: number };
+    };
+    duration?: number | string;
   };
 }
 
@@ -277,6 +301,56 @@ export class WebhookController {
    * pie casi nunca se entiende sin la imagen, así que va a la bandeja con el
    * texto conservado detrás de la etiqueta en vez de al bot.
    */
+  /**
+   * Duración del adjunto en segundos, si WAHA la manda.
+   *
+   * NOWEB la anida bajo el tipo concreto de mensaje y el nombre cambia entre
+   * versiones, así que se prueban varias rutas y se acepta que no venga: es
+   * información útil para quien atiende, no algo de lo que dependa nada.
+   */
+  private mediaDurationSeconds(
+    msg: WahaMessagePayload | undefined,
+  ): number | null {
+    const candidatos = [
+      msg?._data?.message?.audioMessage?.seconds,
+      msg?._data?.message?.videoMessage?.seconds,
+      msg?._data?.duration,
+    ];
+    for (const c of candidatos) {
+      const n = typeof c === 'string' ? Number(c) : c;
+      if (typeof n === 'number' && Number.isFinite(n) && n > 0) {
+        return Math.round(n);
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Rastro del adjunto para la bandeja: duración y enlace al fichero.
+   *
+   * Sin esto, quien atiende ve `[audio]` y no puede hacer nada con él. Con la
+   * URL puede escucharlo, que es lo mínimo mientras no exista la
+   * transcripción — y es el contrato del que se colgará el `SttService`.
+   *
+   * La URL **caduca** (`WHATSAPP_FILES_LIFETIME`), así que se guarda como lo
+   * que es: un enlace que puede estar muerto, no una referencia permanente.
+   */
+  private mediaTrace(msg: WahaMessagePayload | undefined): string {
+    const partes: string[] = [];
+
+    const segundos = this.mediaDurationSeconds(msg);
+    if (segundos !== null) partes.push(`${segundos}s`);
+
+    const url = msg?.media?.url;
+    // Solo http(s): el campo viene de un tercero y acaba en la bandeja del
+    // panel, así que no queremos un `javascript:` ni un `data:` ahí.
+    if (typeof url === 'string' && /^https?:\/\//i.test(url)) {
+      partes.push(url);
+    }
+
+    return partes.length > 0 ? ` (${partes.join(' · ')})` : '';
+  }
+
   private mediaLabel(
     msg: WahaMessagePayload | undefined,
     body: string,
@@ -418,12 +492,19 @@ export class WebhookController {
     label: string;
     caption: string;
     /**
+     * Duración y URL del adjunto, ya formateadas. Vacío si WAHA no mandó
+     * `media` — que es lo que pasa si el contenedor no tiene
+     * `WAHA_MEDIA_STORAGE` configurado.
+     */
+    trace: string;
+    /**
      * `true` si el mensaje acabó derivando la conversación a una persona.
      * Lo devuelve para que el evento `bot.turn` lo refleje: es una derivación
      * de verdad y cuenta para la tasa que ve la clínica en su panel.
      */
   }): Promise<{ handoff: boolean }> {
-    const { clinic, chatId, phone, lid, contactName, label, caption } = params;
+    const { clinic, chatId, phone, lid, contactName, label, caption, trace } =
+      params;
 
     // Mismo upsert que `BotService.handleIncoming`: en update sólo tocamos
     // contactName/phone cuando vienen, para no pisarlos con null.
@@ -447,7 +528,7 @@ export class WebhookController {
       data: {
         conversationId: convo.id,
         direction: 'IN',
-        body: caption ? `${label} ${caption}` : label,
+        body: (caption ? `${label} ${caption}` : label) + trace,
       },
     });
 
@@ -755,6 +836,7 @@ export class WebhookController {
             // discriminador de tipo, así que acotamos lo que un tercero puede
             // escribir en la bandeja.
             caption: body.trim().slice(0, WebhookController.MAX_CAPTION_CHARS),
+            trace: this.mediaTrace(msg),
           }));
         } catch (e) {
           if (dedupKey) await this.releaseMessage(dedupKey);
