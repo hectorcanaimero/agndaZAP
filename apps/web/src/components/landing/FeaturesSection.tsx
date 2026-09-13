@@ -1,116 +1,66 @@
 import { useTranslations } from 'next-intl';
-import {
-  IconReminder,
-  IconHandoff,
-  IconMultiPro,
-  IconKnowledge,
-  IconFeedback,
-  IconMultiLang,
-} from './icons';
-import { FadeIn } from './motion/FadeIn';
-import { Stagger, StaggerItem } from './motion/Stagger';
+import { BookOpenText, CalendarSync, Earth, Headset, Star, type LucideIcon } from 'lucide-react';
 
-// Anchor card = recordatorios (el diferenciador real anti no-show). Se
-// eleva visualmente con doble tamaño, ilustración ambiental (gradient +
-// glow) y typography display. Los 5 restantes caen en grid 3x2 con misma
-// jerarquía. Rompe la uniformidad "6 cards clonadas" sin caer en el bento
-// asimétrico roto del batch previo (usamos grid explícito, no auto-flow).
-const SUPPORTING = [
-  { key: 'handoff', Icon: IconHandoff },
-  { key: 'multiPro', Icon: IconMultiPro },
-  { key: 'faq', Icon: IconKnowledge },
-  { key: 'feedback', Icon: IconFeedback },
-  { key: 'multiTenant', Icon: IconMultiLang },
-] as const;
-
+// Cinco funcionalidades, cinco celdas (lg: 4+2 / 2+2+2; md: 2 / 1+1 / 1+1; mobile: 1 columna).
+// Los recordatorios no están acá porque son la sección <Lifecycle />.
+// Dos celdas llevan una muestra real de la UI del producto; el resto, texto.
 export function FeaturesSection() {
   const t = useTranslations('landing.features');
 
   return (
-    <section id="features" className="bg-mist-50 py-24 lg:py-32">
+    <section id="features" className="scroll-mt-16 py-20 lg:py-28">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-        <FadeIn className="max-w-2xl">
-          <h2
-            className="font-display text-4xl font-medium leading-[1.05] tracking-[-0.03em] text-brand-navy sm:text-5xl lg:text-6xl text-balance"
-            style={{ overflowWrap: 'anywhere', fontOpticalSizing: 'auto' }}
-          >
-            {t('headline')}
-          </h2>
-        </FadeIn>
+        <h2 className="max-w-2xl text-balance text-4xl font-semibold leading-[1.08] tracking-[-0.03em] text-brand-navy sm:text-5xl">
+          {t('headline')}
+        </h2>
 
-        <div className="mt-14 grid gap-5 lg:mt-20 lg:grid-cols-12">
-          <FadeIn
-            as="article"
-            className="group relative overflow-hidden rounded-[2rem] border border-brand-navy/15 bg-brand-navy p-8 text-white shadow-lift-lg transition-transform duration-500 ease-out-soft hover:-translate-y-1 sm:p-10 lg:col-span-7 lg:row-span-2 lg:min-h-[420px]"
-          >
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0 opacity-70 [background-image:radial-gradient(at_20%_10%,rgba(40,217,185,0.35),transparent_55%),radial-gradient(at_100%_100%,rgba(40,217,185,0.15),transparent_50%)]"
-            />
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0 bg-grain opacity-[0.05] mix-blend-overlay"
-            />
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute -right-24 -bottom-24 h-72 w-72 rounded-full bg-brand-teal/20 blur-3xl transition-transform duration-700 ease-out-soft group-hover:scale-110"
-            />
-
-            <div className="relative flex h-full flex-col">
-              <span className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-brand-teal ring-1 ring-inset ring-white/15 backdrop-blur-sm">
-                <IconReminder className="h-7 w-7" />
-              </span>
-              <h3 className="mt-8 max-w-md font-display text-3xl font-medium leading-tight tracking-[-0.02em] text-white sm:text-4xl">
-                {t('items.reminders.title')}
-              </h3>
-              <p className="mt-4 max-w-md text-base leading-relaxed text-white/80 sm:text-lg">
-                {t('items.reminders.body')}
+        <div className="mt-12 grid gap-4 md:grid-cols-2 lg:mt-16 lg:grid-cols-6">
+          <article className="flex min-w-0 flex-col gap-8 rounded-2xl bg-mist-100 p-6 sm:p-8 md:col-span-2 lg:col-span-4 lg:flex-row lg:items-end">
+            <FeatureText Icon={Headset} title={t('items.handoff.title')} body={t('items.handoff.body')} />
+            <div aria-hidden="true" className="w-full max-w-sm shrink-0 space-y-2 lg:w-72">
+              <p className="ml-auto w-fit max-w-[90%] rounded-2xl rounded-br-md bg-[#D9FDD3] px-3 py-2 text-sm text-neutral-900">
+                {t('items.handoff.demoPatient')}
               </p>
-              <div className="mt-auto flex items-center gap-2 pt-8 text-sm font-medium text-brand-teal">
-                <span
-                  aria-hidden="true"
-                  className="relative inline-flex h-2 w-2"
-                >
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-teal opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-brand-teal" />
-                </span>
-                {t('items.reminders.tag')}
-              </div>
+              <p className="mx-auto flex w-fit items-center gap-1.5 rounded-full bg-brand-navy px-3 py-1.5 text-xs font-semibold text-white">
+                <Headset className="h-3.5 w-3.5 text-brand-teal" />
+                {t('items.handoff.demoTaken')}
+              </p>
             </div>
-          </FadeIn>
+          </article>
 
-          <Stagger
-            className="contents"
-            gap={0.08}
-          >
-            {SUPPORTING.map(({ key, Icon }, i) => (
-              <StaggerItem
-                as="article"
-                key={key}
-                className={`group relative flex min-w-0 flex-col overflow-hidden rounded-[1.75rem] border border-mist-200 bg-mist-50 p-6 shadow-lift-sm transition-all duration-300 ease-out-soft hover:-translate-y-1 hover:border-brand-teal/40 hover:shadow-lift-lg lg:col-span-5 ${
-                  i === 0 ? 'lg:col-start-8' : 'lg:col-span-4'
-                } ${i >= 1 && i <= 3 ? 'lg:col-span-4' : ''}`}
-              >
-                <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute -right-14 -top-14 h-32 w-32 rounded-full bg-brand-teal/8 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
-                />
-                <div className="relative">
-                  <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-teal/10 text-brand-teal ring-1 ring-inset ring-brand-teal/20 transition-transform duration-300 ease-back-out group-hover:scale-110">
-                    <Icon className="h-5 w-5" />
-                  </span>
-                  <h3 className="mt-5 text-lg font-semibold leading-snug text-brand-navy">
-                    {t(`items.${key}.title`)}
-                  </h3>
-                  <p className="mt-2 text-[0.95rem] leading-relaxed text-mist-600">
-                    {t(`items.${key}.body`)}
-                  </p>
-                </div>
-              </StaggerItem>
-            ))}
-          </Stagger>
+          <Cell className="lg:col-span-2" Icon={BookOpenText} title={t('items.faq.title')} body={t('items.faq.body')} />
+          <Cell className="lg:col-span-2" Icon={CalendarSync} title={t('items.multiPro.title')} body={t('items.multiPro.body')} />
+
+          <article className="flex min-w-0 flex-col justify-between gap-6 rounded-2xl bg-brand-teal/15 p-6 sm:p-8 lg:col-span-2">
+            <FeatureText Icon={Star} title={t('items.feedback.title')} body={t('items.feedback.body')} />
+            <div aria-hidden="true" className="flex gap-1 text-brand-navy">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <Star key={i} className="h-5 w-5" fill={i < 4 ? 'currentColor' : 'none'} strokeWidth={1.75} />
+              ))}
+            </div>
+          </article>
+
+          <Cell className="lg:col-span-2" Icon={Earth} title={t('items.timezone.title')} body={t('items.timezone.body')} />
         </div>
       </div>
     </section>
+  );
+}
+
+function FeatureText({ Icon, title, body }: { Icon: LucideIcon; title: string; body: string }) {
+  return (
+    <div className="min-w-0 flex-1">
+      <Icon className="h-6 w-6 text-teal-ink" aria-hidden="true" strokeWidth={1.75} />
+      <h3 className="mt-5 text-xl font-semibold leading-snug text-brand-navy">{title}</h3>
+      <p className="mt-2 max-w-md text-base leading-relaxed text-mist-600">{body}</p>
+    </div>
+  );
+}
+
+function Cell({ className, Icon, title, body }: { className?: string; Icon: LucideIcon; title: string; body: string }) {
+  return (
+    <article className={`min-w-0 rounded-2xl border border-mist-200 bg-white p-6 sm:p-8 ${className ?? ''}`}>
+      <FeatureText Icon={Icon} title={title} body={body} />
+    </article>
   );
 }

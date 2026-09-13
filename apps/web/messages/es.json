@@ -1321,33 +1321,29 @@
       }
     },
     "features": {
-      "eyebrow": "Funcionalidades",
-      "headline": "Lo que tu clínica pide todos los días.",
+      "headline": "Lo que la recepción deja de hacer a mano.",
       "items": {
-        "reminders": {
-          "title": "Recordatorios que confirman",
-          "body": "24h y 3h antes de cada cita, en automático. El paciente confirma con un SÍ o pide reagendar. Tú te enteras solo si algo cambia.",
-          "tag": "Anti no-show en vivo"
-        },
         "handoff": {
           "title": "Tu equipo toma el chat cuando quiere",
-          "body": "Cuando el paciente pide una persona o tú quieres entrar, tu equipo toma la conversación y Showly se calla."
+          "body": "Si el paciente pide una persona o tú quieres entrar, tomas la conversación y Showly se calla.",
+          "demoPatient": "¿Puedo hablar con alguien de la clínica?",
+          "demoTaken": "Recepción tomó la conversación"
         },
         "multiPro": {
-          "title": "Cada profesional con su agenda",
-          "body": "Cada profesional con sus servicios, horarios y bloqueos. Se sincroniza con tu Google Calendar o iPhone sin instalar nada."
+          "title": "Una agenda por profesional",
+          "body": "Servicios, horarios y bloqueos de cada uno, y un calendario que se suscribe desde Google Calendar o el iPhone."
         },
         "faq": {
-          "title": "Responde tus preguntas frecuentes",
-          "body": "Precios, dirección, horarios, formas de pago. Showly responde con lo que tú cargaste. Nada de inventos."
+          "title": "Responde lo que siempre preguntan",
+          "body": "Precios, dirección, horarios y formas de pago, con la información que tú cargaste. Nada inventado."
         },
         "feedback": {
-          "title": "Califica cada consulta",
-          "body": "El paciente califica de 1 a 5 estrellas después de cada visita. Sin formularios externos ni links raros."
+          "title": "Cada consulta, calificada",
+          "body": "Después de la visita, el paciente califica de 1 a 5 por el mismo WhatsApp."
         },
-        "multiTenant": {
-          "title": "Español y português, cada clínica en su hora",
-          "body": "Español y português. Cada clínica configura su zona horaria. Los recordatorios respetan feriados y bloqueos."
+        "timezone": {
+          "title": "En la hora de tu clínica",
+          "body": "Recordatorios en español o português que respetan tu zona horaria, feriados y bloqueos."
         }
       }
     },
