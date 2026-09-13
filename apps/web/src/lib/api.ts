@@ -86,6 +86,35 @@ export async function fetchAvailability(
   return data;
 }
 
+/**
+ * Días (`YYYY-MM-DD`, TZ de la clínica) con al menos un horario libre, para
+ * marcar el calendario (ADR 0023). `days` hasta 60.
+ */
+export async function fetchAvailableDays(
+  slug: string,
+  params: {
+    serviceId: string;
+    professionalId: string;
+    from: string;
+    days: number;
+  },
+): Promise<string[]> {
+  const qs = new URLSearchParams({
+    serviceId: params.serviceId,
+    professionalId: params.professionalId,
+    from: params.from,
+    days: String(params.days),
+  });
+  const res = await fetch(
+    `${API_URL}/api/public/clinics/${encodeURIComponent(slug)}/availability/days?${qs.toString()}`,
+    { cache: 'no-store' },
+  );
+  if (!res.ok) {
+    throw new Error(`fetchAvailableDays failed: ${res.status}`);
+  }
+  return (await res.json()) as string[];
+}
+
 export interface CreateAppointmentPayload {
   phone: string;
   name: string;

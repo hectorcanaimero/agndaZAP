@@ -71,8 +71,7 @@
     },
     "noSlots": "No hay horarios disponibles esta semana.",
     "chooseCombination": "Elegí servicio y profesional para ver horarios.",
-    "emptyDescription": "No encontramos horarios en los próximos 7 días.",
-    "tryNextWeek": "Probar la próxima semana",
+    "emptyDescription": "No encontramos horarios en los próximos dos meses.",
     "tryOtherProfessional": "Cambiar profesional",
     "submitting": "Confirmando...",
     "submit": "Confirmar cita",
@@ -84,7 +83,7 @@
       },
       "slot": {
         "title": "Horario",
-        "description": "Estos son los horarios disponibles."
+        "description": "Elige el día en el calendario y luego la hora."
       },
       "patient": {
         "title": "Tus datos",
@@ -1923,5 +1922,15 @@
         }
       }
     }
+  },
+  "slotPicker": {
+    "calendarLabel": "Elige un día",
+    "previousMonth": "Mes anterior",
+    "nextMonth": "Mes siguiente",
+    "dayUnavailable": "{day}, sin horarios",
+    "hoursLabel": "Horarios del {day}",
+    "loading": "Buscando horarios…",
+    "error": "No pudimos cargar los horarios. Inténtalo de nuevo en un momento.",
+    "noSlotsDay": "Ese día se quedó sin horarios. Elige otro día en el calendario."
   }
 }

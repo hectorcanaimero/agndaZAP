@@ -3,7 +3,7 @@
 import { track } from '@/lib/analytics';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Calendar, MessageSquare, Stethoscope, User } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/routing';
@@ -22,22 +22,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import {
   createAppointment,
-  fetchAvailability,
   type CreateAppointmentPayload,
   type CreateAppointmentResponse,
-  type Slot,
 } from '@/lib/api';
-import {
-  formatSlotTime,
-  groupSlotsByDay,
-} from './slot-format';
-import { queryKeys } from '@/lib/query-keys';
-import { todayStartInTZ } from '@/lib/utils';
+import { formatSlotTime } from './slot-format';
 import { useScheduleSelection } from './ScheduleSelection';
+import { SlotPicker } from './SlotPicker';
 
 interface Service {
   id: string;
@@ -98,37 +91,6 @@ const scheduleSchema = z.object({
 });
 
 type ScheduleFormValues = z.infer<typeof scheduleSchema>;
-
-/**
- * Skeleton de slots — 3 filas × 4 buttons con `animate-pulse`.
- *
- * Motivo: en redes lentas (mobile 3G, típico LATAM) el fetch de disponibilidad
- * es 2-4s. Mostrar "…" durante ese lapso es UX muerto. El skeleton comunica
- * "estamos calculando" y da estabilidad visual al layout (evita CLS cuando
- * llegan los slots reales).
- *
- * `aria-live="polite"` + `aria-busy="true"` para que screen readers anuncien
- * "cargando" sin interrumpir la navegación.
- */
-function SlotsSkeleton({ ariaLabel }: { ariaLabel: string }) {
-  return (
-    <div
-      className="space-y-2"
-      role="status"
-      aria-live="polite"
-      aria-busy="true"
-      aria-label={ariaLabel}
-    >
-      {[0, 1, 2].map((row) => (
-        <div key={row} className="flex gap-2">
-          {[0, 1, 2, 3].map((col) => (
-            <Skeleton key={col} className="h-9 w-16 rounded-md" />
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-}
 
 /**
  * Spinner inline SVG (sin dep). Se usa dentro del botón submit durante
@@ -207,11 +169,12 @@ function SectionHeader({
  * Client component del formulario de agendamiento.
  *
  * Reglas:
- * - Cuando cambian serviceId y professionalId, refetch de slots (useQuery).
+ * - Cuando cambian serviceId y professionalId, `SlotPicker` pide calendario y horas.
  * - `professional` se filtra por `service.professionals` (multi-tenant cliente).
  * - `honeypot` está en el DOM pero oculto con `sr-only` y `aria-hidden` +
  *   `tabIndex={-1}` para que humanos no lo llenen y assistive tech lo ignore.
- * - 409 → refetch de slots automático + mensaje de "elegí otro" + foco al
+ * - Horario: `SlotPicker` (calendario de días con hueco + horas del día).
+ * - 409 → refetch de calendario y horas + mensaje de "elige otro" + foco al
  *   primer slot reofrecido (WCAG 2.4.3 Focus Order).
  * - 429 → mensaje "probá en un minuto".
  * - 201 → redirect a /gracias con query params.
@@ -262,10 +225,6 @@ export function ScheduleForm(props: ScheduleFormProps) {
   const consent = watch('consent');
 
   const [submitError, setSubmitError] = useState<string | null>(null);
-  // Empty-state CTA: si no hay slots en 7 días, el paciente puede pedir 14.
-  // Se resetea a false cuando cambia el serviceId/professionalId (nuevo fetch
-  // "por defecto" arranca con 7).
-  const [expandedRange, setExpandedRange] = useState(false);
 
   // Profesionales filtrados por el servicio elegido — evita mostrar profesionales
   // que no atienden ese servicio (además de la validación del backend).
@@ -284,55 +243,6 @@ export function ScheduleForm(props: ScheduleFormProps) {
       setValue('startAtISO', '');
     }
   }, [availableProfessionals, professionalId, setValue]);
-
-  // Reset del rango expandido cuando cambia service/professional — nuevo par,
-  // arrancamos de nuevo con 7 días.
-  useEffect(() => {
-    setExpandedRange(false);
-  }, [serviceId, professionalId]);
-
-  /*
-   * Availability con useQuery. La `queryKey` incluye clinicSlug, serviceId,
-   * professionalId y expandedRange (via days) — cambiar cualquiera dispara
-   * un nuevo fetch. Cuando falta service o professional, `enabled: false`
-   * mantiene el fetch dormido.
-   *
-   * `todayISO` derivado con `todayStartInTZ(timezone)` — TZ de la clínica,
-   * no del navegador (anti-drift).
-   */
-  const todayISO = useMemo(() => todayStartInTZ(timezone), [timezone]);
-  const days = expandedRange ? 14 : 7;
-
-  const slotsQuery = useQuery({
-    queryKey: queryKeys.availability(
-      clinicSlug,
-      serviceId || undefined,
-      professionalId || undefined,
-      todayISO,
-      days,
-    ),
-    queryFn: async () => {
-      const data = await fetchAvailability(clinicSlug, {
-        serviceId,
-        professionalId,
-        from: todayISO,
-        days,
-      });
-      return data.slice(0, 12);
-    },
-    enabled: Boolean(serviceId && professionalId),
-  });
-
-  const slots: Slot[] = slotsQuery.data ?? [];
-  const slotsLoading = slotsQuery.isFetching && slotsQuery.isLoading;
-  const slotsError = slotsQuery.isError ? t('errors.genericError') : null;
-
-  const groupedSlots = useMemo(
-    () => groupSlotsByDay(slots, timezone, locale),
-    [slots, timezone, locale],
-  );
-  const selectedSlotExists =
-    Boolean(selectedSlot) && slots.some((s) => s.startAt === selectedSlot);
 
   // Cuando el paciente elige un slot nuevo, limpiar cualquier submitError
   // stale (típicamente "slot tomado" post-409): la nueva elección invalida
@@ -376,57 +286,17 @@ export function ScheduleForm(props: ScheduleFormProps) {
   ]);
 
   /**
-   * Navegación por flechas dentro del radiogroup de horarios: ←/↑ anterior,
-   * →/↓ siguiente, Home/End.
-   *
-   * Decisión: las flechas SÓLO mueven el foco; seleccionar sigue siendo
-   * Enter/Espacio/click. El patrón Radio Group de WAI-ARIA APG
-   * (https://www.w3.org/WAI/ARIA/apg/patterns/radio/) recomienda que las
-   * flechas también seleccionen, pero acá cada selección dispara el evento
-   * de analytics `slot_selected` y un cambio de estado del form; recorrer
-   * 12 horarios con el teclado generaría 12 eventos falsos. Es la variante
-   * "roving tabindex + activación explícita" que el mismo APG admite para
-   * grupos donde seleccionar tiene efectos secundarios.
+   * Tras un 409 el horario elegido ya no existe: se invalidan el calendario y
+   * las horas de la clínica (todos los días cacheados), no solo el día actual,
+   * porque ese día pudo quedarse sin huecos.
    */
-  const handleSlotsKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
-    const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
-    if (!keys.includes(e.key)) return;
-    const radios = Array.from(
-      e.currentTarget.querySelectorAll<HTMLButtonElement>(
-        '[role="radio"]:not([disabled])',
-      ),
-    );
-    if (radios.length === 0) return;
-    const current = radios.indexOf(document.activeElement as HTMLButtonElement);
-    let next = current;
-    if (e.key === 'Home') next = 0;
-    else if (e.key === 'End') next = radios.length - 1;
-    else if (e.key === 'ArrowRight' || e.key === 'ArrowDown')
-      next = current < 0 ? 0 : (current + 1) % radios.length;
-    else next = current <= 0 ? radios.length - 1 : current - 1;
-    e.preventDefault();
-    radios[next]?.focus();
-  }, []);
-
   const refetchSlots = useCallback(async () => {
-    if (!serviceId || !professionalId) return;
-    await qc.invalidateQueries({
-      queryKey: queryKeys.availability(
-        clinicSlug,
-        serviceId,
-        professionalId,
-        todayISO,
-        days,
-      ),
-    });
     setValue('startAtISO', '');
-  }, [qc, clinicSlug, serviceId, professionalId, todayISO, days, setValue]);
-
-  // CTAs del empty state (no slots en 7 días).
-  const handleNextWeek = useCallback(() => {
-    // El useQuery re-observa `expandedRange` via queryKey → dispara fetch con days=14.
-    setExpandedRange(true);
-  }, []);
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['availability', clinicSlug] }),
+      qc.invalidateQueries({ queryKey: ['availability-days', clinicSlug] }),
+    ]);
+  }, [qc, clinicSlug, setValue]);
 
   const handleChangeProfessional = useCallback(() => {
     // Forzar re-selección: limpiar el profesional actual + slot elegido.
@@ -652,103 +522,41 @@ export function ScheduleForm(props: ScheduleFormProps) {
         <div className="space-y-2">
           {!serviceId || !professionalId ? (
             <p className="text-sm text-gray-500">{t('chooseCombination')}</p>
-          ) : slotsLoading ? (
-            <SlotsSkeleton ariaLabel={t('loadingSlotsAria')} />
-          ) : slotsError ? (
-            <p className="text-sm text-red-600">{slotsError}</p>
-          ) : slots.length === 0 ? (
-            // Empty state con CTAs — no dejar al paciente en un callejón.
-            // "Probar próxima semana" = bump a 14 días (útil si la clínica
-            // está muy ocupada). "Cambiar profesional" sólo si hay ≥2 opciones.
-            <div className="rounded-md border border-gray-200 bg-gray-50 p-4 text-center">
-              <p className="text-sm text-gray-700">{t('emptyDescription')}</p>
-              <div className="mt-3 flex flex-wrap justify-center gap-2">
-                {!expandedRange ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleNextWeek}
-                    className="border-brand-600 text-brand-700 hover:bg-brand-50"
-                  >
-                    {t('tryNextWeek')}
-                  </Button>
-                ) : null}
-                {hasMultipleProfessionals ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleChangeProfessional}
-                  >
-                    {t('tryOtherProfessional')}
-                  </Button>
-                ) : null}
-              </div>
-            </div>
           ) : (
-            // Un solo radiogroup para todos los días: el paciente elige UN
-            // horario. Roving tabindex: el seleccionado (o el primero) entra
-            // en el orden de tabulación; el resto se alcanza con flechas.
-            <div
-              role="radiogroup"
-              aria-label={t('labels.slot')}
-              aria-describedby={errors.startAtISO ? 'slot-error' : undefined}
-              className="space-y-4"
-              onKeyDown={handleSlotsKeyDown}
-            >
-              {groupedSlots.map((group, groupIdx) => (
-                <div key={group.dayLabel}>
-                  <p className="mb-2 text-sm font-semibold text-gray-700">
-                    {group.dayLabel}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {group.slots.map((slot, slotIdx) => {
-                      const time = formatSlotTime(
-                        slot.startAt,
-                        timezone,
-                        locale,
-                      );
-                      const isSelected = selectedSlot === slot.startAt;
-                      const isFirst = groupIdx === 0 && slotIdx === 0;
-                      // Defensa: si selectedSlot apunta a un slot que ya no
-                      // está en la lista (p. ej. post-409), el primero vuelve
-                      // a ser tabulable.
-                      const tabbable = selectedSlotExists ? isSelected : isFirst;
-                      return (
-                        <button
-                          key={slot.startAt}
-                          type="button"
-                          data-slot
-                          role="radio"
-                          aria-checked={isSelected}
-                          aria-label={`${group.dayLabel} ${time}`}
-                          tabIndex={tabbable ? 0 : -1}
-                          // Deshabilitar TODOS los slots durante submit — evita
-                          // que el paciente cambie de slot mid-flight y termine
-                          // con estado inconsistente cliente/servidor.
-                          disabled={submitting}
-                          onClick={() => {
-                            setValue('startAtISO', slot.startAt);
-                            track('slot_selected', { clinic: clinicSlug });
-                          }}
-                          className={`rounded-md border px-3 py-2 text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ${
-                            isSelected
-                              ? // bg-brand-600 sobre text-white = 4.83:1 → WCAG AA
-                                // (bg-brand-500 daba 2.83:1 → falla). Outline extra
-                                // para daltónicos: no dependemos sólo del color.
-                                'border-brand-700 bg-brand-600 text-white shadow-sm outline outline-2 outline-offset-2 outline-brand-700'
-                              : 'border-gray-300 bg-white text-gray-700 hover:border-brand-500 hover:bg-brand-50'
-                          }`}
-                        >
-                          {time}
-                        </button>
-                      );
-                    })}
-                  </div>
+            <SlotPicker
+              clinicSlug={clinicSlug}
+              serviceId={serviceId}
+              professionalId={professionalId}
+              timezone={timezone}
+              locale={locale}
+              selected={selectedSlot || null}
+              onSelect={(startAt) => {
+                setValue('startAtISO', startAt);
+                track('slot_selected', { clinic: clinicSlug });
+              }}
+              // Deshabilitar TODOS los slots durante submit — evita que el
+              // paciente cambie de slot mid-flight y termine con estado
+              // inconsistente cliente/servidor.
+              disabled={submitting}
+              empty={
+                // Empty state con CTA — no dejar al paciente en un callejón.
+                <div className="rounded-md border border-gray-200 bg-gray-50 p-4 text-center">
+                  <p className="text-sm text-gray-700">{t('emptyDescription')}</p>
+                  {hasMultipleProfessionals ? (
+                    <div className="mt-3 flex flex-wrap justify-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleChangeProfessional}
+                      >
+                        {t('tryOtherProfessional')}
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
-              ))}
-            </div>
+              }
+            />
           )}
           {errors.startAtISO ? (
             <p id="slot-error" className="text-sm text-red-600">

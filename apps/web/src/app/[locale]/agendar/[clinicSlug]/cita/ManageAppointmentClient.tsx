@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle,
   CalendarClock,
@@ -19,18 +19,12 @@ import { Card, CardContent } from '@/components/ui/card';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   cancelManagedAppointment,
-  fetchAvailability,
   rescheduleManagedAppointment,
   type AppointmentStatus,
   type ManagedAppointmentData,
-  type Slot,
 } from '@/lib/api';
-import { todayStartInTZ } from '@/lib/utils';
-import {
-  formatAppointmentWhen,
-  formatSlotTime,
-  groupSlotsByDay,
-} from '../slot-format';
+import { formatAppointmentWhen } from '../slot-format';
+import { SlotPicker } from '../SlotPicker';
 
 interface Props {
   clinicSlug: string;
@@ -91,6 +85,7 @@ export function ManageAppointmentClient({
 }: Props) {
   const t = useTranslations('manage');
   const router = useRouter();
+  const qc = useQueryClient();
 
   const [data, setData] = useState(initial);
   const [activeToken, setActiveToken] = useState(token);
@@ -134,35 +129,16 @@ export function ManageAppointmentClient({
     feedbackRef.current?.scrollIntoView({ block: 'nearest' });
   }, []);
 
-  // `from` en la TZ de la clínica, NUNCA la del navegador: con
-  // `new Date().toISOString()` un paciente en Caracas a las 21:00 pediría los
-  // slots de mañana y perdería los de hoy. Mismo helper que usa ScheduleForm.
-  const fromDay = todayStartInTZ(timezone);
-
-  const slotsQuery = useQuery({
-    queryKey: [
-      'manage-availability',
-      clinicSlug,
-      appointment.serviceId,
-      appointment.professionalId,
-      fromDay,
-    ],
-    enabled: mode === 'reschedule',
-    retry: false,
-    queryFn: () =>
-      fetchAvailability(clinicSlug, {
-        serviceId: appointment.serviceId,
-        professionalId: appointment.professionalId,
-        from: fromDay,
-        days: 14,
-      }),
-  });
-
-  const slots: Slot[] = slotsQuery.data ?? [];
-  const grouped = useMemo(
-    () => groupSlotsByDay(slots, timezone, locale),
-    [slots, timezone, locale],
-  );
+  /**
+   * Recarga calendario y horas de la clínica. La disponibilidad cambia al
+   * mover la cita (su horario nuevo figura libre y el viejo ocupado) y tras un
+   * 409 (el día pudo quedarse sin huecos). `SlotPicker` guarda en caché cada
+   * día que abre, así que se invalida el prefijo entero.
+   */
+  const refreshAvailability = useCallback(() => {
+    void qc.invalidateQueries({ queryKey: ['availability', clinicSlug] });
+    void qc.invalidateQueries({ queryKey: ['availability-days', clinicSlug] });
+  }, [qc, clinicSlug]);
 
   /**
    * Traduce los códigos que el contrato distingue. El 404 merece su propio
@@ -246,7 +222,7 @@ export function ManageAppointmentClient({
         );
         // El slot se ocupó mientras elegía: recargamos la disponibilidad para
         // no dejarle a la vista un horario que ya no existe.
-        if (res.status === 409) void slotsQuery.refetch();
+        if (res.status === 409) refreshAvailability();
       }
       if (res.status === 404) setLinkLost(true);
       focusFeedback();
@@ -271,7 +247,7 @@ export function ManageAppointmentClient({
     // La foto de disponibilidad quedó vieja (su slot nuevo figura libre y el
     // viejo ocupado). Sin esto, reabrir "cambiar horario" dentro del staleTime
     // muestra datos que ya no son ciertos.
-    void slotsQuery.refetch();
+    refreshAvailability();
 
     // El token viejo ya no vale. Con uno nuevo reescribimos la URL —vía router,
     // para que el server component rehidrate con él— y así un refresh sigue
@@ -422,53 +398,21 @@ export function ManageAppointmentClient({
             </div>
 
             <div className="mt-4">
-              {slotsQuery.isLoading ? (
-                <p className="flex items-center gap-2 text-sm text-gray-500">
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  {t('reschedule.loading')}
-                </p>
-              ) : slotsQuery.isError ? (
-                <p className="text-sm text-red-600">{t('errors.generic')}</p>
-              ) : grouped.length === 0 ? (
-                <p className="text-sm text-gray-600">{t('reschedule.noSlots')}</p>
-              ) : (
-                <div className="space-y-4">
-                  {grouped.map((group) => (
-                    <div key={group.dayLabel}>
-                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                        {group.dayLabel}
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {group.slots.map((slot) => {
-                          const time = formatSlotTime(
-                            slot.startAt,
-                            timezone,
-                            locale,
-                          );
-                          return (
-                            <button
-                              key={slot.startAt}
-                              type="button"
-                              // Mismo atributo que el picker de `ScheduleForm`
-                              // (allí sin valor), para que `button[data-slot]`
-                              // sirva de locator en los dos E2E.
-                              data-slot={slot.startAt}
-                              // Sin el día, un lector de pantalla oye una lista
-                              // de horas sueltas sin saber de qué fecha son.
-                              aria-label={`${group.dayLabel} ${time}`}
-                              disabled={busy}
-                              onClick={() => setPendingSlot(slot.startAt)}
-                              className="inline-flex h-9 min-w-[4.5rem] items-center justify-center rounded-md border border-gray-300 bg-white px-3 text-sm font-medium text-gray-800 transition-colors hover:border-brand-500 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {time}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <SlotPicker
+                clinicSlug={clinicSlug}
+                serviceId={appointment.serviceId}
+                professionalId={appointment.professionalId}
+                timezone={timezone}
+                locale={locale}
+                selected={null}
+                // Elegir no mueve la cita: abre la confirmación. En móvil, un
+                // toque accidental no puede cambiarla.
+                onSelect={setPendingSlot}
+                disabled={busy}
+                empty={
+                  <p className="text-sm text-gray-600">{t('reschedule.noSlots')}</p>
+                }
+              />
             </div>
           </CardContent>
         </Card>
