@@ -68,6 +68,11 @@ export class PublicController {
    */
   private static readonly MAX_PATIENT_RESCHEDULES = 3;
 
+  /** Horarios por petición de `availability`: un día largo de servicios cortos cabe. */
+  static readonly MAX_SLOTS_PER_REQUEST = 200;
+  /** Horizonte del calendario de la web. */
+  static readonly MAX_CALENDAR_DAYS = 60;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly availability: AvailabilityService,
@@ -76,7 +81,7 @@ export class PublicController {
     private readonly notifier: PatientWhatsappNotifier,
   ) {}
 
-  private parseAvailabilityDays(days?: string): number {
+  private parseAvailabilityDays(days?: string, max = 30): number {
     if (!days) return 7;
 
     const parsed = Number(days);
@@ -84,7 +89,7 @@ export class PublicController {
       throw new BadRequestException('days debe ser un entero');
     }
 
-    return Math.max(1, Math.min(30, parsed));
+    return Math.max(1, Math.min(max, parsed));
   }
 
   private assertValidAvailabilityFrom(from: string): void {
@@ -253,7 +258,53 @@ export class PublicController {
       professionalId,
       fromISO: from,
       days: parsedDays,
-      limit: 50,
+      // La web pide un día cada vez (calendario, ADR 0023). 50 cortaba un día
+      // con servicios cortos, y con 7 días dejaba ver solo los tres primeros.
+      limit: PublicController.MAX_SLOTS_PER_REQUEST,
+    });
+  }
+
+  /**
+   * `GET /:slug/availability/days` — días con al menos un horario libre, para
+   * marcar el calendario de la web. Mismas validaciones que `availability`;
+   * `days` hasta `MAX_CALENDAR_DAYS`.
+   */
+  @Get(':slug/availability/days')
+  @UseGuards(RateLimit(30, 'public-availability-days'))
+  async getAvailableDays(
+    @Param('slug', SlugValidationPipe) slug: string,
+    @Query('serviceId') serviceId: string,
+    @Query('professionalId') professionalId: string,
+    @Query('from') from: string,
+    @Query('days') days?: string,
+  ): Promise<string[]> {
+    if (!serviceId || !professionalId || !from) {
+      throw new BadRequestException(
+        'serviceId, professionalId y from son obligatorios',
+      );
+    }
+    this.assertValidAvailabilityFrom(from);
+
+    const clinic = await this.prisma.clinic.findFirst({
+      where: { slug, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    if (!clinic) {
+      throw new NotFoundException('clínica no encontrada');
+    }
+
+    await this.assertBookableSelection({
+      clinicId: clinic.id,
+      serviceId,
+      professionalId,
+    });
+
+    return this.availability.getAvailableDates({
+      clinicId: clinic.id,
+      serviceId,
+      professionalId,
+      fromISO: from,
+      days: this.parseAvailabilityDays(days, PublicController.MAX_CALENDAR_DAYS),
     });
   }
 

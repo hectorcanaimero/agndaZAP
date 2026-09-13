@@ -152,6 +152,82 @@ describe('AvailabilityService', () => {
     }
   });
 
+  describe('getAvailableDates (calendario de la web, ADR 0023)', () => {
+    it('días con hueco en la TZ de la clínica, sin cortar en el tope de slots de getSlots', async () => {
+      // Lun a vie de 9 a 20 h: 11 slots de 1 h por día. Con el tope viejo de
+      // 50 slots, el viernes y los siguientes no aparecían.
+      const businessHours = [1, 2, 3, 4, 5].map((weekday) => ({
+        weekday,
+        startMinutes: 9 * 60,
+        endMinutes: 20 * 60,
+        professionalId: null,
+      }));
+      const availability = new AvailabilityService(makePrisma({ businessHours }));
+
+      const dates = await availability.getAvailableDates({
+        clinicId,
+        serviceId,
+        professionalId,
+        fromISO: monday2099,
+        days: 14,
+      });
+
+      expect(dates).toEqual([
+        '2099-01-05', '2099-01-06', '2099-01-07', '2099-01-08', '2099-01-09',
+        '2099-01-12', '2099-01-13', '2099-01-14', '2099-01-15', '2099-01-16',
+      ]);
+    });
+
+    it('la fecha sale en la TZ de la clínica: un turno de 21 h del lunes es lunes, aunque en UTC ya sea martes', async () => {
+      const availability = new AvailabilityService(
+        makePrisma({
+          businessHours: [
+            { weekday: 1, startMinutes: 21 * 60, endMinutes: 22 * 60, professionalId: null },
+          ],
+        }),
+      );
+
+      const dates = await availability.getAvailableDates({
+        clinicId,
+        serviceId,
+        professionalId,
+        fromISO: monday2099,
+        days: 1,
+      });
+
+      expect(dates).toEqual(['2099-01-05']);
+    });
+
+    it('un día lleno de citas no aparece', async () => {
+      const availability = new AvailabilityService(
+        makePrisma({
+          businessHours: [
+            { weekday: 1, startMinutes: 9 * 60, endMinutes: 10 * 60, professionalId: null },
+            { weekday: 2, startMinutes: 9 * 60, endMinutes: 10 * 60, professionalId: null },
+          ],
+          appointments: [
+            {
+              // Lunes 9:00 en Caracas (UTC-4).
+              startAt: new Date('2099-01-05T13:00:00Z'),
+              endAt: new Date('2099-01-05T14:00:00Z'),
+              service: { bufferMin: 0 },
+            },
+          ],
+        }),
+      );
+
+      const dates = await availability.getAvailableDates({
+        clinicId,
+        serviceId,
+        professionalId,
+        fromISO: monday2099,
+        days: 7,
+      });
+
+      expect(dates).toEqual(['2099-01-06']);
+    });
+  });
+
   it('fallback: profesional SIN horario propio hereda el de la clínica', async () => {
     const prisma = makePrisma({
       businessHours: [

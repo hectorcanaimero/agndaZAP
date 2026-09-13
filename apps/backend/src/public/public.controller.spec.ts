@@ -764,8 +764,63 @@ describe('PublicController', () => {
           professionalId: 'prof-1',
           fromISO: '2030-06-01',
           days: 7,
+          limit: 200,
         }),
       );
+    });
+  });
+
+  describe('GET :slug/availability/days (ADR 0023)', () => {
+    beforeEach(() => {
+      availability.getAvailableDates = jest
+        .fn()
+        .mockResolvedValue(['2030-06-01', '2030-06-03']);
+    });
+
+    it('devuelve los días con hueco, con clinicId resuelto por slug y hasta 60 días', async () => {
+      const res = await controller.getAvailableDays(
+        'clinica-a',
+        'svc-1',
+        'prof-1',
+        '2030-06-01',
+        '90',
+      );
+
+      expect(res).toEqual(['2030-06-01', '2030-06-03']);
+      expect(availability.getAvailableDates).toHaveBeenCalledWith({
+        clinicId: 'clinic-A',
+        serviceId: 'svc-1',
+        professionalId: 'prof-1',
+        fromISO: '2030-06-01',
+        days: 60,
+      });
+    });
+
+    it('tira 400 si falta un parámetro o `from` no es ISO', async () => {
+      await expect(
+        controller.getAvailableDays('clinica-a', 'svc-1', '', '2030-06-01'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        controller.getAvailableDays('clinica-a', 'svc-1', 'prof-1', 'mañana'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(availability.getAvailableDates).not.toHaveBeenCalled();
+    });
+
+    it('clínica inexistente o suspendida → 404', async () => {
+      prisma.clinic.findFirst.mockResolvedValueOnce(null);
+
+      await expect(
+        controller.getAvailableDays('clinica-a', 'svc-1', 'prof-1', '2030-06-01'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('servicio de otra clínica → 404 sin calcular nada (multi-tenant)', async () => {
+      prisma.service.findFirst.mockResolvedValueOnce(null);
+
+      await expect(
+        controller.getAvailableDays('clinica-a', 'svc-otra', 'prof-1', '2030-06-01'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(availability.getAvailableDates).not.toHaveBeenCalled();
     });
   });
 });
