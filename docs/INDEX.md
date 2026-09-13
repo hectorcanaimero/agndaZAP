@@ -93,6 +93,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[notas/2026-09-11-revision-fks-compuestas-restantes|2026-09-11 — Los otros 9 pares del ADR 0022: cuáles merecen FK compuesta]]
 - [[notas/2026-09-12-stt-descarga-segura|2026-09-12 — Transcribir notas de voz: por qué el servicio desconfía de su propia URL]]
 - [[notas/2026-09-12-stt-cableado-notas-de-voz|2026-09-12 — Cablear la transcripción: quién decide qué, y qué pasa cuando algo falla]]
+- [[notas/2026-09-12-confirmacion-escrita-por-voz|2026-09-12 — Por voz no se confirma ni se cancela una cita]]
 - [[notas/2026-09-12-waha-media-storage|2026-09-12 — WAHA no descarga los adjuntos si no se lo pides, y cuánto vive el fichero]]
 
 ## Análisis
