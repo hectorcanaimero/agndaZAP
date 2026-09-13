@@ -36,7 +36,7 @@ Las clínicas y consultorios pequeños/medianos en LATAM pierden entre **20% y 3
 
 ## 2. Usuarios
 
-- **Paciente (usuario final):** agenda, reprograma, cancela y confirma su cita por WhatsApp. No instala nada.
+- **Paciente (usuario final):** escribe por WhatsApp; agenda y reprograma en la página que el asistente le manda (sin instalar nada), confirma y cancela respondiendo en el chat, y recibe la confirmación por WhatsApp ([[adr/0023-bot-link-first]]).
 - **Recepción / secretaria (usuario admin):** gestiona la agenda, servicios, profesionales y horarios desde el panel web. Ve y responde conversaciones.
 - **Profesional / dueño (usuario móvil):** ve su agenda del día y sus citas desde el panel web responsive (`GET /appointments/mine`, feed iCal para su calendario). La app Flutter nativa con push llega en la Fase 4.
 - **SUPERADMIN (operador de la plataforma Showly):** rol de operador SaaS con panel propio en `/admin/*`. Puede crear, suspender, reactivar y archivar cuentas de clínica (tenants); ver métricas cross-tenant; acceder al log de auditoría; e impersonar cualquier clínica activa con un JWT temporal de 30 minutos para operar en su contexto. NO opera directamente sobre endpoints de clínica — toda acción transversal pasa por impersonation auditada. Ver [[adr/0014-superadmin-como-operador-saas]].
@@ -47,11 +47,11 @@ Las clínicas y consultorios pequeños/medianos en LATAM pierden entre **20% y 3
 
 ### Bot de WhatsApp (vía WAHA)
 - Recibe mensajes entrantes y detecta intención con LLM barata (DeepSeek primario, Gemini fallback).
-- Flujo de **agendamiento**: elegir servicio → elegir profesional (opcional) → elegir fecha/hora disponible → confirmar → cita creada.
-- Flujo de **reprogramación** y **cancelación** por el paciente.
+- **Agendamiento y reprogramación por link** ([[adr/0023-bot-link-first]]): el bot detecta la intención y manda la página de agendamiento (con nombre y teléfono ya rellenados) o la de gestión de la cita. No elige horarios por chat: ahí es donde se perdía. Al terminar en la web, el paciente recibe la confirmación por WhatsApp.
+- **Cancelación** respondiendo *CANCELAR* en el chat, o desde el link de gestión.
 - Responde **preguntas frecuentes** desde una base de conocimiento por clínica (dirección, horarios, precios, formas de pago) vía RAG simple.
 - Handoff a humano: si el bot no entiende o el paciente pide "hablar con alguien", marca la conversación para atención humana en el panel.
-- Escalado bot → web: cuando el bot no puede cerrar la cita por chat (p. ej. conversación `@lid` sin número), manda un link con token efímero a la página pública que ya trae nombre/teléfono y deja la cita atada a la conversación ([[adr/0018-scheduling-link-wa]]).
+- Link con token efímero a la página pública, que ya trae nombre/teléfono y deja la cita atada a la conversación ([[adr/0018-scheduling-link-wa]]). Desde el ADR 0023 es el camino normal, no la excepción del caso `@lid`.
 
 ### Motor de recordatorios anti no-show (el diferenciador)
 - Recordatorio configurable: por defecto 24h antes y 3h antes de la cita.
@@ -111,16 +111,14 @@ Las clínicas y consultorios pequeños/medianos en LATAM pierden entre **20% y 3
 
 ### 5.1 Paciente agenda (happy path)
 1. Paciente escribe al WhatsApp de la clínica: "Quiero una cita".
-2. Bot detecta intención = agendar. Pregunta servicio.
-3. Paciente elige servicio (lista o texto libre interpretado por LLM).
-4. Bot ofrece próximos horarios disponibles (según agenda, servicio y profesional).
-5. Paciente elige. Bot confirma datos y crea la cita (estado: CONFIRMADA o PENDIENTE según config).
-6. Bot envía confirmación con fecha, hora, dirección y botón de cancelar/reagendar.
+2. Bot detecta intención = agendar y responde con el link de agendamiento (nombre y teléfono ya rellenados).
+3. En la web el paciente elige servicio, profesional, día y hora en un calendario y confirma. Se crea la cita (CONFIRMADA o PENDIENTE según config).
+4. El paciente recibe por WhatsApp la confirmación con fecha, hora, dirección y link para cancelar o cambiar.
 
 ### 5.2 Recordatorio anti no-show
 1. Job programado dispara el recordatorio (24h y 3h antes).
 2. Bot envía mensaje pidiendo confirmación.
-3. Paciente responde SÍ → cita CONFIRMADA. Responde REAGENDAR → entra al flujo de reprogramación. Responde CANCELAR → cita CANCELADA + libera el horario.
+3. Paciente responde SÍ → cita CONFIRMADA. Responde REAGENDAR → recibe el link de gestión y elige el horario nuevo en la web (la cita sigue en pie hasta que la mueva). Responde CANCELAR → cita CANCELADA + libera el horario.
 4. Si no responde antes del umbral → cita marcada EN_RIESGO + alerta a recepción en el panel.
 
 ### 5.3 Handoff a humano

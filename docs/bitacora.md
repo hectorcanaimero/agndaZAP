@@ -1,5 +1,15 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-13 — Bot link-first: agendar y reagendar por link (rama `feat/bot-link-first`, [[adr/0023-bot-link-first]])
+- **Por qué**: el owner probó agendar por WhatsApp contra `main` 6bad599 y el bot se perdió en los horarios. Cada tanda mostraba los 6 primeros de la semana (todos del lunes), "ver más" saltaba al lunes siguiente sin pasar por martes-viernes, "tienes para el 15" se leía como la opción 15 y "cualquera" no se entendía. Arreglar la FSM cerraba esos tres casos, no la clase de fallo.
+- **Decisión del owner**: agendar y reagendar pasan siempre por el link. `SÍ` y `CANCELAR` exacto se quedan en el chat: son respuestas cerradas y liberar el turno sin abrir un navegador es lo que evita el no-show.
+- **Lo que faltaba y no se veía**: crear, mover o cancelar desde la web **no mandaba nada por WhatsApp**. Con el link como camino único el paciente volvía al chat sin un "listo". `PatientWhatsappNotifier` lo manda solo a quien ya tiene conversación: nunca abre un chat desde el formulario, porque cualquiera puede escribir el teléfono de otro.
+- **Token caducado → `PUBLIC`** en vez de 400: con el link como camino normal, abrirlo pasados 30 min es lo habitual y perdía la reserva de quien ya había elegido horario.
+- **Gotcha**: el primer cableado (`PublicModule` importando `WhatsappModule` con `forwardRef`) pasaba `tsc` y 1519 tests, pero la app no arrancaba (`BotModule` con un import `undefined`). Se vio levantando el contexto de Nest a mano; ver [[notas/2026-09-13-ciclo-modulos-public-whatsapp]]. Arreglo: `WahaClientModule` hoja.
+- **Vuelta atrás**: `BOT_CHAT_BOOKING_ENABLED=true` restaura FSM y textos. La suite de la FSM corre con el flag encendido; la nueva (25 tests) cubre el defecto. Las dos se comprobaron reinyectando el bug (flag forzado, salida de la FSM atrapada, filtro de tenant y orden enviar/persistir en el notifier).
+- **Pendiente**: medir la conversión `BOT_WEB` en el piloto; borrar la FSM y el flag al cerrarlo. Los PRs abiertos #103 y #105 tocan `bot.service.ts`.
+- **Local**: faltaba `WEB_BASE_URL` en el `.env` del VPS, así que los links salían con `localhost:3000`.
+
 ## 2026-09-12 — B6: el aviso de "asistente automático" deja de repetirse en cada saludo (rama `feat/bot-disclosure-24h`)
 - **Antes**: `resolveBotMessage('greeting')` concatenaba `aiDisclosure` SIEMPRE. Un paciente que saluda tres veces en la semana leía tres veces que habla con un bot. **Ahora**: el primer saludo de la conversación siempre lo lleva, y después como mucho una vez cada 24 h.
 - **Sin estado nuevo**: no hay columna `disclosureShownAt` ni flag en `flowData`. `shouldSendAiDisclosure` pregunta si hay algún `Message OUT` de esa conversación en las últimas 24 h **cuyo cuerpo contenga el aviso**. La query cae en el índice `[conversationId, createdAt]` que ya existe.
