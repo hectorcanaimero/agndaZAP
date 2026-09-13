@@ -43,3 +43,27 @@ Psicología aplicada al copy de `bot.service.ts` y `reminders.processor.ts`:
 Nota: el saludo NO pasa por LLM ni RAG (barato y determinista). La base de
 conocimiento se consulta solo cuando `IntentService` clasifica el mensaje como
 `PREGUNTA_FAQ`.
+
+---
+
+## Actualización 2026-09-12: la web NO estaba migrada (y ahora lo verifica CI)
+
+Esta nota daba a entender que la migración estaba hecha. No lo estaba: en
+`apps/web/messages/es.json` quedaban **55 cadenas en voseo**, y no en rincones
+—el titular de la página pública de agendamiento decía *"Agendá tu cita"* y el
+formulario *"Elegí servicio, profesional y horario"*. Lo que el bot había
+migrado era el backend; la web se quedó fuera y la nota no lo distinguía.
+
+Migradas todas (imperativos `elegí → elige`, presentes `podés → puedes`, el
+enclítico `avisanos → avísanos` y el regionalismo `acá → aquí`).
+
+**Lo importante no es la migración, es que ahora se verifica.** El chequeo vive
+en `scripts/i18n-check.mjs`, que ya corría en CI, y detecta el voseo **por
+patrón** —toda palabra acabada en á/é/í o en -ás/-és/-ís, con una lista corta de
+excepciones legítimas— y no por lista de verbos. La primera versión del chequeo
+sí era una lista de 23 verbos y daba "✓ sin voseo" sobre un fichero cuyo titular
+decía "Agendá tu cita": una lista de verbos no termina nunca, el patrón sí.
+
+Si CI señala una palabra legítima nueva (un nombre propio, un futuro de tuteo),
+se añade a `LEGITIMAS` con su motivo. Es una línea, y deja escrito por qué esa
+palabra no es voseo.
