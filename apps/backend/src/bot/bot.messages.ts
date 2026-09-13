@@ -128,6 +128,41 @@ export interface BotCopy {
    */
   voiceNoteTooLong: string;
   voiceNoteFailed: string;
+
+  /**
+   * Nota de voz que el parser leería como una confirmación o una cancelación
+   * (M10, PR5). En vez de actuar, el bot repite lo que entendió y pide que se
+   * lo escriban.
+   *
+   * El motivo: la transcripción entra al pipeline como si el paciente lo
+   * hubiera escrito, pero un "sí" es un golpe de voz muy corto y el proveedor
+   * no nos da ninguna señal de confianza. Confirmar o cancelar una cita a
+   * partir de eso sería hacerlo sin que el paciente lo haya dicho.
+   *
+   * `palabra` es la que tiene que escribir, en negrita como en el resto de la
+   * familia (`confirmNeedsWord`, `cancelNeedsWord`). No es solo cortesía: un
+   * eco sin la palabra se interpone entre la pregunta y la respuesta y deja al
+   * paciente adivinando qué escribir.
+   */
+  voiceConfirmEcho: (entendido: string, palabra: string) => string;
+
+  /**
+   * Segunda nota de voz seguida sobre lo mismo. Quien manda audios suele ser
+   * quien peor escribe: insistir en pedirle texto es un callejón sin salida,
+   * así que a la segunda lo atiende una persona.
+   */
+  voiceConfirmHandoff: string;
+
+  /**
+   * Las palabras que el paciente tiene que escribir, sueltas. Existen para que
+   * `voiceConfirmEcho` pida **la misma** que ya usan `reminder` y
+   * `confirmNeedsWord`: si el eco dijera "SÍ" y el recordatorio "SIM", el
+   * paciente en portugués escribiría lo que le dijimos y no lo entenderíamos.
+   */
+  wordYes: string;
+  wordNo: string;
+  wordCancel: string;
+  wordReschedule: string;
 }
 
 /**
@@ -304,6 +339,14 @@ const es: BotCopy = {
     'Tu nota de voz es un poco larga para que la entienda. ¿Me la resumes en un mensaje? Mientras tanto, le aviso a alguien del equipo.',
   voiceNoteFailed:
     'No pude escuchar tu nota de voz. Le aviso a alguien del equipo para que te atienda.',
+  voiceConfirmEcho: (entendido, palabra) =>
+    `Entendí: "${entendido}". Como viene de una nota de voz prefiero asegurarme, para no confirmar ni cancelar nada por error: escríbeme *${palabra}* y lo hago.`,
+  voiceConfirmHandoff:
+    'Para no equivocarme con tu cita, mejor te paso con una persona del equipo. Ya le avisé; te escribe en un momento.',
+  wordYes: 'SÍ',
+  wordNo: 'NO',
+  wordCancel: 'CANCELAR',
+  wordReschedule: 'REAGENDAR',
 };
 
 const pt: BotCopy = {
@@ -467,6 +510,14 @@ const pt: BotCopy = {
     'Sua nota de voz é um pouco longa para eu entender. Você me resume em uma mensagem? Enquanto isso, aviso alguém da equipe.',
   voiceNoteFailed:
     'Não consegui escutar sua nota de voz. Vou avisar alguém da equipe para te atender.',
+  voiceConfirmEcho: (entendido, palabra) =>
+    `Entendi: "${entendido}". Como veio de uma nota de voz prefiro ter certeza, para não confirmar nem cancelar nada por engano: me escreva *${palabra}* que eu faço.`,
+  voiceConfirmHandoff:
+    'Para não errar com a sua consulta, prefiro te passar para uma pessoa da equipe. Já avisei; ela te escreve em instantes.',
+  wordYes: 'SIM',
+  wordNo: 'NÃO',
+  wordCancel: 'CANCELAR',
+  wordReschedule: 'REMARCAR',
 };
 
 /** Si alguien añade una clave a `es` y se olvida de `pt`, esto no compila. */
