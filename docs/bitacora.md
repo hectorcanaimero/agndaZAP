@@ -1,13 +1,16 @@
 # Bitácora de sesiones — AgendaZap
 
-## 2026-09-13 — Bot link-first: agendar y reagendar por link (rama `feat/bot-link-first`, [[adr/0023-bot-link-first]])
+## 2026-09-13 — Bot link-first: agendar y reagendar por link (rama `feat/bot-link-first`, [[adr/0024-bot-link-first]])
 - **Por qué**: el owner probó agendar por WhatsApp contra `main` 6bad599 y el bot se perdió en los horarios. Cada tanda mostraba los 6 primeros de la semana (todos del lunes), "ver más" saltaba al lunes siguiente sin pasar por martes-viernes, "tienes para el 15" se leía como la opción 15 y "cualquera" no se entendía. Arreglar la FSM cerraba esos tres casos, no la clase de fallo.
 - **Decisión del owner**: agendar y reagendar pasan siempre por el link. `SÍ` y `CANCELAR` exacto se quedan en el chat: son respuestas cerradas y liberar el turno sin abrir un navegador es lo que evita el no-show.
 - **Lo que faltaba y no se veía**: crear, mover o cancelar desde la web **no mandaba nada por WhatsApp**. Con el link como camino único el paciente volvía al chat sin un "listo". `PatientWhatsappNotifier` lo manda solo a quien ya tiene conversación: nunca abre un chat desde el formulario, porque cualquiera puede escribir el teléfono de otro.
 - **Token caducado → `PUBLIC`** en vez de 400: con el link como camino normal, abrirlo pasados 30 min es lo habitual y perdía la reserva de quien ya había elegido horario.
 - **Gotcha**: el primer cableado (`PublicModule` importando `WhatsappModule` con `forwardRef`) pasaba `tsc` y 1519 tests, pero la app no arrancaba (`BotModule` con un import `undefined`). Se vio levantando el contexto de Nest a mano; ver [[notas/2026-09-13-ciclo-modulos-public-whatsapp]]. Arreglo: `WahaClientModule` hoja.
 - **Vuelta atrás**: `BOT_CHAT_BOOKING_ENABLED=true` restaura FSM y textos. La suite de la FSM corre con el flag encendido; la nueva (25 tests) cubre el defecto. Las dos se comprobaron reinyectando el bug (flag forzado, salida de la FSM atrapada, filtro de tenant y orden enviar/persistir en el notifier).
-- **Pendiente**: medir la conversión `BOT_WEB` en el piloto; borrar la FSM y el flag al cerrarlo. Los PRs abiertos #103 y #105 tocan `bot.service.ts`.
+- **Auditoría de seguridad** (sin fugas entre clínicas): un alto — crear y cancelar en bucle con el teléfono de un paciente con chat le mandaba dos WhatsApp por vuelta. Arreglo: sin conversación verificada por token, solo si escribió en 24 h; dedupe y tope en Redis, fail-closed. Además timeout de WAHA solo para este aviso (la revisión de código vio que global duplicaba mensajes en jobs que reintentan), token devuelto a Redis si la cita falla y logs sin `message` de Prisma.
+- **Calendario (R8)**: al probar la web el owner solo podía elegir horas de mañana. Causa: `ScheduleForm` se quedaba con los 12 primeros horarios de una respuesta cortada en 50 por el backend. Endpoint `availability/days` + `SlotPicker` con calendario de 60 días en el formulario y en la gestión de cita.
+- **ADR 0024 y no 0023**: el PR #105 ya usa el 0023.
+- **Pendiente**: medir la conversión `BOT_WEB` en el piloto; borrar la FSM y el flag al cerrarlo. Los PRs abiertos #103 y #105 tocan `bot.service.ts` (ver consecuencias del ADR para el #103).
 - **Local**: faltaba `WEB_BASE_URL` en el `.env` del VPS, así que los links salían con `localhost:3000`.
 
 ## 2026-09-12 — B6: el aviso de "asistente automático" deja de repetirse en cada saludo (rama `feat/bot-disclosure-24h`)

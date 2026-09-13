@@ -79,7 +79,7 @@ export class CreatePublicAppointmentDto {
    *   3. Ata la cita creada a la Conversation origen (`conversationId`).
    *   4. Marca la cita con `source: 'BOT_WEB'` en vez de `'PUBLIC'`.
    *
-   * Si el token caducó o ya se usó, la cita se crea como `PUBLIC` (ADR 0023):
+   * Si el token caducó o ya se usó, la cita se crea como `PUBLIC` (ADR 0024):
    * con el link como camino normal del bot, abrirlo pasados 30 min es lo
    * habitual y un 400 le hacía perder la reserva. El token no autoriza nada
    * que el formulario no permita sin él. De otra clínica → 400.

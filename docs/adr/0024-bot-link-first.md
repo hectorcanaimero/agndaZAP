@@ -4,7 +4,7 @@ date: 2026-09-13
 tags: [bot, scheduling, whatsapp, web, producto]
 ---
 
-# ADR 0023 — Bot link-first: agendar y reagendar por link, no por chat
+# ADR 0024 — Bot link-first: agendar y reagendar por link, no por chat
 
 ## Contexto
 
@@ -43,7 +43,11 @@ la gestión de cita de [[0020-gestion-cita-por-link]].
 - **Aviso por WhatsApp** al crear, mover o cancelar desde la web, que antes no existía: sin él el
   paciente vuelve al chat sin un "listo". Solo a quien ya tiene conversación con la clínica; nunca
   abre un chat desde el formulario público (cualquiera puede escribir el teléfono de otro, y el
-  número de la clínica acabaría baneado).
+  número de la clínica acabaría baneado). La auditoría de seguridad encontró que eso no bastaba
+  (crear y cancelar en bucle): sin conversación verificada por token exige un mensaje entrante en
+  24 h, con dedupe y tope por conversación en Redis, fail-closed.
+- **Calendario en la web**: la lista plana mostraba los 12 primeros horarios de un corte de 50 y
+  no dejaba elegir otro día. Endpoint `availability/days` + `SlotPicker` (60 días).
 - **Token de agendamiento caducado → cita `PUBLIC`**, no 400. El token no autoriza nada que el
   formulario no permita sin él; solo ata la conversación. Con el link como camino normal, abrirlo
   pasados 30 min es lo habitual.
@@ -86,6 +90,11 @@ flag encendido. **Diferida**: se borra al cerrar el piloto.
   reservar en un toque y le confirma por WhatsApp.
 - Con token caducado la cita pierde el `conversationId`. El aviso cae a la búsqueda por teléfono,
   que no existe en un chat `@lid`: ese paciente no recibe el "listo" (sí lo ve en `/gracias`).
+- Quien gestiona desde el link de un recordatorio sin haber escrito en 24 h tampoco recibe el
+  aviso por WhatsApp (regla anti-spam); lo ve en la página.
+- Choca en lógica con el PR #103 (guard de audio): pide confirmación escrita para `REAGENDAR`
+  porque "pone la FSM en ASK_SLOT". Con el flag apagado solo manda un link; al mergear, aplicar ese
+  guard a `RESCHEDULE` solo si `chatBookingEnabled()`.
 - `WahaService` pasa a `WahaClientModule` (hoja): importar `WhatsappModule` desde `PublicModule`
   cerraba un ciclo de archivos y `BotModule` arrancaba con un import `undefined`. Ver
   [[notas/2026-09-13-ciclo-modulos-public-whatsapp]].

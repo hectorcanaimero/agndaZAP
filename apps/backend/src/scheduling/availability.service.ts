@@ -182,7 +182,7 @@ export class AvailabilityService {
   /**
    * Días (`YYYY-MM-DD` en la TZ de la clínica) con al menos un horario libre.
    *
-   * Alimenta el calendario de la web (ADR 0023): con el link como camino normal
+   * Alimenta el calendario de la web (ADR 0024): con el link como camino normal
    * para agendar, el paciente tiene que poder elegir cualquier día, y pedir
    * todos los slots de 60 días para saber cuáles marcar mandaría cientos al
    * navegador. Reusa `getSlots` sin tope para que las reglas (horario,

@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type Redis from 'ioredis';
+import { DateTime } from 'luxon';
 import { REDIS_CLIENT } from '../public/rate-limit.guard';
 import { manageAppointmentUrl } from '../common/web-url.util';
 
@@ -175,7 +176,7 @@ export class SchedulingSessionService {
    * Devuelve a Redis un token consumido cuando la cita NO llegó a crearse
    * (horario ocupado, datos inválidos). Sin esto el reintento del paciente
    * sale como `PUBLIC`, sin conversación, y en un chat `@lid` se queda sin el
-   * aviso por WhatsApp que el bot le prometió (ADR 0023).
+   * aviso por WhatsApp que el bot le prometió (ADR 0024).
    *
    * Con el TTL que le quedaba, contado desde `createdAtISO`: restaurar no puede
    * alargarle la vida. `NX` para no pisar nada si otra petición ya lo recreó.
@@ -184,7 +185,7 @@ export class SchedulingSessionService {
   async restore(token: string, data: SchedulingSessionData): Promise<void> {
     if (!isPlausibleToken(token)) return;
     const elapsedSec = Math.floor(
-      (Date.now() - new Date(data.createdAtISO).getTime()) / 1000,
+      DateTime.now().diff(DateTime.fromISO(data.createdAtISO), 'seconds').seconds,
     );
     const remaining = DEFAULT_TTL_SECONDS - elapsedSec;
     if (!Number.isFinite(remaining) || remaining <= 0) return;

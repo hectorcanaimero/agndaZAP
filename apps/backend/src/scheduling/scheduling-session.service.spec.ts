@@ -144,7 +144,7 @@ describe('SchedulingSessionService', () => {
     });
   });
 
-  describe('restore (ADR 0023)', () => {
+  describe('restore (ADR 0024)', () => {
     it('devuelve el token consumido para que el reintento siga atado al chat', async () => {
       const { token } = await service.create(baseInput());
       const consumed = await service.consume(token);

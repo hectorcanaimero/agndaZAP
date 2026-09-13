@@ -65,13 +65,14 @@ type FlowStep =
   | 'AWAITING_NPS_SCORE'
   | 'AWAITING_NPS_COMMENT';
 
-/** Pasos de agendar/reagendar por chat. Los de NPS no cuentan (ADR 0023). */
-const BOOKING_STEPS: ReadonlySet<string> = new Set<FlowStep>([
-  'ASK_SERVICE',
-  'ASK_PROFESSIONAL',
-  'ASK_SLOT',
-  'ASK_NAME',
-  'CONFIRM',
+/**
+ * Pasos que siguen vivos con el bot link-first (ADR 0024): solo la encuesta.
+ * Se lista lo que se QUEDA y no lo que sale, para que un `flowStep` que nadie
+ * previó también salga al link en vez de caer en `startFlow`.
+ */
+const NPS_STEPS: ReadonlySet<string> = new Set<FlowStep>([
+  'AWAITING_NPS_SCORE',
+  'AWAITING_NPS_COMMENT',
 ]);
 
 /** Datos acumulados durante la FSM, persistidos en Conversation.flowData. */
@@ -723,13 +724,13 @@ export class BotService {
 
     // 1) FSM activa: procesamos el paso ANTES de tocar el LLM.
     //
-    // Con el bot link-first (ADR 0023) un paso de agendamiento solo puede
+    // Con el bot link-first (ADR 0024) un paso de agendamiento solo puede
     // venir de antes del despliegue, o de un rollback del flag que se apagó
     // otra vez. No lo retomamos: el paciente atrapado en la lista de horarios
     // recibe el link, que es justo lo que este cambio existe para darle.
     if (
       convo.flowStep &&
-      BOOKING_STEPS.has(convo.flowStep) &&
+      !NPS_STEPS.has(convo.flowStep) &&
       !chatBookingEnabled()
     ) {
       await this.leaveChatBookingFlow(clinic, convo, normalized, phone);
@@ -964,7 +965,7 @@ export class BotService {
     }
   }
 
-  // ─────────────────────────── Link-first (ADR 0023) ───────────────────────────
+  // ─────────────────────────── Link-first (ADR 0024) ───────────────────────────
 
   /**
    * "Quiero agendar" sin FSM: el link de la web con token, que llega con el
@@ -2276,7 +2277,7 @@ export class BotService {
     // no-show tiene (M2-c).
     const link = await this.manageLink(clinic, appt);
 
-    // Link-first (ADR 0023): mover la cita se hace en la web. Sin link no hay
+    // Link-first (ADR 0024): mover la cita se hace en la web. Sin link no hay
     // camino que no pase por la lista de horarios por chat, así que recepción.
     if (!chatBookingEnabled()) {
       if (!link) {

@@ -84,7 +84,7 @@ describe('BotService — FSM de agendamiento', () => {
     process.env.BOT_TYPING_ENABLED = 'false';
 
     // Casi toda esta suite es la FSM de agendar y reagendar por chat, que desde
-    // el ADR 0023 solo corre con el flag de vuelta atrás encendido. Se deja
+    // el ADR 0024 solo corre con el flag de vuelta atrás encendido. Se deja
     // encendido aquí para que siga protegiéndola mientras exista; el
     // comportamiento por defecto (link-first) tiene su propio `describe` al
     // final, que lo apaga.
@@ -2905,8 +2905,8 @@ describe('BotService — FSM de agendamiento', () => {
       expect(await greet()).toContain(BotService.AI_DISCLOSURE);
     });
   });
-  // ───────────── Link-first (ADR 0023): agendar y reagendar por la web ─────────────
-  describe('bot link-first (BOT_CHAT_BOOKING_ENABLED apagado, ADR 0023)', () => {
+  // ───────────── Link-first (ADR 0024): agendar y reagendar por la web ─────────────
+  describe('bot link-first (BOT_CHAT_BOOKING_ENABLED apagado, ADR 0024)', () => {
     const upcoming = {
       id: 'appt-7',
       clinicId: 'clinic-A',
@@ -3102,6 +3102,7 @@ describe('BotService — FSM de agendamiento', () => {
 
       it('si estaba moviendo una cita, manda el link de gestión', async () => {
         prisma.appointment.findFirst.mockResolvedValue(upcoming);
+        scheduling.rescheduleAppointment = jest.fn();
         convoState.flowStep = 'ASK_SLOT';
         convoState.flowData = { rescheduleOf: 'appt-7', serviceId: 'svc-1' };
 
@@ -3109,7 +3110,7 @@ describe('BotService — FSM de agendamiento', () => {
 
         expect(convoState.flowStep).toBeNull();
         expect(lastReply()).toContain('/cita?t=mtok-abc');
-        expect(scheduling.rescheduleAppointment).toBeUndefined();
+        expect(scheduling.rescheduleAppointment).not.toHaveBeenCalled();
       });
 
       it('"cancelar" abandona la reserva: pausa, no cancela ninguna cita', async () => {
@@ -3122,6 +3123,17 @@ describe('BotService — FSM de agendamiento', () => {
         expect(convoState.flowStep).toBeNull();
         expect(lastReply()).toBe(botCopy('es').flowAborted);
         expect(prisma.appointment.update).not.toHaveBeenCalled();
+      });
+
+      it('un flowStep que nadie previó también sale al link, no a la FSM', async () => {
+        convoState.flowStep = 'ASK_ALGO_VIEJO';
+        convoState.flowData = {};
+
+        await say('hola');
+
+        expect(convoState.flowStep).toBeNull();
+        expect(lastReply()).toContain('?t=tok-abc');
+        expect(prisma.service.findMany).not.toHaveBeenCalled();
       });
 
       it('pedir un humano sigue ganando', async () => {

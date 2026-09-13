@@ -152,7 +152,7 @@ describe('AvailabilityService', () => {
     }
   });
 
-  describe('getAvailableDates (calendario de la web, ADR 0023)', () => {
+  describe('getAvailableDates (calendario de la web, ADR 0024)', () => {
     it('días con hueco en la TZ de la clínica, sin cortar en el tope de slots de getSlots', async () => {
       // Lun a vie de 9 a 20 h: 11 slots de 1 h por día. Con el tope viejo de
       // 50 slots, el viernes y los siguientes no aparecían.

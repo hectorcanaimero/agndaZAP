@@ -209,7 +209,7 @@ describe('PublicController', () => {
       resolveManage: jest.fn().mockResolvedValue(null),
       invalidateManage: jest.fn().mockResolvedValue(undefined),
     };
-    // Aviso por WhatsApp al paciente (ADR 0023). Sus reglas se prueban en
+    // Aviso por WhatsApp al paciente (ADR 0024). Sus reglas se prueban en
     // `patient-whatsapp-notifier.service.spec.ts`; aquí solo cuándo se llama.
     notifier = { notify: jest.fn().mockResolvedValue(true) };
     controller = new PublicController(
@@ -221,7 +221,7 @@ describe('PublicController', () => {
     );
   });
 
-  describe('POST :slug/appointments — aviso por WhatsApp (ADR 0023)', () => {
+  describe('POST :slug/appointments — aviso por WhatsApp (ADR 0024)', () => {
     const body = {
       phone: '+584141234567',
       name: 'Ana',
@@ -582,7 +582,7 @@ describe('PublicController', () => {
         );
       });
 
-      it('token caducado o ya usado → la cita se crea como PUBLIC, sin conversación (ADR 0023)', async () => {
+      it('token caducado o ya usado → la cita se crea como PUBLIC, sin conversación (ADR 0024)', async () => {
         // El bot manda el link en vez de agendar por chat: abrirlo pasados los
         // 30 min del token es lo normal, y un 400 le hacía perder la reserva.
         sessions.consume.mockResolvedValueOnce(null);
@@ -770,7 +770,7 @@ describe('PublicController', () => {
     });
   });
 
-  describe('GET :slug/availability/days (ADR 0023)', () => {
+  describe('GET :slug/availability/days (ADR 0024)', () => {
     beforeEach(() => {
       availability.getAvailableDates = jest
         .fn()
@@ -1168,7 +1168,7 @@ describe('PublicController — gestión de cita por link', () => {
           `${(process.env.WEB_BASE_URL ?? 'http://localhost:3000').replace(/\/+$/, '')}/${locale}/agendar/${slug}/cita?t=mtok-new`,
         ),
     };
-    // Aviso por WhatsApp al paciente (ADR 0023). Sus reglas se prueban en
+    // Aviso por WhatsApp al paciente (ADR 0024). Sus reglas se prueban en
     // `patient-whatsapp-notifier.service.spec.ts`; aquí solo cuándo se llama.
     notifier = { notify: jest.fn().mockResolvedValue(true) };
     controller = new PublicController(
@@ -1300,7 +1300,7 @@ describe('PublicController — gestión de cita por link', () => {
   });
 
   describe('POST manage/:token/cancel', () => {
-    it('avisa al paciente por WhatsApp de la cancelación (ADR 0023)', async () => {
+    it('avisa al paciente por WhatsApp de la cancelación (ADR 0024)', async () => {
       await controller.cancelManagedAppointment('clinica-a', TOKEN);
 
       expect(notifier.notify).toHaveBeenCalledWith({
@@ -1396,7 +1396,7 @@ describe('PublicController — gestión de cita por link', () => {
   describe('POST manage/:token/reschedule', () => {
     const body = { startAtISO: '2030-06-02T14:00:00.000Z' };
 
-    it('avisa al paciente del horario nuevo con el link nuevo (ADR 0023)', async () => {
+    it('avisa al paciente del horario nuevo con el link nuevo (ADR 0024)', async () => {
       process.env.WEB_BASE_URL = 'https://showly.us';
 
       await controller.rescheduleManagedAppointment('clinica-a', TOKEN, body as any);

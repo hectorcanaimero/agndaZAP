@@ -44,10 +44,16 @@ export interface BotCopy {
   apptConfirmedLine(service: string, when: string): string;
   apptPendingLine(service: string, when: string): string;
   /**
-   * Respuesta a "quiero agendar" sin FSM (ADR 0023). Sin "vence en 30 minutos":
+   * Respuesta a "quiero agendar" sin FSM (ADR 0024). Sin "vence en 30 minutos":
    * con el token caducado la web sigue agendando, solo sin datos precargados.
    */
   bookingLink(link: string): string;
+  /**
+   * Formato Luxon de fecha y hora, y línea de dirección, del aviso por WhatsApp
+   * de lo hecho en la web. La FSM del bot conserva su formato fijo en español.
+   */
+  whenFormat: string;
+  addressLine(address: string): string;
   /** Cierre del agendamiento: línea con el link de gestión, o el fallback. */
   manageLine(url: string): string;
   manageLineFallback: string;
@@ -190,7 +196,9 @@ const es: BotCopy = {
   apptPendingLine: (service, when) =>
     `Veo que tienes una cita de ${service} el ${when}.`,
   bookingLink: (link) =>
-    `¡Con gusto! Elige el servicio, el profesional y el horario que te queden mejor aquí:\n\n${link}\n\nCuando termines, te confirmo la cita por este chat.`,
+    `¡Con gusto! Elige el servicio, el profesional y el horario que te queden mejor aquí:\n\n${link}\n\nAl terminar verás la confirmación en la página.`,
+  whenFormat: "cccc d 'de' LLLL 'a las' HH:mm",
+  addressLine: (address) => `\nDirección: ${address}`,
   manageLine: (url) =>
     `\n\nSi necesitas cambiarla o cancelarla, entra aquí:\n${url}`,
   manageLineFallback: '\n\nSi necesitas cambiarla, escríbeme *reagendar*.',
@@ -356,7 +364,9 @@ const pt: BotCopy = {
   apptPendingLine: (service, when) =>
     `Vi que você tem uma consulta de ${service} em ${when}.`,
   bookingLink: (link) =>
-    `Com prazer! Escolha o serviço, o profissional e o horário que forem melhores para você aqui:\n\n${link}\n\nQuando terminar, confirmo a consulta por esta conversa.`,
+    `Com prazer! Escolha o serviço, o profissional e o horário que forem melhores para você aqui:\n\n${link}\n\nAo terminar, você verá a confirmação na página.`,
+  whenFormat: "cccc, d 'de' LLLL 'às' HH:mm",
+  addressLine: (address) => `\nEndereço: ${address}`,
   manageLine: (url) =>
     `\n\nSe precisar mudar ou cancelar, é por aqui:\n${url}`,
   manageLineFallback: '\n\nSe precisar mudar, escreva *remarcar*.',
@@ -484,7 +494,7 @@ const pt: BotCopy = {
 export const BOT_COPY: Record<BotLocale, BotCopy> = { es, pt };
 
 /**
- * Pools que cambian con el bot link-first (ADR 0023): los que prometían
+ * Pools que cambian con el bot link-first (ADR 0024): los que prometían
  * "escríbeme *agendar* y lo hacemos aquí". El resto de textos vale en los dos
  * modos, porque escribir *agendar* o *reagendar* sigue funcionando: ahora
  * responde con el link.
@@ -521,7 +531,7 @@ export const LINK_FIRST_POOLS: Record<BotLocale, LinkFirstPools> = {
 /**
  * Rellena una variante de `pools.confirmAppointment`. Lo comparten el bot
  * (cierre de la FSM) y el aviso por WhatsApp cuando el paciente agenda o mueve
- * la cita desde la web (ADR 0023), para que los dos digan lo mismo.
+ * la cita desde la web (ADR 0024), para que los dos digan lo mismo.
  */
 export function fillConfirmAppointment(
   copy: BotCopy,

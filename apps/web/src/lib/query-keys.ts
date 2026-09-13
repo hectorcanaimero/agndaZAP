@@ -54,7 +54,7 @@ export const queryKeys = {
     days?: number,
   ) =>
     ['availability', slug, serviceId ?? '', professionalId ?? '', from ?? '', days ?? 7] as const,
-  /** Días con hueco para el calendario público (ADR 0023). */
+  /** Días con hueco para el calendario público (ADR 0024). */
   availabilityDays: (
     slug: string,
     serviceId: string,

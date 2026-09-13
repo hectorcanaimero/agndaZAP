@@ -258,7 +258,7 @@ export class PublicController {
       professionalId,
       fromISO: from,
       days: parsedDays,
-      // La web pide un día cada vez (calendario, ADR 0023). 50 cortaba un día
+      // La web pide un día cada vez (calendario, ADR 0024). 50 cortaba un día
       // con servicios cortos, y con 7 días dejaba ver solo los tres primeros.
       limit: PublicController.MAX_SLOTS_PER_REQUEST,
     });
@@ -369,7 +369,7 @@ export class PublicController {
     // mismo token: la segunda invocación recibe token null y sigue como
     // `PUBLIC`, y el `@@unique` del horario la rechaza con 409.
     //
-    // Token caducado o ya usado → la cita se crea como `PUBLIC` (ADR 0023). El
+    // Token caducado o ya usado → la cita se crea como `PUBLIC` (ADR 0024). El
     // token no autoriza nada que el formulario público no permita sin él: solo
     // ata la conversación. Con el bot mandando el link en vez de agendar por
     // chat, abrirlo pasados 30 min es lo normal, y un 400 ahí le hacía perder
@@ -427,7 +427,7 @@ export class PublicController {
       }));
     } catch (e) {
       // La cita no se creó: el token vuelve a Redis con el TTL que le quedaba,
-      // para que el reintento siga atado a la conversación (ADR 0023).
+      // para que el reintento siga atado a la conversación (ADR 0024).
       if (consumedSession && dto.token) {
         await this.sessions.restore(dto.token, consumedSession);
       }

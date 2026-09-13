@@ -36,4 +36,4 @@ await app.close();
 (con `node --env-file=.env` sobre `dist/`; no escucha HTTP ni arranca workers). El job `e2e` de CI
 también lo detectaría, pero tarde.
 
-Ver [[adr/0023-bot-link-first]].
+Ver [[adr/0024-bot-link-first]].

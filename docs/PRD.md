@@ -36,7 +36,7 @@ Las clínicas y consultorios pequeños/medianos en LATAM pierden entre **20% y 3
 
 ## 2. Usuarios
 
-- **Paciente (usuario final):** escribe por WhatsApp; agenda y reprograma en la página que el asistente le manda (sin instalar nada), confirma y cancela respondiendo en el chat, y recibe la confirmación por WhatsApp ([[adr/0023-bot-link-first]]).
+- **Paciente (usuario final):** escribe por WhatsApp; agenda y reprograma en la página que el asistente le manda (sin instalar nada), confirma y cancela respondiendo en el chat, y recibe la confirmación por WhatsApp ([[adr/0024-bot-link-first]]).
 - **Recepción / secretaria (usuario admin):** gestiona la agenda, servicios, profesionales y horarios desde el panel web. Ve y responde conversaciones.
 - **Profesional / dueño (usuario móvil):** ve su agenda del día y sus citas desde el panel web responsive (`GET /appointments/mine`, feed iCal para su calendario). La app Flutter nativa con push llega en la Fase 4.
 - **SUPERADMIN (operador de la plataforma Showly):** rol de operador SaaS con panel propio en `/admin/*`. Puede crear, suspender, reactivar y archivar cuentas de clínica (tenants); ver métricas cross-tenant; acceder al log de auditoría; e impersonar cualquier clínica activa con un JWT temporal de 30 minutos para operar en su contexto. NO opera directamente sobre endpoints de clínica — toda acción transversal pasa por impersonation auditada. Ver [[adr/0014-superadmin-como-operador-saas]].
@@ -47,11 +47,11 @@ Las clínicas y consultorios pequeños/medianos en LATAM pierden entre **20% y 3
 
 ### Bot de WhatsApp (vía WAHA)
 - Recibe mensajes entrantes y detecta intención con LLM barata (DeepSeek primario, Gemini fallback).
-- **Agendamiento y reprogramación por link** ([[adr/0023-bot-link-first]]): el bot detecta la intención y manda la página de agendamiento (con nombre y teléfono ya rellenados) o la de gestión de la cita. No elige horarios por chat: ahí es donde se perdía. Al terminar en la web, el paciente recibe la confirmación por WhatsApp.
+- **Agendamiento y reprogramación por link** ([[adr/0024-bot-link-first]]): el bot detecta la intención y manda la página de agendamiento (con nombre y teléfono ya rellenados) o la de gestión de la cita. No elige horarios por chat: ahí es donde se perdía. Al terminar en la web, el paciente recibe la confirmación por WhatsApp.
 - **Cancelación** respondiendo *CANCELAR* en el chat, o desde el link de gestión.
 - Responde **preguntas frecuentes** desde una base de conocimiento por clínica (dirección, horarios, precios, formas de pago) vía RAG simple.
 - Handoff a humano: si el bot no entiende o el paciente pide "hablar con alguien", marca la conversación para atención humana en el panel.
-- Link con token efímero a la página pública, que ya trae nombre/teléfono y deja la cita atada a la conversación ([[adr/0018-scheduling-link-wa]]). Desde el ADR 0023 es el camino normal, no la excepción del caso `@lid`.
+- Link con token efímero a la página pública, que ya trae nombre/teléfono y deja la cita atada a la conversación ([[adr/0018-scheduling-link-wa]]). Desde el ADR 0024 es el camino normal, no la excepción del caso `@lid`.
 
 ### Motor de recordatorios anti no-show (el diferenciador)
 - Recordatorio configurable: por defecto 24h antes y 3h antes de la cita.

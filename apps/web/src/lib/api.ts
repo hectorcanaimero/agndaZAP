@@ -88,7 +88,7 @@ export async function fetchAvailability(
 
 /**
  * Días (`YYYY-MM-DD`, TZ de la clínica) con al menos un horario libre, para
- * marcar el calendario (ADR 0023). `days` hasta 60.
+ * marcar el calendario (ADR 0024). `days` hasta 60.
  */
 export async function fetchAvailableDays(
   slug: string,
@@ -127,7 +127,8 @@ export interface CreateAppointmentPayload {
   /**
    * Token de sesión del link WA (opcional). Cuando viene, el backend consume
    * el token, valida que el `clinicSlug` matchee la URL y ata la cita a la
-   * `Conversation` origen. Si el token expiró/es inválido → 400.
+   * `Conversation` origen. Caducado o ya usado → la cita se crea como `PUBLIC`;
+   * de otra clínica → 400 (ADR 0024).
    */
   token?: string;
 }

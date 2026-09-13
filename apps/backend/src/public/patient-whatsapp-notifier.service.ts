@@ -10,7 +10,7 @@ export type PatientNoticeKind = 'created' | 'rescheduled' | 'canceled';
 
 /**
  * Avisa por WhatsApp al paciente cuando agenda, mueve o cancela su cita desde
- * la web (ADR 0023).
+ * la web (ADR 0024).
  *
  * Con el bot link-first el chat ya no cierra la reserva: manda un link. Sin este
  * aviso el paciente volvía a WhatsApp y no encontraba ningún "listo".
@@ -47,6 +47,7 @@ export class PatientWhatsappNotifier {
   static readonly MAX_PER_CONVERSATION_PER_HOUR = 4;
   /** Ventana de "escribió hace poco", la misma que la sesión de WhatsApp. */
   static readonly RECENT_INBOUND_HOURS = 24;
+  static readonly SEND_TIMEOUT_MS = 10_000;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -122,7 +123,12 @@ export class PatientWhatsappNotifier {
       }
 
       const text = this.render(appt, kind, input.manageUrl ?? null);
-      await this.waha.sendText(appt.clinic.wahaSession, conversation.chatId, text);
+      // Con tope de tiempo: esto va sin `await` desde el controller y no
+      // reintenta, así que una sesión de WAHA colgada no puede acumular
+      // peticiones abiertas (~300 s de undici sin él).
+      await this.waha.sendText(appt.clinic.wahaSession, conversation.chatId, text, {
+        timeoutMs: PatientWhatsappNotifier.SEND_TIMEOUT_MS,
+      });
       await this.prisma.message.create({
         data: { conversationId: conversation.id, direction: 'OUT', body: text },
       });
@@ -159,9 +165,12 @@ export class PatientWhatsappNotifier {
     );
     if (dedupe === null) return false;
 
+    // `SET NX EX` crea la ventana con su TTL en un solo comando e `INCR`
+    // conserva el TTL. Con `INCR` + `EXPIRE` aparte, morir entre los dos dejaba
+    // la clave sin caducidad y la conversación sin avisos para siempre.
     const countKey = `notice:conv:${clinicId}:${conversationId}`;
+    await this.redis.set(countKey, '0', 'EX', 60 * 60, 'NX');
     const count = await this.redis.incr(countKey);
-    if (count === 1) await this.redis.expire(countKey, 60 * 60);
     if (count > PatientWhatsappNotifier.MAX_PER_CONVERSATION_PER_HOUR) {
       this.logger.warn(
         `tope de avisos por conversación alcanzado clinicId=${clinicId} apptId=${appointmentId} kind=${kind}`,
@@ -194,13 +203,13 @@ export class PatientWhatsappNotifier {
     // Mismo formato que el cierre de la FSM del bot, en la TZ de la clínica.
     const when = DateTime.fromJSDate(appt.startAt, { zone: appt.clinic.timezone })
       .setLocale(appt.clinic.locale)
-      .toFormat("cccc d 'de' LLLL 'a las' HH:mm");
+      .toFormat(copy.whenFormat);
 
     return fillConfirmAppointment(copy, copy.pools.confirmAppointment[0], {
       status,
       when,
       clinicName: appt.clinic.name,
-      address: appt.clinic.address ? `\nDirección: ${appt.clinic.address}` : '',
+      address: appt.clinic.address ? copy.addressLine(appt.clinic.address) : '',
       service: appt.service.name,
       professional: appt.professional.name,
       manageUrl,

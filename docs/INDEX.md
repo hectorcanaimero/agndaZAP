@@ -41,7 +41,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[adr/0020-gestion-cita-por-link|0020 — Gestión de cita por link (cancelar y reagendar sin escribir)]]
 - [[adr/0022-fk-compuestas-multi-tenant|0022 — FKs compuestas para que el aislamiento entre clínicas no dependa del código]]
 - [[adr/0021-cola-bot-inbound|ADR 0021 — Cola `bot-inbound` entre el webhook de WAHA y el bot]]
-- [[adr/0023-bot-link-first|0023 — Bot link-first: agendar y reagendar por link, no por chat]]
+- [[adr/0024-bot-link-first|0024 — Bot link-first: agendar y reagendar por link, no por chat]]
 
 ## Specs de sprint (implementación)
 - [[specs/2026-08-18-observabilidad-pino-axiom-sentry|2026-08-18 — Spec Observabilidad (Pino + Axiom + Sentry) — Sprint 40 clínicas día 1-2]]

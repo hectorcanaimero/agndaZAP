@@ -1,5 +1,5 @@
 /**
- * ¿Agenda y reagenda el bot por chat, con la FSM de horarios? (ADR 0023)
+ * ¿Agenda y reagenda el bot por chat, con la FSM de horarios? (ADR 0024)
  *
  * Apagado por defecto: el bot manda el link de la web y no pregunta servicio,
  * profesional ni horario. `BOT_CHAT_BOOKING_ENABLED=true` restaura la FSM entera

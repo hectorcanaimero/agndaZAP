@@ -6,7 +6,7 @@ import { WahaService } from './waha.service';
  *
  * Existe para que un módulo pueda mandar un WhatsApp sin importar
  * `WhatsappModule`, que arrastra el webhook, el bot y `PublicModule`: desde
- * `PublicModule` (aviso al paciente, ADR 0023) ese import cerraba un ciclo de
+ * `PublicModule` (aviso al paciente, ADR 0024) ese import cerraba un ciclo de
  * archivos y `BotModule` arrancaba con un import `undefined`.
  *
  * `WahaService` no tiene estado más allá del env, así que un único provider

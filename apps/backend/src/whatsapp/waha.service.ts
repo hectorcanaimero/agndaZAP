@@ -8,7 +8,6 @@ import { phoneToChatId } from '../common/phone.util';
  */
 @Injectable()
 export class WahaService {
-  static readonly SEND_TIMEOUT_MS = 10_000;
   private readonly logger = new Logger(WahaService.name);
   private readonly baseUrl = process.env.WAHA_BASE_URL ?? 'http://localhost:3000';
   private readonly apiKey = process.env.WAHA_API_KEY ?? 'dev-waha-key';
@@ -43,7 +42,18 @@ export class WahaService {
     return phoneToChatId(phone);
   }
 
-  async sendText(session: string, phoneOrChatId: string, text: string): Promise<void> {
+  /**
+   * @param opts.timeoutMs corta la petición. Opcional a propósito: el bot y los
+   * recordatorios reintentan sus jobs, y un corte cuando WAHA tarda pero sí
+   * entrega duplicaría el mensaje al paciente. Lo usa el aviso de la web
+   * (ADR 0024), que se lanza sin esperar y no reintenta.
+   */
+  async sendText(
+    session: string,
+    phoneOrChatId: string,
+    text: string,
+    opts: { timeoutMs?: number } = {},
+  ): Promise<void> {
     const chatId = phoneOrChatId.includes('@')
       ? phoneOrChatId
       : this.toChatId(phoneOrChatId);
@@ -52,11 +62,7 @@ export class WahaService {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify({ session, chatId, text }),
-      // Sin tope, una sesión de WAHA colgada deja la petición abierta hasta el
-      // timeout de undici (~300 s). Los avisos al paciente se lanzan sin
-      // esperar (ADR 0023), así que se acumularían sockets contra el mismo
-      // WAHA que usan el bot y los recordatorios.
-      signal: AbortSignal.timeout(WahaService.SEND_TIMEOUT_MS),
+      ...(opts.timeoutMs ? { signal: AbortSignal.timeout(opts.timeoutMs) } : {}),
     });
 
     if (!res.ok) {

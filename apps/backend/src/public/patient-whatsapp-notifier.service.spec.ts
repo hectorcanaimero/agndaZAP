@@ -2,7 +2,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { WahaService } from '../whatsapp/waha.service';
 import { PatientWhatsappNotifier } from './patient-whatsapp-notifier.service';
 
-describe('PatientWhatsappNotifier (ADR 0023)', () => {
+describe('PatientWhatsappNotifier (ADR 0024)', () => {
   let prisma: any;
   let waha: { sendText: jest.Mock };
   /** Redis en memoria: `SET NX` e `INCR` de verdad, para que dedupe y tope se prueben. */
@@ -152,6 +152,25 @@ describe('PatientWhatsappNotifier (ADR 0023)', () => {
     expect(text).toContain('*agendar*');
   });
 
+  it('en portugués, también la fecha y la dirección', async () => {
+    prisma.appointment.findFirst.mockResolvedValue(
+      appt({ clinic: { ...appt().clinic, locale: 'pt' } }),
+    );
+
+    await notify('created', MANAGE);
+
+    const text = waha.sendText.mock.calls[0][2];
+    expect(text).toContain('segunda-feira, 3 de junho às 10:00');
+    expect(text).toContain('Endereço: Av. Principal 123');
+    expect(text).not.toContain('Dirección');
+  });
+
+  it('manda con tope de tiempo: va sin esperar y no reintenta', async () => {
+    await notify('created', MANAGE);
+
+    expect(waha.sendText.mock.calls[0][3]).toEqual({ timeoutMs: 10_000 });
+  });
+
   it('en portugués si la clínica es pt', async () => {
     prisma.appointment.findFirst.mockResolvedValue(
       appt({ clinic: { ...appt().clinic, locale: 'pt' } }),
@@ -211,7 +230,9 @@ describe('PatientWhatsappNotifier (ADR 0023)', () => {
       }
 
       expect(sent).toEqual([true, true, true, true, false, false]);
-      expect(redis.expire).toHaveBeenCalledWith('notice:conv:clinic-A:convo-1', 3600);
+      // La ventana nace con su TTL en el mismo comando (`SET NX EX`).
+      expect(redis.set).toHaveBeenCalledWith('notice:conv:clinic-A:convo-1', '0', 'EX', 3600, 'NX');
+      expect(redis.expire).not.toHaveBeenCalled();
     });
 
     it('Redis caído: no avisa (fail-closed)', async () => {

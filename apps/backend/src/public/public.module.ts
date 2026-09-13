@@ -19,7 +19,7 @@ import { PublicSchedulingSessionController } from './scheduling-session.controll
  *
  * `WahaClientModule` y no `WhatsappModule`: este importa `PublicModule`, y el
  * ciclo dejaba módulos `undefined` al arrancar. Hace falta para avisar al
- * paciente por WhatsApp cuando agenda, mueve o cancela desde la web (ADR 0023).
+ * paciente por WhatsApp cuando agenda, mueve o cancela desde la web (ADR 0024).
  */
 @Module({
   imports: [SchedulingModule, WahaClientModule],

@@ -28,7 +28,7 @@ interface Props {
 }
 
 /**
- * Calendario de días con hueco + horas del día elegido (ADR 0023).
+ * Calendario de días con hueco + horas del día elegido (ADR 0024).
  *
  * Sustituye a la lista plana de horarios, que se quedaba con los primeros
  * 12 de un corte de 50: el paciente veía parte de mañana y no podía elegir
