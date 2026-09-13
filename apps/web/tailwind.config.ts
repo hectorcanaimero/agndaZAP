@@ -41,23 +41,24 @@ const config: Config = {
           navy: '#0F2A4A',
           teal: '#28D9B9',
         },
-        // Cream / warm neutrals — el fondo del landing pasa a cream tint
-        // en vez de white puro. Restar frialdad SaaS al instante sin tocar
-        // el brand. Escalas cortas porque el uso es concentrado: bg de
-        // superficies, hairlines, sombra base.
-        cream: {
-          50: '#FDFBF7',
-          100: '#F9F5EE',
-          200: '#F2ECDF',
+        // Mist: neutro frío con tinte navy para las superficies públicas
+        // (landing, /seguridad, legales). Reemplaza cream/warm (2026-09-13):
+        // crema + serif display era el look por defecto del "SaaS cálido" y
+        // no es la marca; la marca es navy + teal. Ver
+        // docs/adr/0023-landing-navy-teal-geist.md.
+        mist: {
+          50: '#F7F9FB',
+          100: '#EEF2F6',
+          200: '#DFE6EE',
+          300: '#C3CEDA',
+          500: '#66768C',
+          600: '#4A5A70',
+          700: '#33435A',
         },
-        warm: {
-          50: '#FAF7F2',
-          100: '#F1ECE1',
-          200: '#E5DDCC',
-          300: '#C9BFA9',
-          600: '#7A6E55',
-          900: '#2A2418',
-        },
+        // Teal para TEXTO sobre fondos claros: #28D9B9 no llega a 4.5:1 sobre
+        // mist-50, este sí. Mismo tono, más oscuro; el teal de marca sigue
+        // siendo el de rellenos y marcas.
+        'teal-ink': '#0A7A67',
         // Tokens semánticos shadcn/ui (leen variables CSS de globals.css).
         // Esto habilita que los componentes de shadcn (bg-primary, text-muted-foreground, etc.)
         // funcionen sin hardcodear colores. El tema light mapea --primary a brand-600 (verde).
@@ -111,18 +112,9 @@ const config: Config = {
         // Inter — body/UI, panel, superficies densas. Cargada via next/font
         // como `--font-inter`.
         sans: ['var(--font-inter)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        // Fraunces (opsz 144, SOFT 100, WONK 0) — display SOLO en H1/H2 de
-        // landing pública. Serif humanist con curvas cálidas: rompe la
-        // cuadratura visual del all-Inter sin caer en nostalgic.
-        // Anti-brief del batch previo: allá era H1-H3, ahora scope acotado.
-        display: [
-          'var(--font-fraunces)',
-          'ui-serif',
-          'Georgia',
-          'Cambria',
-          'Times New Roman',
-          'serif',
-        ],
+        // Geist: display y cuerpo de las superficies públicas. Cargada via
+        // next/font como `--font-geist`. El panel sigue en Inter (`sans`).
+        display: ['var(--font-geist)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
       transitionTimingFunction: {
         'out-soft': 'cubic-bezier(0.22, 1, 0.36, 1)',
@@ -155,22 +147,11 @@ const config: Config = {
         // que se ve demasiado marcada sobre bg-gray-50.
         'card-flat': '0 1px 2px rgba(15, 23, 42, 0.04), 0 0 0 1px rgba(15, 23, 42, 0.03)',
         'card-lift': '0 8px 24px -8px rgba(15, 42, 74, 0.12), 0 2px 6px rgba(15, 42, 74, 0.06)',
-        // Warm shadows — tono cálido (marrón) en vez de blue-gray. Landing
-        // pública usa estas para que las cards descansen sobre cream sin
-        // sentir frío. Ver ProblemSection, FeaturesSection, PricingSection.
-        'warm-sm': '0 1px 2px rgba(74, 55, 30, 0.05), 0 1px 3px rgba(74, 55, 30, 0.06)',
-        'warm-md': '0 4px 12px -2px rgba(74, 55, 30, 0.08), 0 2px 4px rgba(74, 55, 30, 0.05)',
-        'warm-lg': '0 20px 40px -12px rgba(74, 55, 30, 0.15), 0 8px 16px -8px rgba(74, 55, 30, 0.08)',
-        'warm-xl': '0 32px 64px -16px rgba(74, 55, 30, 0.20), 0 16px 32px -16px rgba(74, 55, 30, 0.10)',
-      },
-      backgroundImage: {
-        // Mesh gradient cálido para Hero — reemplaza el dot grid. Combina
-        // teal muy transparente con cream para atmósfera sin gritar.
-        'mesh-hero':
-          'radial-gradient(at 15% 0%, rgba(40, 217, 185, 0.14) 0%, transparent 45%), radial-gradient(at 85% 20%, rgba(15, 42, 74, 0.08) 0%, transparent 50%), radial-gradient(at 50% 100%, rgba(249, 245, 238, 0.9) 0%, transparent 60%)',
-        // Grain SVG data-uri, opacity muy baja. Solo textura, no ruido.
-        grain:
-          "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.28 0 0 0 0 0.22 0 0 0 0 0.15 0 0 0 0.55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
+        // Sombras con tinte navy para superficies públicas. Una sola
+        // elevación por elemento: borde O sombra, no ambos.
+        'lift-sm': '0 1px 2px rgba(15, 42, 74, 0.06), 0 1px 3px rgba(15, 42, 74, 0.05)',
+        'lift-md': '0 6px 16px -4px rgba(15, 42, 74, 0.10), 0 2px 4px rgba(15, 42, 74, 0.05)',
+        'lift-lg': '0 24px 48px -16px rgba(15, 42, 74, 0.22), 0 8px 16px -8px rgba(15, 42, 74, 0.10)',
       },
     },
   },

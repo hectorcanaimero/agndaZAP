@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, getTranslations, setRequestLocale } from 'next-intl/server';
-import { Inter, Fraunces } from 'next/font/google';
+import { Geist, Inter } from 'next/font/google';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { routing } from '@/i18n/routing';
@@ -20,17 +20,11 @@ const inter = Inter({
   display: 'swap',
 });
 
-// Fraunces — display SOLO para H1/H2 del landing público. Eje SOFT alto
-// para curvas cálidas (humanist, no nostalgic) y opsz 144 para display.
-// weights limitados (500/600/700) para no inflar bundle: el body sigue en
-// Inter. Scope acotado responde al rechazo del batch previo que la usaba
-// en H1-H3 y saturaba.
-const fraunces = Fraunces({
+// Geist — display y cuerpo de las superficies públicas (landing, /seguridad,
+// legales) vía `font-display`. Variable: un solo archivo cubre 400-700.
+const geist = Geist({
   subsets: ['latin', 'latin-ext'],
-  variable: '--font-fraunces',
-  weight: 'variable',
-  style: ['normal', 'italic'],
-  axes: ['SOFT', 'opsz'],
+  variable: '--font-geist',
   display: 'swap',
 });
 
@@ -87,7 +81,7 @@ export default async function LocaleLayout({
   return (
     <html
       lang={locale}
-      className={`${inter.variable} ${fraunces.variable}`}
+      className={`${inter.variable} ${geist.variable}`}
       suppressHydrationWarning
     >
       <body className="antialiased font-sans" suppressHydrationWarning>

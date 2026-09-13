@@ -14,7 +14,7 @@ export function FaqSection() {
   const t = useTranslations('landing.faq');
 
   return (
-    <section id="faq" className="bg-cream-50 py-24 lg:py-32">
+    <section id="faq" className="bg-mist-50 py-24 lg:py-32">
       <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
         <div className="max-w-2xl">
           <h2
@@ -25,11 +25,11 @@ export function FaqSection() {
           </h2>
         </div>
 
-        <div className="mt-14 divide-y divide-warm-200 overflow-hidden rounded-[1.75rem] border border-warm-200 bg-cream-50 shadow-warm-md lg:mt-20">
+        <div className="mt-14 divide-y divide-mist-200 overflow-hidden rounded-[1.75rem] border border-mist-200 bg-mist-50 shadow-lift-md lg:mt-20">
           {QUESTIONS.map((q) => (
             <details
               key={q}
-              className="group px-6 py-5 transition-colors duration-300 open:bg-cream-100 sm:px-8 [&_summary::-webkit-details-marker]:hidden"
+              className="group px-6 py-5 transition-colors duration-300 open:bg-mist-100 sm:px-8 [&_summary::-webkit-details-marker]:hidden"
             >
               <summary className="flex cursor-pointer list-none items-start justify-between gap-4 text-left focus-visible:outline-none">
                 <span className="text-base font-semibold leading-snug text-brand-navy sm:text-lg">
@@ -39,7 +39,7 @@ export function FaqSection() {
                   <Plus className="h-4 w-4" aria-hidden="true" strokeWidth={2} />
                 </span>
               </summary>
-              <p className="mt-4 max-w-2xl text-base leading-relaxed text-warm-600">
+              <p className="mt-4 max-w-2xl text-base leading-relaxed text-mist-600">
                 {t(`items.${q}.answer`)}
               </p>
             </details>

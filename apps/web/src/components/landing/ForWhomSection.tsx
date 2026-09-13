@@ -17,7 +17,7 @@ export function ForWhomSection() {
   const t = useTranslations('landing.forWhom');
 
   return (
-    <section className="bg-cream-50 py-24 lg:py-32">
+    <section className="bg-mist-50 py-24 lg:py-32">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <div className="max-w-3xl">
           <h2
@@ -32,7 +32,7 @@ export function ForWhomSection() {
           {CARDS.map(({ key, Icon }) => (
             <article
               key={key}
-              className="group relative min-w-0 overflow-hidden rounded-[1.75rem] border border-warm-200 bg-cream-50 p-7 shadow-warm-sm transition-all duration-300 ease-out-soft hover:-translate-y-1 hover:border-brand-teal/40 hover:shadow-warm-lg"
+              className="group relative min-w-0 overflow-hidden rounded-[1.75rem] border border-mist-200 bg-mist-50 p-7 shadow-lift-sm transition-all duration-300 ease-out-soft hover:-translate-y-1 hover:border-brand-teal/40 hover:shadow-lift-lg"
             >
               <div
                 aria-hidden="true"
@@ -46,7 +46,7 @@ export function ForWhomSection() {
                   <h3 className="text-xl font-semibold leading-snug text-brand-navy">
                     {t(`cards.${key}.title`)}
                   </h3>
-                  <p className="mt-2.5 text-base leading-relaxed text-warm-600">
+                  <p className="mt-2.5 text-base leading-relaxed text-mist-600">
                     {t(`cards.${key}.body`)}
                   </p>
                 </div>

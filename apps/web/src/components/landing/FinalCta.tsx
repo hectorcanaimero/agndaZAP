@@ -11,9 +11,9 @@ export function FinalCta() {
   const waLink = whatsappSalesLink(t('whatsappMessage'));
 
   return (
-    <section id="cta" className="bg-cream-100 py-28 md:py-36">
+    <section id="cta" className="bg-mist-100 py-28 md:py-36">
       <FadeIn className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
-        <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-brand-navy via-[#152f52] to-[#0a5a4a] p-8 shadow-warm-xl sm:p-12 lg:p-16">
+        <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-brand-navy via-[#152f52] to-[#0a5a4a] p-8 shadow-lift-lg sm:p-12 lg:p-16">
           <div
             aria-hidden="true"
             className="pointer-events-none absolute inset-0 opacity-30 [background-image:radial-gradient(at_10%_10%,rgba(40,217,185,0.4),transparent_45%),radial-gradient(at_90%_100%,rgba(255,255,255,0.08),transparent_50%)]"
@@ -39,7 +39,7 @@ export function FinalCta() {
                   <Button
                     asChild
                     size="lg"
-                    className="h-14 w-full rounded-full bg-brand-teal px-7 text-base font-semibold text-brand-navy shadow-warm-lg transition-transform duration-300 ease-out-soft hover:-translate-y-0.5 hover:bg-brand-teal/90 sm:w-auto"
+                    className="h-14 w-full rounded-full bg-brand-teal px-7 text-base font-semibold text-brand-navy shadow-lift-lg transition-transform duration-300 ease-out-soft hover:-translate-y-0.5 hover:bg-brand-teal/90 sm:w-auto"
                   >
                     <a
                       href={waLink}

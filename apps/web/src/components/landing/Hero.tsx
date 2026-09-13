@@ -25,7 +25,7 @@ export function Hero() {
 
   return (
     <section
-      className="relative isolate overflow-hidden bg-cream-50"
+      className="relative isolate overflow-hidden bg-mist-50"
       data-analytics-view="hero_view"
     >
       <div
@@ -49,7 +49,7 @@ export function Hero() {
       <div className="mx-auto max-w-6xl px-4 pb-20 pt-20 sm:px-6 sm:pt-28 lg:px-8 lg:pb-28 lg:pt-32">
         <div className="grid items-center gap-14 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:gap-8">
           <FadeIn className="relative z-10 min-w-0">
-            <p className="inline-flex items-center gap-2 rounded-full border border-brand-navy/15 bg-white/60 px-3 py-1 text-xs font-medium text-brand-navy shadow-warm-sm">
+            <p className="inline-flex items-center gap-2 rounded-full border border-brand-navy/15 bg-white/60 px-3 py-1 text-xs font-medium text-brand-navy shadow-lift-sm">
               <span
                 aria-hidden="true"
                 className="relative inline-flex h-2 w-2"
@@ -67,7 +67,7 @@ export function Hero() {
               {t('headline')}
             </h1>
 
-            <p className="mt-7 max-w-xl text-lg leading-relaxed text-warm-600 sm:text-xl">
+            <p className="mt-7 max-w-xl text-lg leading-relaxed text-mist-600 sm:text-xl">
               {t('subheadline')}
             </p>
 
@@ -76,7 +76,7 @@ export function Hero() {
                 <Button
                   asChild
                   size="lg"
-                  className="group relative h-14 overflow-hidden rounded-full bg-brand-navy px-7 text-base font-semibold text-white shadow-warm-lg transition-transform duration-300 ease-out-soft hover:-translate-y-0.5 hover:shadow-warm-xl"
+                  className="group relative h-14 overflow-hidden rounded-full bg-brand-navy px-7 text-base font-semibold text-white shadow-lift-lg transition-transform duration-300 ease-out-soft hover:-translate-y-0.5 hover:shadow-lift-lg"
                 >
                   <a
                     href={waLink}
@@ -100,8 +100,8 @@ export function Hero() {
                 variant={waLink ? 'outline' : 'default'}
                 className={
                   waLink
-                    ? 'group h-14 rounded-full border-brand-navy/25 bg-white/70 px-7 text-base font-semibold text-brand-navy shadow-warm-sm transition-transform duration-300 ease-out-soft hover:-translate-y-0.5 hover:bg-white'
-                    : 'group relative h-14 overflow-hidden rounded-full bg-brand-navy px-7 text-base font-semibold text-white shadow-warm-lg transition-transform duration-300 ease-out-soft hover:-translate-y-0.5 hover:shadow-warm-xl'
+                    ? 'group h-14 rounded-full border-brand-navy/25 bg-white/70 px-7 text-base font-semibold text-brand-navy shadow-lift-sm transition-transform duration-300 ease-out-soft hover:-translate-y-0.5 hover:bg-white'
+                    : 'group relative h-14 overflow-hidden rounded-full bg-brand-navy px-7 text-base font-semibold text-white shadow-lift-lg transition-transform duration-300 ease-out-soft hover:-translate-y-0.5 hover:shadow-lift-lg'
                 }
               >
                 <a
@@ -144,7 +144,7 @@ export function Hero() {
               {TRUST_ITEMS.map(({ Icon, key }) => (
                 <li
                   key={key}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-warm-200 bg-cream-50 px-3 py-1.5 text-xs font-medium text-warm-600 shadow-warm-sm"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-mist-200 bg-mist-50 px-3 py-1.5 text-xs font-medium text-mist-600 shadow-lift-sm"
                 >
                   <Icon
                     className={`h-3.5 w-3.5 ${
@@ -162,7 +162,7 @@ export function Hero() {
             <div className="relative mx-auto w-full max-w-[360px] lg:max-w-[380px]">
               <div
                 aria-hidden="true"
-                className="absolute -inset-6 -z-10 rounded-[3rem] bg-gradient-to-br from-brand-teal/30 via-cream-100/40 to-transparent blur-2xl"
+                className="absolute -inset-6 -z-10 rounded-[3rem] bg-gradient-to-br from-brand-teal/30 via-mist-100/40 to-transparent blur-2xl"
               />
               <div className="relative">
                 <WhatsAppMock />
@@ -182,7 +182,7 @@ export function Hero() {
 
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-b from-transparent to-cream-50"
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-b from-transparent to-mist-50"
       />
     </section>
   );

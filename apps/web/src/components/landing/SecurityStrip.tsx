@@ -15,7 +15,7 @@ export function SecurityStrip() {
   const t = useTranslations('landing.securityStrip');
 
   return (
-    <section id="security" className="bg-cream-100 py-20 md:py-24">
+    <section id="security" className="bg-mist-100 py-20 md:py-24">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <FadeIn className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between md:gap-8">
           <h3 className="max-w-2xl font-display text-2xl font-medium leading-snug tracking-[-0.02em] text-brand-navy sm:text-3xl">
@@ -42,7 +42,7 @@ export function SecurityStrip() {
             <StaggerItem
               as="li"
               key={key}
-              className="flex h-full items-center gap-3 rounded-2xl border border-warm-200 bg-cream-50 px-5 py-4 shadow-warm-sm"
+              className="flex h-full items-center gap-3 rounded-2xl border border-mist-200 bg-mist-50 px-5 py-4 shadow-lift-sm"
             >
               <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-teal/10 text-brand-teal ring-1 ring-inset ring-brand-teal/20">
                 <Icon className="h-4 w-4" aria-hidden="true" strokeWidth={1.75} />

@@ -7,11 +7,11 @@ export function ProblemSection() {
   const points = ['one', 'two', 'three'] as const;
 
   return (
-    <section className="relative bg-cream-100 py-24 lg:py-32">
+    <section className="relative bg-mist-100 py-24 lg:py-32">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:items-center lg:gap-16">
           <div className="relative min-w-0">
-            <div className="relative aspect-[3/2] overflow-hidden rounded-[2rem] border border-warm-200 shadow-warm-xl">
+            <div className="relative aspect-[3/2] overflow-hidden rounded-[2rem] border border-mist-200 shadow-lift-lg">
               <Image
                 src="/landing/problem-chaos.jpg"
                 alt=""
@@ -24,11 +24,11 @@ export function ProblemSection() {
                 className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-brand-navy/40 to-transparent"
               />
             </div>
-            <div className="absolute -bottom-8 -right-2 hidden max-w-[260px] rounded-2xl border border-warm-200 bg-cream-50 p-5 shadow-warm-lg sm:block">
+            <div className="absolute -bottom-8 -right-2 hidden max-w-[260px] rounded-2xl border border-mist-200 bg-mist-50 p-5 shadow-lift-lg sm:block">
               <div className="font-display text-3xl font-semibold leading-none tracking-tight text-brand-navy">
                 {t('callout.headline')}
               </div>
-              <div className="mt-2 text-xs leading-relaxed text-warm-600">
+              <div className="mt-2 text-xs leading-relaxed text-mist-600">
                 {t('callout.body')}
               </div>
             </div>
@@ -41,7 +41,7 @@ export function ProblemSection() {
             >
               {t('headline')}
             </h2>
-            <p className="mt-6 text-lg leading-relaxed text-warm-600">
+            <p className="mt-6 text-lg leading-relaxed text-mist-600">
               {t('subheadline')}
             </p>
 
@@ -58,7 +58,7 @@ export function ProblemSection() {
                     <h3 className="text-lg font-semibold text-brand-navy">
                       {t(`points.${k}.title`)}
                     </h3>
-                    <p className="mt-1.5 text-base leading-relaxed text-warm-600">
+                    <p className="mt-1.5 text-base leading-relaxed text-mist-600">
                       {t(`points.${k}.body`)}
                     </p>
                   </div>
