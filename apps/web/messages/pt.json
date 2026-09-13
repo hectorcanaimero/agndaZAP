@@ -1347,6 +1347,22 @@
         }
       }
     },
+    "demo": {
+      "headline": "Não acredite na gente: teste agora.",
+      "body": "É uma clínica odontológica de exemplo com o mesmo Showly que a sua usaria. Marque uma consulta e veja o que acontece.",
+      "whatsapp": {
+        "title": "Escreva para o bot",
+        "body": "Ele responde pelo WhatsApp como a qualquer paciente.",
+        "cta": "Abrir WhatsApp",
+        "message": "Oi, quero marcar uma consulta."
+      },
+      "web": {
+        "title": "Agende pela web",
+        "body": "A página que o paciente usa quando prefere escolher em um calendário.",
+        "cta": "Abrir a página de agendamento"
+      },
+      "note": "Clínica fictícia: sua consulta não chega a nenhum consultório real."
+    },
     "pricing": {
       "eyebrow": "Preços",
       "headline": "Grátis enquanto durar o piloto.",

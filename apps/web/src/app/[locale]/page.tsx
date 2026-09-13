@@ -6,6 +6,7 @@ import { Facts } from '@/components/landing/Facts';
 import { ProblemSection } from '@/components/landing/ProblemSection';
 import { Lifecycle } from '@/components/landing/Lifecycle';
 import { FeaturesSection } from '@/components/landing/FeaturesSection';
+import { DemoSection } from '@/components/landing/DemoSection';
 import { PricingSection } from '@/components/landing/PricingSection';
 import { SecurityStrip } from '@/components/landing/SecurityStrip';
 import { FaqSection } from '@/components/landing/FaqSection';
@@ -43,6 +44,7 @@ export default async function LandingPage({
         <ProblemSection />
         <Lifecycle />
         <FeaturesSection />
+        <DemoSection />
         {/*
           Sin testimonios: no hay clínica en producción con un caso publicable
           y apps/web/PRODUCT.md prohíbe inventarlos. SecurityStrip (comprimida,

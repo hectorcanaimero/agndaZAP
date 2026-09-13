@@ -1347,6 +1347,22 @@
         }
       }
     },
+    "demo": {
+      "headline": "No nos creas: pruébalo ahora.",
+      "body": "Es una clínica dental de ejemplo con el mismo Showly que usaría la tuya. Pide una cita y mira qué pasa.",
+      "whatsapp": {
+        "title": "Escríbele al bot",
+        "body": "Te responde por WhatsApp como a cualquier paciente.",
+        "cta": "Abrir WhatsApp",
+        "message": "Hola, quiero agendar una cita."
+      },
+      "web": {
+        "title": "Agenda desde la web",
+        "body": "La página que usa el paciente cuando prefiere elegir en un calendario.",
+        "cta": "Abrir la página de citas"
+      },
+      "note": "Clínica ficticia: tu cita no llega a ningún consultorio real."
+    },
     "pricing": {
       "eyebrow": "Precios",
       "headline": "Gratis mientras dure el piloto.",
