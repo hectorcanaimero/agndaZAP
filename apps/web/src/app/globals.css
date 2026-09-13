@@ -105,9 +105,9 @@
  * Reset + browser surface polish para el flujo público.
  *
  * El panel/admin sigue usando bg-gray-50 vía sus propios shells; acá
- * pintamos el body con cream tint (#FDFBF7) que es el nuevo canvas del
- * landing. Las páginas internas se pintan sobre esto y ganan calidez
- * ambiental sin cambiar sus tokens.
+ * pintamos el body con mist-50 (#F7F9FB), el neutro frío con tinte navy
+ * de las superficies públicas. Las páginas internas se pintan encima con
+ * sus propios fondos.
  */
 @layer base {
   * {
@@ -117,7 +117,7 @@
   body {
     margin: 0;
     padding: 0;
-    @apply bg-cream-50 text-neutral-900;
+    @apply bg-mist-50 text-neutral-900;
     /* Tabular numerals globales — números de agenda, precios y estados
        alinean vertical sin que la copy pierda contexto humanist. */
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'ss01', 'ss03';
@@ -139,7 +139,7 @@
   textarea {
     caret-color: #0F2A4A;
   }
-  /* Custom scrollbar warm para superficies del landing. Fallback default
+  /* Custom scrollbar navy para superficies del landing. Fallback default
      en el panel — usa su propia paleta gray. */
   @media (min-width: 768px) {
     .landing-scroll {
