@@ -83,6 +83,13 @@ describe('BotService — FSM de agendamiento', () => {
     // wrapper `reply` con jest.useFakeTimers) — acá el foco es la FSM.
     process.env.BOT_TYPING_ENABLED = 'false';
 
+    // Casi toda esta suite es la FSM de agendar y reagendar por chat, que desde
+    // el ADR 0023 solo corre con el flag de vuelta atrás encendido. Se deja
+    // encendido aquí para que siga protegiéndola mientras exista; el
+    // comportamiento por defecto (link-first) tiene su propio `describe` al
+    // final, que lo apaga.
+    process.env.BOT_CHAT_BOOKING_ENABLED = 'true';
+
     // Pool de variantes en `DEFAULT_BOT_MESSAGES`: forzamos `pickVariant` a
     // devolver la PRIMERA variante. Así los asserts históricos que buscan
     // tokens ("persona del equipo", etc.) siguen matcheando sin tener que
@@ -143,6 +150,7 @@ describe('BotService — FSM de agendamiento', () => {
       service: {
         findMany: jest.fn().mockResolvedValue([service1]),
         findFirst: jest.fn().mockResolvedValue(service1),
+        count: jest.fn().mockResolvedValue(1),
       },
       professional: {
         findMany: jest.fn().mockResolvedValue([professional1]),
@@ -2895,6 +2903,268 @@ describe('BotService — FSM de agendamiento', () => {
       prisma.message.count.mockRejectedValue(new Error('db caída'));
 
       expect(await greet()).toContain(BotService.AI_DISCLOSURE);
+    });
+  });
+  // ───────────── Link-first (ADR 0023): agendar y reagendar por la web ─────────────
+  describe('bot link-first (BOT_CHAT_BOOKING_ENABLED apagado, ADR 0023)', () => {
+    const upcoming = {
+      id: 'appt-7',
+      clinicId: 'clinic-A',
+      patientId: 'pat-1',
+      serviceId: 'svc-1',
+      professionalId: 'prof-1',
+      status: 'PENDIENTE',
+      startAt: tomorrow10.toJSDate(),
+      endAt: tomorrow1030.toJSDate(),
+    };
+
+    beforeEach(() => {
+      // Por defecto el flag no existe: es el comportamiento de producción.
+      delete process.env.BOT_CHAT_BOOKING_ENABLED;
+      prisma.appointment.update = jest.fn().mockResolvedValue({});
+    });
+
+    async function say(text: string) {
+      await bot.handleIncoming({
+        clinicId: 'clinic-A',
+        chatId: convoState.chatId,
+        phone: convoState.phone,
+        text,
+      });
+    }
+
+    const lastReply = () => waha.sendText.mock.calls.at(-1)![2] as string;
+
+    describe('agendar', () => {
+      it('manda el link con token y no arranca la FSM', async () => {
+        intent.detect.mockResolvedValue(Intent.AGENDAR);
+
+        await say('quiero agendar una cita');
+
+        expect(schedulingSessions.create).toHaveBeenCalledWith(
+          expect.objectContaining({ conversationId: 'convo-1', clinicId: 'clinic-A' }),
+        );
+        expect(lastReply()).toContain('/es/agendar/clinica-a?t=tok-abc');
+        expect(convoState.flowStep).toBeNull();
+        expect(availability.getSlots).not.toHaveBeenCalled();
+        expect(prisma.service.findMany).not.toHaveBeenCalled();
+      });
+
+      it('sin token (Redis caído) manda el link público: agendar no se rompe', async () => {
+        intent.detect.mockResolvedValue(Intent.AGENDAR);
+        schedulingSessions.create.mockRejectedValue(new Error('redis down'));
+
+        await say('quiero agendar');
+
+        const msg = lastReply();
+        expect(msg).toContain('/es/agendar/clinica-a');
+        expect(msg).not.toContain('?t=');
+        expect(convoState.flowStep).toBeNull();
+      });
+
+      it('sin servicios activos no manda un link a una página vacía', async () => {
+        intent.detect.mockResolvedValue(Intent.AGENDAR);
+        prisma.service.count.mockResolvedValue(0);
+
+        await say('quiero agendar');
+
+        expect(schedulingSessions.create).not.toHaveBeenCalled();
+        expect(lastReply()).toBe(botCopy('es').noServices);
+      });
+
+      it('en portugués, el texto del link también', async () => {
+        const clinicPt = makeClinic({ locale: 'pt' });
+        prisma.clinic.findUniqueOrThrow.mockResolvedValue(clinicPt);
+        intent.detect.mockResolvedValue(Intent.AGENDAR);
+
+        await say('quero marcar uma consulta');
+
+        expect(lastReply()).toBe(
+          botCopy('pt').bookingLink('http://localhost:3000/pt/agendar/clinica-a?t=tok-abc'),
+        );
+      });
+
+      it('con el flag de vuelta atrás encendido arranca la FSM como antes', async () => {
+        process.env.BOT_CHAT_BOOKING_ENABLED = 'true';
+        intent.detect.mockResolvedValue(Intent.AGENDAR);
+
+        await say('quiero agendar');
+
+        expect(convoState.flowStep).toBe('ASK_SLOT');
+        expect(schedulingSessions.create).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('reagendar', () => {
+      beforeEach(() => {
+        prisma.appointment.findFirst.mockResolvedValue(upcoming);
+      });
+
+      it.each(['reagendar', 'REPROGRAMAR', 'remarcar'])(
+        '"%s" → link de gestión, sin lista de horarios ni tocar la cita',
+        async (text) => {
+          await say(text);
+
+          expect(lastReply()).toBe(
+            botCopy('es').rescheduleSlots(
+              'http://localhost:3000/es/agendar/clinica-a/cita?t=mtok-abc',
+            ),
+          );
+          expect(availability.getSlots).not.toHaveBeenCalled();
+          expect(convoState.flowStep).toBeNull();
+          expect(prisma.appointment.update).not.toHaveBeenCalled();
+          expect(reminders.cancelForAppointment).not.toHaveBeenCalled();
+          expect(intent.detect).not.toHaveBeenCalled();
+        },
+      );
+
+      it('la intención REPROGRAMAR en texto libre va al mismo link', async () => {
+        intent.detect.mockResolvedValue(Intent.REPROGRAMAR);
+
+        await say('necesito mover mi cita para otro día');
+
+        expect(lastReply()).toContain('/cita?t=mtok-abc');
+        expect(availability.getSlots).not.toHaveBeenCalled();
+      });
+
+      it('sin link de gestión (Redis caído) deriva a recepción, no a la lista por chat', async () => {
+        schedulingSessions.issueManageUrl.mockRejectedValue(new Error('redis down'));
+
+        await say('reagendar');
+
+        expect(convoState.state).toBe('NEEDS_HUMAN');
+        expect(lastReply()).toBe(botCopy('es').cannotLinkChat);
+        expect(availability.getSlots).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('lo que sigue en el chat', () => {
+      beforeEach(() => {
+        prisma.appointment.findFirst.mockResolvedValue(upcoming);
+        prisma.reminder.findFirst.mockResolvedValue({ id: 'rem-1' });
+      });
+
+      it('"CANCELAR" cancela la cita en el chat, sin link', async () => {
+        await say('CANCELAR');
+
+        expect(prisma.appointment.update).toHaveBeenCalledWith({
+          where: { id: 'appt-7' },
+          data: expect.objectContaining({ status: 'CANCELADA' }),
+        });
+        expect(reminders.cancelForAppointment).toHaveBeenCalledWith('appt-7');
+      });
+
+      it('"sí" al recordatorio confirma en el chat', async () => {
+        await say('sí');
+
+        expect(reminders.confirmAppointment).toHaveBeenCalledWith('appt-7');
+      });
+
+      it('la sub-FSM de NPS no se toca', async () => {
+        convoState.flowStep = 'AWAITING_NPS_SCORE';
+        convoState.flowData = { feedbackAppointmentId: 'appt-9' };
+
+        await say('5');
+
+        expect(followUps.recordFeedback).toHaveBeenCalledWith('clinic-A', 'appt-9', 5);
+        expect(convoState.flowStep).toBe('AWAITING_NPS_COMMENT');
+      });
+    });
+
+    describe('conversación atrapada en la FSM de antes del despliegue', () => {
+      it('en ASK_SLOT, "tienes para el 15?" resetea y manda el link', async () => {
+        convoState.flowStep = 'ASK_SLOT';
+        convoState.flowData = { serviceId: 'svc-1', offeredSlots: ['x'] };
+
+        await say('tienes para el dia 15 de septiembre');
+
+        expect(convoState.flowStep).toBeNull();
+        expect(lastReply()).toContain('?t=tok-abc');
+        expect(scheduling.createAppointment).not.toHaveBeenCalled();
+        expect(intent.detect).not.toHaveBeenCalled();
+      });
+
+      it.each(['ASK_SERVICE', 'ASK_PROFESSIONAL', 'ASK_NAME', 'CONFIRM'])(
+        'en %s también sale al link, sin crear nada',
+        async (step) => {
+          convoState.flowStep = step;
+          convoState.flowData = { serviceId: 'svc-1', startAtISO: tomorrow10.toISO() };
+
+          await say('sí');
+
+          expect(convoState.flowStep).toBeNull();
+          expect(lastReply()).toContain('?t=tok-abc');
+          expect(scheduling.createAppointment).not.toHaveBeenCalled();
+        },
+      );
+
+      it('si estaba moviendo una cita, manda el link de gestión', async () => {
+        prisma.appointment.findFirst.mockResolvedValue(upcoming);
+        convoState.flowStep = 'ASK_SLOT';
+        convoState.flowData = { rescheduleOf: 'appt-7', serviceId: 'svc-1' };
+
+        await say('2');
+
+        expect(convoState.flowStep).toBeNull();
+        expect(lastReply()).toContain('/cita?t=mtok-abc');
+        expect(scheduling.rescheduleAppointment).toBeUndefined();
+      });
+
+      it('"cancelar" abandona la reserva: pausa, no cancela ninguna cita', async () => {
+        prisma.appointment.findFirst.mockResolvedValue(upcoming);
+        convoState.flowStep = 'ASK_PROFESSIONAL';
+        convoState.flowData = { serviceId: 'svc-1' };
+
+        await say('cancelar');
+
+        expect(convoState.flowStep).toBeNull();
+        expect(lastReply()).toBe(botCopy('es').flowAborted);
+        expect(prisma.appointment.update).not.toHaveBeenCalled();
+      });
+
+      it('pedir un humano sigue ganando', async () => {
+        convoState.flowStep = 'ASK_SLOT';
+        convoState.flowData = { serviceId: 'svc-1' };
+
+        await say('quiero hablar con un humano');
+
+        expect(convoState.state).toBe('NEEDS_HUMAN');
+        expect(schedulingSessions.create).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('textos', () => {
+      it('el saludo ya no ofrece agendar por chat', async () => {
+        await say('hola');
+
+        const msg = lastReply();
+        expect(msg).toContain('http://localhost:3000/es/agendar/clinica-a');
+        expect(msg).not.toMatch(/escr[ií]beme \*agendar\*/i);
+      });
+
+      it('la invitación tras una duda tampoco', async () => {
+        intent.detect.mockResolvedValue(Intent.PREGUNTA_FAQ);
+        knowledge.answer.mockResolvedValue({ answer: 'Abrimos a las 9.' });
+
+        await say('¿a qué hora abren?');
+
+        const msg = lastReply();
+        expect(msg).toContain('Abrimos a las 9.');
+        expect(msg).toContain('/es/agendar/clinica-a');
+        expect(msg).not.toMatch(/\*agendar\*/);
+      });
+
+      it.each(['es', 'pt'] as const)(
+        'ningún saludo ni invitación link-first (%s) promete agendar por chat',
+        (locale) => {
+          // Con el flag apagado, `botCopy` sirve los pools link-first.
+          const pools = botCopy(locale).pools;
+          for (const text of [...pools.greeting, ...pools.ctaAfterAnswer]) {
+            expect(text).toContain('{link}');
+            expect(text).not.toMatch(/\*agendar\*/);
+          }
+        },
+      );
     });
   });
 });
