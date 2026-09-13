@@ -32,6 +32,7 @@ import { RescheduleByTokenDto } from './dto/reschedule-by-token.dto';
 import { RateLimit } from './rate-limit.guard';
 import { SlugValidationPipe } from './slug.pipe';
 import { normalizeE164 } from '../common/phone.util';
+import { PatientWhatsappNotifier } from './patient-whatsapp-notifier.service';
 
 /**
  * PublicController — Bloque 3 del roadmap.
@@ -69,6 +70,7 @@ export class PublicController {
     private readonly availability: AvailabilityService,
     private readonly scheduling: SchedulingService,
     private readonly sessions: SchedulingSessionService,
+    private readonly notifier: PatientWhatsappNotifier,
   ) {}
 
   private parseAvailabilityDays(days?: string): number {
@@ -303,8 +305,14 @@ export class PublicController {
 
     // 3) Si vino token, lo consumimos AHORA (single-use). Antes de crear la
     // cita — así una race condition (doble click) no crea dos citas atadas al
-    // mismo token; la segunda invocación al POST recibe token null y sigue
-    // el flujo público normal (o 400 si el token era el único identificador).
+    // mismo token: la segunda invocación recibe token null y sigue como
+    // `PUBLIC`, y el `@@unique` del horario la rechaza con 409.
+    //
+    // Token caducado o ya usado → la cita se crea como `PUBLIC` (ADR 0023). El
+    // token no autoriza nada que el formulario público no permita sin él: solo
+    // ata la conversación. Con el bot mandando el link en vez de agendar por
+    // chat, abrirlo pasados 30 min es lo normal, y un 400 ahí le hacía perder
+    // la reserva a quien ya había elegido horario.
     //
     // Validación cross-tenant: el token guarda `clinicSlug` propio, tiene que
     // coincidir con el `:slug` de la URL. Un token de otra clínica → 400. Esto
@@ -314,19 +322,17 @@ export class PublicController {
     if (dto.token) {
       const session = await this.sessions.consume(dto.token);
       if (!session) {
-        throw new BadRequestException(
-          'el link expiró o ya fue usado — pide uno nuevo por WhatsApp',
-        );
-      }
-      if (session.clinicSlug !== slug) {
+        this.logger.log(`token de agendamiento caducado o usado, sigue como PUBLIC slug=${slug}`);
+      } else if (session.clinicSlug !== slug) {
         // Log de seguridad: alguien intentó reusar un token en otra clínica.
         this.logger.warn(
           `token/slug mismatch tokenSlug=${session.clinicSlug} urlSlug=${slug}`,
         );
         throw new BadRequestException('link inválido para esta clínica');
+      } else {
+        source = 'BOT_WEB';
+        conversationId = session.conversationId;
       }
-      source = 'BOT_WEB';
-      conversationId = session.conversationId;
     }
 
     // 4) Normalizamos phone a E.164 con `+` (helper único, ver phone.util).
@@ -392,6 +398,14 @@ export class PublicController {
         `no se pudo emitir el manage token slug=${slug} apptId=${appointment.id}: ${(e as Error).message}`,
       );
     }
+
+    // Sin `await`: el aviso nunca lanza y no debe retrasar la respuesta.
+    void this.notifier.notify({
+      clinicId: clinic.id,
+      appointmentId: appointment.id,
+      kind: 'created',
+      manageUrl,
+    });
 
     // Cero PII en la respuesta: NO devolvemos `patient.{name,phone}`. El frontend
     // ya tiene el nombre en su state; no hace falta reflejarlo. Esto minimiza
@@ -666,6 +680,11 @@ export class PublicController {
     await this.sessions.invalidateAllForAppointment(appointment.id);
 
     await this.alertReceptionOfPatientChange(appointment, 'cancel', {});
+    void this.notifier.notify({
+      clinicId: session.clinicId,
+      appointmentId: appointment.id,
+      kind: 'canceled',
+    });
 
     this.logger.log(
       `appointment canceled via link slug=${slug} apptId=${appointment.id}`,
@@ -756,6 +775,12 @@ export class PublicController {
     await this.alertReceptionOfPatientChange(appointment, 'reschedule', {
       newStartAt: updated.startAt,
       rescheduleCount: updated.rescheduleCount,
+    });
+    void this.notifier.notify({
+      clinicId: session.clinicId,
+      appointmentId: updated.id,
+      kind: 'rescheduled',
+      manageUrl,
     });
 
     this.logger.log(

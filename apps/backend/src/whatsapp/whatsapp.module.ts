@@ -2,7 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { PublicModule } from '../public/public.module';
 import { parseRedis } from '../reminders/reminders.module';
-import { WahaService } from './waha.service';
+import { WahaClientModule } from './waha-client.module';
 import { WahaHealthMonitor } from './health-monitor.service';
 import {
   WAHA_HEALTH_QUEUE,
@@ -43,6 +43,9 @@ import { BotInboundQueueModule } from '../bot/bot-inbound.queue';
  */
 @Module({
   imports: [
+    // `WahaService` vive en su propio módulo hoja para que `PublicModule` pueda
+    // usarlo sin ciclo; aquí se importa y se re-exporta.
+    WahaClientModule,
     forwardRef(() => BotModule),
     PublicModule,
     // Cola de mensajes entrantes: el webhook encola y responde 200 al
@@ -50,7 +53,6 @@ import { BotInboundQueueModule } from '../bot/bot-inbound.queue';
     BotInboundQueueModule,
   ],
   providers: [
-    WahaService,
     WahaHealthMonitor,
     {
       provide: WAHA_HEALTH_QUEUE_TOKEN,
@@ -59,6 +61,6 @@ import { BotInboundQueueModule } from '../bot/bot-inbound.queue';
     },
   ],
   controllers: [WebhookController, WhatsappPanelController],
-  exports: [WahaService, WahaHealthMonitor, WAHA_HEALTH_QUEUE_TOKEN],
+  exports: [WahaClientModule, WahaHealthMonitor, WAHA_HEALTH_QUEUE_TOKEN],
 })
 export class WhatsappModule {}

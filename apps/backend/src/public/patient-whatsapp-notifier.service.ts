@@ -1,0 +1,136 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { DateTime } from 'luxon';
+import { botCopy, fillConfirmAppointment } from '../bot/bot.messages';
+import { PrismaService } from '../prisma/prisma.service';
+import { WahaService } from '../whatsapp/waha.service';
+
+export type PatientNoticeKind = 'created' | 'rescheduled' | 'canceled';
+
+/**
+ * Avisa por WhatsApp al paciente cuando agenda, mueve o cancela su cita desde
+ * la web (ADR 0023).
+ *
+ * Con el bot link-first el chat ya no cierra la reserva: manda un link. Sin este
+ * aviso el paciente volvía a WhatsApp y no encontraba ningún "listo".
+ *
+ * Reglas:
+ *  - **Solo a quien ya tiene conversación con la clínica.** Nunca abre un chat
+ *    nuevo desde un formulario público: cualquiera puede escribir el teléfono de
+ *    otro, y convertir el número de la clínica en un emisor de mensajes no
+ *    pedidos es la vía rápida a un baneo de WAHA.
+ *  - Se manda al `chatId` de esa conversación, no al teléfono del formulario:
+ *    es el que verificó WhatsApp, y el único que existe en un chat `@lid`.
+ *  - Se manda aunque la conversación esté con una persona (`HUMAN` o
+ *    `NEEDS_HUMAN`): es una notificación transaccional, como el recordatorio,
+ *    no una respuesta del bot.
+ *  - **Nunca lanza.** La cita ya está hecha cuando se llama; perder el aviso es
+ *    malo, pero no puede tumbar la respuesta HTTP. El caller lo invoca sin
+ *    esperar, así que tampoco la retrasa si WAHA tarda.
+ */
+@Injectable()
+export class PatientWhatsappNotifier {
+  private readonly logger = new Logger(PatientWhatsappNotifier.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly waha: WahaService,
+  ) {}
+
+  /** @returns `true` si el aviso salió; `false` si no había a quién o falló. */
+  async notify(input: {
+    clinicId: string;
+    appointmentId: string;
+    kind: PatientNoticeKind;
+    /** Link de gestión para crear y mover. Sin él, el texto cae al fallback. */
+    manageUrl?: string | null;
+  }): Promise<boolean> {
+    const { clinicId, appointmentId, kind } = input;
+    try {
+      const appt = await this.prisma.appointment.findFirst({
+        where: { id: appointmentId, clinicId },
+        select: {
+          status: true,
+          startAt: true,
+          patientId: true,
+          conversationId: true,
+          patient: { select: { phone: true } },
+          service: { select: { name: true } },
+          professional: { select: { name: true } },
+          clinic: {
+            select: {
+              name: true,
+              address: true,
+              timezone: true,
+              locale: true,
+              wahaSession: true,
+            },
+          },
+        },
+      });
+      if (!appt) return false;
+
+      // Mismo orden que `alertReception`: la conversación de la que nació la
+      // cita, y si no, la del paciente por `patientId` o teléfono.
+      const conversation = await this.prisma.conversation.findFirst({
+        where: appt.conversationId
+          ? { id: appt.conversationId, clinicId }
+          : {
+              clinicId,
+              OR: [{ patientId: appt.patientId }, { phone: appt.patient.phone }],
+            },
+        orderBy: { updatedAt: 'desc' },
+        select: { id: true, chatId: true },
+      });
+      if (!conversation) return false;
+
+      const text = this.render(appt, kind, input.manageUrl ?? null);
+      await this.waha.sendText(appt.clinic.wahaSession, conversation.chatId, text);
+      await this.prisma.message.create({
+        data: { conversationId: conversation.id, direction: 'OUT', body: text },
+      });
+      return true;
+    } catch (e) {
+      // Sin teléfono, chatId ni texto: son PHI.
+      this.logger.warn(
+        `no se pudo avisar al paciente por WhatsApp clinicId=${clinicId} apptId=${appointmentId} kind=${kind}: ${(e as Error).message}`,
+      );
+      return false;
+    }
+  }
+
+  private render(
+    appt: {
+      status: string;
+      startAt: Date;
+      service: { name: string };
+      professional: { name: string };
+      clinic: { name: string; address: string | null; timezone: string; locale: string };
+    },
+    kind: PatientNoticeKind,
+    manageUrl: string | null,
+  ): string {
+    const copy = botCopy(appt.clinic.locale);
+    if (kind === 'canceled') return copy.appointmentCanceled;
+
+    const status =
+      kind === 'rescheduled'
+        ? copy.status.moved
+        : appt.status === 'CONFIRMADA'
+          ? copy.status.confirmed
+          : copy.status.scheduled;
+    // Mismo formato que el cierre de la FSM del bot, en la TZ de la clínica.
+    const when = DateTime.fromJSDate(appt.startAt, { zone: appt.clinic.timezone })
+      .setLocale(appt.clinic.locale)
+      .toFormat("cccc d 'de' LLLL 'a las' HH:mm");
+
+    return fillConfirmAppointment(copy, copy.pools.confirmAppointment[0], {
+      status,
+      when,
+      clinicName: appt.clinic.name,
+      address: appt.clinic.address ? `\nDirección: ${appt.clinic.address}` : '',
+      service: appt.service.name,
+      professional: appt.professional.name,
+      manageUrl,
+    });
+  }
+}

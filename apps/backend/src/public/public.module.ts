@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { SchedulingModule } from '../scheduling/scheduling.module';
+import { WahaClientModule } from '../whatsapp/waha-client.module';
+import { PatientWhatsappNotifier } from './patient-whatsapp-notifier.service';
 import { PublicController } from './public.controller';
 import { PublicSchedulingSessionController } from './scheduling-session.controller';
 
@@ -14,9 +16,14 @@ import { PublicSchedulingSessionController } from './scheduling-session.controll
  *  - `PublicController`                  → `/public/clinics/*` (agenda web).
  *  - `PublicSchedulingSessionController` → `/public/scheduling/session/:token`
  *    (hidrata form desde link mandado por WA).
+ *
+ * `WahaClientModule` y no `WhatsappModule`: este importa `PublicModule`, y el
+ * ciclo dejaba módulos `undefined` al arrancar. Hace falta para avisar al
+ * paciente por WhatsApp cuando agenda, mueve o cancela desde la web (ADR 0023).
  */
 @Module({
-  imports: [SchedulingModule],
+  imports: [SchedulingModule, WahaClientModule],
   controllers: [PublicController, PublicSchedulingSessionController],
+  providers: [PatientWhatsappNotifier],
 })
 export class PublicModule {}

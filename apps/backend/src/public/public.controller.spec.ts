@@ -15,6 +15,7 @@ import {
   RescheduleLimitExceededException,
   SlotTakenException,
 } from '../scheduling/scheduling.errors';
+import { PatientWhatsappNotifier } from './patient-whatsapp-notifier.service';
 import { PublicController } from './public.controller';
 import { extractIp, RateLimit, REDIS_CLIENT } from './rate-limit.guard';
 import { SlugValidationPipe } from './slug.pipe';
@@ -114,6 +115,7 @@ describe('PublicController', () => {
   let availability: Deep<AvailabilityService>;
   let scheduling: Deep<SchedulingService>;
   let sessions: Deep<SchedulingSessionService>;
+  let notifier: { notify: jest.Mock };
   let controller: PublicController;
 
   beforeEach(() => {
@@ -206,12 +208,59 @@ describe('PublicController', () => {
       resolveManage: jest.fn().mockResolvedValue(null),
       invalidateManage: jest.fn().mockResolvedValue(undefined),
     };
+    // Aviso por WhatsApp al paciente (ADR 0023). Sus reglas se prueban en
+    // `patient-whatsapp-notifier.service.spec.ts`; aquí solo cuándo se llama.
+    notifier = { notify: jest.fn().mockResolvedValue(true) };
     controller = new PublicController(
       prisma as unknown as PrismaService,
       availability as unknown as AvailabilityService,
       scheduling as unknown as SchedulingService,
       sessions as unknown as SchedulingSessionService,
+      notifier as unknown as PatientWhatsappNotifier,
     );
+  });
+
+  describe('POST :slug/appointments — aviso por WhatsApp (ADR 0023)', () => {
+    const body = {
+      phone: '+584141234567',
+      name: 'Ana',
+      serviceId: 'svc-1',
+      professionalId: 'prof-1',
+      startAtISO: '2030-06-01T14:00:00.000Z',
+      consent: true,
+    } as any;
+
+    it('al crear la cita avisa al paciente con el link de gestión', async () => {
+      await controller.createAppointment('clinica-a', body);
+
+      expect(notifier.notify).toHaveBeenCalledWith({
+        clinicId: 'clinic-A',
+        appointmentId: 'appt-1',
+        kind: 'created',
+        manageUrl: 'http://localhost:3000/es/agendar/clinica-a/cita?t=mtok-abc',
+      });
+    });
+
+    it('la respuesta no espera al aviso: WAHA colgado no retiene al paciente', async () => {
+      notifier.notify.mockReturnValue(new Promise(() => {}));
+
+      const res: any = await controller.createAppointment('clinica-a', body);
+
+      expect(res.id).toBe('appt-1');
+    });
+
+    it('honeypot: no crea nada y no escribe a nadie', async () => {
+      await controller.createAppointment('clinica-a', { ...body, honeypot: 'x' });
+
+      expect(notifier.notify).not.toHaveBeenCalled();
+    });
+
+    it('si la creación falla no se avisa', async () => {
+      scheduling.createAppointment.mockRejectedValueOnce(new ConflictException());
+
+      await expect(controller.createAppointment('clinica-a', body)).rejects.toThrow();
+      expect(notifier.notify).not.toHaveBeenCalled();
+    });
   });
 
   describe('POST :slug/appointments — manageUrl', () => {
@@ -532,15 +581,19 @@ describe('PublicController', () => {
         );
       });
 
-      it('token inválido/expirado → 400 y NO crea cita', async () => {
+      it('token caducado o ya usado → la cita se crea como PUBLIC, sin conversación (ADR 0023)', async () => {
+        // El bot manda el link en vez de agendar por chat: abrirlo pasados los
+        // 30 min del token es lo normal, y un 400 le hacía perder la reserva.
         sessions.consume.mockResolvedValueOnce(null);
-        await expect(
-          controller.createAppointment('clinica-a', {
-            ...dto,
-            token: validToken,
-          }),
-        ).rejects.toBeInstanceOf(BadRequestException);
-        expect(scheduling.createAppointment).not.toHaveBeenCalled();
+
+        await controller.createAppointment('clinica-a', {
+          ...dto,
+          token: validToken,
+        });
+
+        expect(scheduling.createAppointment).toHaveBeenCalledWith(
+          expect.objectContaining({ source: 'PUBLIC', conversationId: undefined }),
+        );
       });
 
       it('token de otra clínica → 400 (multi-tenant guard)', async () => {
@@ -945,6 +998,7 @@ describe('PublicController — gestión de cita por link', () => {
   let availability: any;
   let scheduling: any;
   let sessions: any;
+  let notifier: { notify: jest.Mock };
   let controller: PublicController;
 
   const TOKEN = 'm'.repeat(32);
@@ -1031,11 +1085,15 @@ describe('PublicController — gestión de cita por link', () => {
           `${(process.env.WEB_BASE_URL ?? 'http://localhost:3000').replace(/\/+$/, '')}/${locale}/agendar/${slug}/cita?t=mtok-new`,
         ),
     };
+    // Aviso por WhatsApp al paciente (ADR 0023). Sus reglas se prueban en
+    // `patient-whatsapp-notifier.service.spec.ts`; aquí solo cuándo se llama.
+    notifier = { notify: jest.fn().mockResolvedValue(true) };
     controller = new PublicController(
       prisma as unknown as PrismaService,
       availability as unknown as AvailabilityService,
       scheduling as unknown as SchedulingService,
       sessions as unknown as SchedulingSessionService,
+      notifier as unknown as PatientWhatsappNotifier,
     );
   });
 
@@ -1159,6 +1217,16 @@ describe('PublicController — gestión de cita por link', () => {
   });
 
   describe('POST manage/:token/cancel', () => {
+    it('avisa al paciente por WhatsApp de la cancelación (ADR 0023)', async () => {
+      await controller.cancelManagedAppointment('clinica-a', TOKEN);
+
+      expect(notifier.notify).toHaveBeenCalledWith({
+        clinicId: 'clinic-A',
+        appointmentId: 'appt-1',
+        kind: 'canceled',
+      });
+    });
+
     it('cancela y quema el token', async () => {
       const res = await controller.cancelManagedAppointment('clinica-a', TOKEN);
 
@@ -1244,6 +1312,28 @@ describe('PublicController — gestión de cita por link', () => {
 
   describe('POST manage/:token/reschedule', () => {
     const body = { startAtISO: '2030-06-02T14:00:00.000Z' };
+
+    it('avisa al paciente del horario nuevo con el link nuevo (ADR 0023)', async () => {
+      process.env.WEB_BASE_URL = 'https://showly.us';
+
+      await controller.rescheduleManagedAppointment('clinica-a', TOKEN, body as any);
+
+      expect(notifier.notify).toHaveBeenCalledWith({
+        clinicId: 'clinic-A',
+        appointmentId: 'appt-1',
+        kind: 'rescheduled',
+        manageUrl: 'https://showly.us/es/agendar/clinica-a/cita?t=mtok-new',
+      });
+    });
+
+    it('si mover falla no se avisa', async () => {
+      scheduling.rescheduleAppointment.mockRejectedValueOnce(new SlotTakenException());
+
+      await expect(
+        controller.rescheduleManagedAppointment('clinica-a', TOKEN, body as any),
+      ).rejects.toThrow();
+      expect(notifier.notify).not.toHaveBeenCalled();
+    });
 
     it('mueve la cita in-place y devuelve un manageUrl nuevo', async () => {
       const res = await controller.rescheduleManagedAppointment(
