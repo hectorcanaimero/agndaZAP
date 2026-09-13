@@ -1235,41 +1235,43 @@
     "nav": {
       "brand": "Showly",
       "howItWorks": "Como funciona",
-      "features": "Recursos",
-      "pricing": "Preços",
+      "features": "Funcionalidades",
+      "pricing": "Preço",
       "faq": "Perguntas",
       "signIn": "Entrar",
-      "primaryCta": "Solicite sua demo",
+      "primaryCta": "Entrar no piloto",
       "openMenu": "Abrir menu",
       "closeMenu": "Fechar menu"
     },
     "hero": {
-      "eyebrow": "Agendamento pelo WhatsApp para clínicas",
-      "headline": "Pare de perder pacientes por faltas.",
-      "subheadline": "O paciente escreve para o WhatsApp de sempre. O Showly agenda, confirma e lembra. Ninguém baixa nada, sua equipe não aprende nada novo.",
-      "primaryCta": "Solicite sua demo",
-      "secondaryCta": "Veja como funciona",
-      "trust": "Em piloto com clínicas na LATAM e no Brasil.",
-      "trustStrip": {
-        "pilot": "Em piloto com clínicas na LATAM",
-        "whatsapp": "O WhatsApp que seus pacientes já usam",
-        "onboarding": "Onboarding em menos de 1 hora",
-        "multilang": "Português e español"
-      },
+      "headline": "Pare de perder pacientes por falta.",
+      "subheadline": "Seus pacientes escrevem no WhatsApp da clínica. O Showly agenda, confirma e lembra cada consulta por você.",
+      "primaryCta": "Entrar no piloto",
+      "secondaryCta": "Testar o bot",
+      "secondaryCtaFallback": "Ver como funciona",
       "mock": {
+        "label": "Conversa de exemplo entre um paciente e o Showly pelo WhatsApp",
         "clinicName": "Clínica Aurora",
         "clinicStatus": "online",
-        "patient": "Olá, quero uma consulta com a Dra. Rios.",
-        "bot1": "Oi! Estes são os próximos horários com a Dra. Rios:",
-        "botOptions": "1. Ter 12 · 09:30\n2. Qua 13 · 15:00\n3. Qui 14 · 11:00",
+        "typing": "digitando…",
+        "patient": "Oi, quero marcar uma consulta com a Dra. Ríos.",
+        "bot1": "Oi! Estes são os próximos horários com a Dra. Ríos:",
+        "botOptions": "1. Ter 12, 09:30\n2. Qua 13, 15:00\n3. Qui 14, 11:00",
         "botHint": "Responda com o número ou escreva outra data.",
         "patientReply": "1",
-        "botConfirm": "Pronto. Consulta confirmada para terça 12 às 9:30. ✅",
-        "reminderBadge": "Lembrete automático 24h antes",
-        "reminderText": "Oi Maria, esperamos você amanhã às 9:30. Responda SIM para confirmar, REMARCAR para trocar."
-      },
-      "whatsappCta": "Fale com a gente pelo WhatsApp",
-      "whatsappMessage": "Olá, quero saber mais sobre o Showly para a minha clínica."
+        "botConfirm": "Pronto. Sua consulta ficou para terça, dia 12, às 9:30.",
+        "reminderBadge": "Segunda 11, 9:30. Lembrete automático",
+        "reminderText": "Oi Maria, esperamos você amanhã às 9:30. Responda SIM para confirmar ou REMARCAR para mudar.",
+        "patientConfirm": "SIM",
+        "confirmedChip": "Consulta confirmada na agenda"
+      }
+    },
+    "facts": {
+      "label": "O básico do Showly",
+      "noApp": "O paciente não instala nada",
+      "number": "Com o seu número ou um dedicado",
+      "onboarding": "Pronta em menos de 1 hora",
+      "languages": "Em español e português"
     },
     "problem": {
       "eyebrow": "O problema",
@@ -1416,28 +1418,6 @@
         }
       },
       "footnote": "Estamos em piloto: ainda não temos certificações formais como LGPD auditada ou ISO 27001. O que temos são estas garantias escritas no código, e podemos mostrar quando quiser."
-    },
-    "forWhom": {
-      "eyebrow": "Para quem",
-      "headline": "Se sua clínica agenda pelo WhatsApp, o Showly é para você.",
-      "cards": {
-        "consultorios": {
-          "title": "Consultórios pequenos",
-          "body": "Um a três profissionais, agenda mista, recepção compartilhada."
-        },
-        "clinicas": {
-          "title": "Clínicas polivalentes",
-          "body": "Vários serviços, múltiplos profissionais, agenda com feriados e bloqueios."
-        },
-        "estetica": {
-          "title": "Centros de estética e bem-estar",
-          "body": "Turnos por sessão, tratamentos com intervalo entre consultas."
-        },
-        "especialistas": {
-          "title": "Especialistas",
-          "body": "Odontologia, fisioterapia, psicologia, nutrição. Cada um no seu ritmo."
-        }
-      }
     },
     "faq": {
       "eyebrow": "Perguntas frequentes",

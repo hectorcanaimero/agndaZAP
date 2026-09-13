@@ -1236,40 +1236,42 @@
       "brand": "Showly",
       "howItWorks": "Cómo funciona",
       "features": "Funcionalidades",
-      "pricing": "Precios",
+      "pricing": "Precio",
       "faq": "Preguntas",
       "signIn": "Iniciar sesión",
-      "primaryCta": "Solicita tu demo",
+      "primaryCta": "Unirme al piloto",
       "openMenu": "Abrir menú",
       "closeMenu": "Cerrar menú"
     },
     "hero": {
-      "eyebrow": "Agendamiento por WhatsApp para clínicas",
       "headline": "Deja de perder pacientes por no-show.",
-      "subheadline": "El paciente escribe al WhatsApp de siempre. Showly agenda, confirma y recuerda. Nadie descarga nada, tu equipo no aprende nada nuevo.",
-      "primaryCta": "Solicita tu demo",
-      "secondaryCta": "Ver cómo funciona",
-      "trust": "En piloto con clínicas de LATAM y Brasil.",
-      "trustStrip": {
-        "pilot": "En piloto con clínicas de LATAM",
-        "whatsapp": "El WhatsApp que ya usan tus pacientes",
-        "onboarding": "Onboarding en menos de 1 hora",
-        "multilang": "Español y português"
-      },
+      "subheadline": "Tus pacientes escriben al WhatsApp de la clínica. Showly agenda, confirma y recuerda cada cita por ti.",
+      "primaryCta": "Unirme al piloto",
+      "secondaryCta": "Probar el bot",
+      "secondaryCtaFallback": "Ver cómo funciona",
       "mock": {
+        "label": "Conversación de ejemplo entre un paciente y Showly por WhatsApp",
         "clinicName": "Clínica Aurora",
         "clinicStatus": "en línea",
+        "typing": "escribiendo…",
         "patient": "Hola, quiero una cita con la Dra. Ríos.",
         "bot1": "¡Hola! Estos son los próximos horarios con la Dra. Ríos:",
-        "botOptions": "1. Mar 12 · 09:30\n2. Mié 13 · 15:00\n3. Jue 14 · 11:00",
+        "botOptions": "1. Mar 12, 09:30\n2. Mié 13, 15:00\n3. Jue 14, 11:00",
         "botHint": "Responde con el número o escribe otra fecha.",
         "patientReply": "1",
-        "botConfirm": "Listo. Cita confirmada para el martes 12 a las 9:30. ✅",
-        "reminderBadge": "Recordatorio automático 24h antes",
-        "reminderText": "Hola María, te esperamos mañana a las 9:30. Responde SÍ para confirmar, REAGENDAR para cambiar."
-      },
-      "whatsappCta": "Escribinos por WhatsApp",
-      "whatsappMessage": "Hola, quiero saber más sobre Showly para mi clínica."
+        "botConfirm": "Listo. Tu cita quedó para el martes 12 a las 9:30.",
+        "reminderBadge": "Lunes 11, 9:30. Recordatorio automático",
+        "reminderText": "Hola María, te esperamos mañana a las 9:30. Responde SÍ para confirmar o REAGENDAR para cambiarla.",
+        "patientConfirm": "SÍ",
+        "confirmedChip": "Cita confirmada en la agenda"
+      }
+    },
+    "facts": {
+      "label": "Lo básico de Showly",
+      "noApp": "El paciente no instala nada",
+      "number": "Con tu número o uno dedicado",
+      "onboarding": "Lista en menos de 1 hora",
+      "languages": "En español y português"
     },
     "problem": {
       "eyebrow": "El problema",
@@ -1416,28 +1418,6 @@
         }
       },
       "footnote": "Estamos en piloto: todavía no tenemos certificaciones formales como HIPAA o ISO 27001. Lo que sí tenemos son estas garantías escritas en el código, y las podemos mostrar cuando quieras."
-    },
-    "forWhom": {
-      "eyebrow": "Para quién",
-      "headline": "Si tu clínica agenda por WhatsApp, Showly es para ti.",
-      "cards": {
-        "consultorios": {
-          "title": "Consultorios pequeños",
-          "body": "Uno a tres profesionales, agenda mixta, recepción compartida."
-        },
-        "clinicas": {
-          "title": "Clínicas polivalentes",
-          "body": "Varios servicios, múltiples profesionales, agenda con feriados y bloqueos."
-        },
-        "estetica": {
-          "title": "Centros de estética y bienestar",
-          "body": "Turnos por sesión, tratamientos con buffer entre citas."
-        },
-        "especialistas": {
-          "title": "Especialistas",
-          "body": "Odontología, kinesiología, psicología, nutrición. Cada uno con su ritmo."
-        }
-      }
     },
     "faq": {
       "eyebrow": "Preguntas frecuentes",

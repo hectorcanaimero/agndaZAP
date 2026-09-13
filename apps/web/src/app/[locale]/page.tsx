@@ -2,11 +2,11 @@ import type { Metadata } from 'next';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { Nav } from '@/components/landing/Nav';
 import { Hero } from '@/components/landing/Hero';
+import { Facts } from '@/components/landing/Facts';
 import { ProblemSection } from '@/components/landing/ProblemSection';
 import { HowItWorksSection } from '@/components/landing/HowItWorksSection';
 import { FeaturesSection } from '@/components/landing/FeaturesSection';
 import { PricingSection } from '@/components/landing/PricingSection';
-import { ForWhomSection } from '@/components/landing/ForWhomSection';
 import { SecurityStrip } from '@/components/landing/SecurityStrip';
 import { FaqSection } from '@/components/landing/FaqSection';
 import { FaqJsonLd } from '@/components/landing/FaqJsonLd';
@@ -39,6 +39,7 @@ export default async function LandingPage({
       <Nav />
       <main id="main" tabIndex={-1}>
         <Hero />
+        <Facts />
         <ProblemSection />
         <HowItWorksSection />
         <FeaturesSection />
@@ -47,7 +48,6 @@ export default async function LandingPage({
           y apps/web/PRODUCT.md prohíbe inventarlos. SecurityStrip (comprimida,
           link a /seguridad) después de Pricing para no competir con la venta.
         */}
-        <ForWhomSection />
         <PricingSection />
         <SecurityStrip />
         <FaqSection />

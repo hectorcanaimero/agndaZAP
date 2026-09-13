@@ -7,7 +7,7 @@ import { Link } from '@/i18n/routing';
 import { Button } from '@/components/ui/button';
 import { Logo } from './Logo';
 
-// Nav canonical SaaS three-section (N1b): brand · nav links · CTA.
+// Nav: marca, anclas de la página y el CTA único de la landing.
 // Sticky con backdrop blur — no altera el layout, respeta prefers-reduced-motion
 // porque solo animamos opacity/transform vía CSS.
 export function Nav() {
@@ -53,7 +53,7 @@ export function Nav() {
           <Button
             asChild
             size="sm"
-            className="group rounded-full bg-brand-navy px-5 text-sm font-semibold text-white shadow-lift-md transition-transform duration-300 ease-out-soft hover:-translate-y-0.5 hover:shadow-lift-lg hover:bg-brand-navy/95"
+            className="rounded-full bg-brand-navy px-5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-[#16375d]"
           >
             <a
               href="#cta"
@@ -68,7 +68,7 @@ export function Nav() {
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-md text-neutral-900 md:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-md text-brand-navy md:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy"
           aria-expanded={open}
           aria-label={open ? t('closeMenu') : t('openMenu')}
         >
@@ -101,7 +101,7 @@ export function Nav() {
               data-analytics="cta_click"
               data-analytics-location="nav-mobile"
               onClick={() => setOpen(false)}
-              className="mt-2 inline-flex items-center justify-center rounded-full bg-brand-navy px-4 py-3 text-base font-semibold text-white shadow-lift-md"
+              className="mt-2 inline-flex items-center justify-center rounded-full bg-brand-navy px-4 py-3 text-base font-semibold text-white"
             >
               {t('primaryCta')}
             </a>
