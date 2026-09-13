@@ -1364,34 +1364,29 @@
       "note": "Clínica ficticia: tu cita no llega a ningún consultorio real."
     },
     "pricing": {
-      "eyebrow": "Precios",
-      "headline": "Gratis mientras dure el piloto.",
-      "subheadline": "Sin tarjeta, sin compromiso. Te acompañamos hasta que la clínica agende sola.",
-      "badge": "Piloto",
-      "price": "Gratis",
-      "priceNote": "mientras dure el piloto",
-      "description": "No pedimos tarjeta ni firma de compromiso. Te acompañamos en el arranque hasta que la clínica agende sola.",
-      "includesTitle": "Todo incluido",
+      "headline": "Gratis durante el piloto.",
+      "subheadline": "Sin tarjeta y sin contrato. Te acompañamos hasta que tu clínica agende sola.",
+      "includesTitle": "Incluye todo",
       "features": {
-        "bot": "Bot de agendamiento por WhatsApp",
-        "reminders": "Recordatorios 24h y 3h antes",
-        "panel": "Panel web para tu equipo (agenda, bandeja, dashboard)",
+        "bot": "Agendamiento por WhatsApp",
+        "reminders": "Recordatorios 24 h y 3 h antes",
+        "panel": "Panel para tu equipo: agenda, conversaciones y ausencias",
         "multiLang": "Español y português",
-        "onboarding": "Onboarding acompañado en menos de 1 hora",
+        "onboarding": "Alta acompañada en menos de 1 hora",
         "unlimited": "Sin límite de citas ni de pacientes"
       },
-      "cta": "Quiero entrar al piloto",
-      "afterPilot": "Cuando salgamos del piloto te avisamos 30 días antes. Ni un centavo antes de eso."
+      "cta": "Unirme al piloto",
+      "afterTitle": "¿Y cuando termine el piloto?",
+      "afterBody": "El plan base va a costar menos que un no-show a la semana. Te avisamos 30 días antes y tú decides si sigues. No cobramos nada antes de eso."
     },
     "securityStrip": {
-      "eyebrow": "Seguridad y datos",
-      "headline": "Los datos de tus pacientes están aislados por clínica.",
+      "headline": "Los datos de tus pacientes quedan aislados por clínica.",
       "chips": {
         "isolation": {
           "label": "Aislamiento por clínica"
         },
         "dedicated": {
-          "label": "WhatsApp dedicado"
+          "label": "Sesión de WhatsApp propia"
         },
         "noPii": {
           "label": "Sin datos personales en logs"
@@ -1430,63 +1425,65 @@
       "footnote": "Estamos en piloto: todavía no tenemos certificaciones formales como HIPAA o ISO 27001. Lo que sí tenemos son estas garantías escritas en el código, y las podemos mostrar cuando quieras."
     },
     "faq": {
-      "eyebrow": "Preguntas frecuentes",
       "headline": "Lo que suelen preguntarnos.",
       "items": {
         "phone": {
-          "question": "¿Necesito un número de WhatsApp nuevo?",
-          "answer": "Sí. Recomendamos un número dedicado para la clínica, distinto del personal. Puede ser prepago o corporativo."
+          "question": "¿Tengo que cambiar el número de WhatsApp?",
+          "answer": "No. Puedes usar el número que ya tiene la clínica. Te recomendamos uno dedicado (prepago o corporativo) para que el bot no se mezcle con el uso personal ni con chats que no son de pacientes."
         },
         "install": {
           "question": "¿El paciente tiene que instalar algo?",
-          "answer": "No. El paciente solo escribe al WhatsApp de la clínica, como siempre. No hay apps, cuentas ni descargas."
+          "answer": "No. El paciente escribe al WhatsApp de la clínica, como siempre. No hay apps, cuentas ni descargas."
         },
         "business": {
           "question": "¿Funciona con WhatsApp Business?",
-          "answer": "Sí. Usamos un número dedicado que puede ser Business. En la fase piloto usamos WAHA (una integración no oficial) para bajar costos."
+          "answer": "Sí, con WhatsApp y con WhatsApp Business. Hoy nos conectamos con una integración no oficial (WAHA), que mantiene el costo bajo. Por eso recomendamos un número dedicado: si algo falla, tu número principal no se toca."
         },
         "onboarding": {
           "question": "¿Cuánto tarda dar de alta mi clínica?",
-          "answer": "Menos de una hora. Cargamos servicios, profesionales y horarios contigo. La misma tarde ya recibes citas por WhatsApp."
+          "answer": "Menos de una hora. Cargamos contigo servicios, profesionales y horarios. Esa misma tarde ya recibes citas por WhatsApp."
         },
         "privacy": {
           "question": "¿Los datos de mis pacientes están seguros?",
-          "answer": "Sí. Todo cifrado en tránsito, datos aislados por clínica, y minimizamos lo que se almacena. Los mensajes viven en tu sesión de WhatsApp."
+          "answer": "Todo viaja cifrado, los datos quedan aislados por clínica y guardamos lo mínimo. Todavía no tenemos certificaciones formales; en /seguridad te contamos qué está hecho en el código."
         },
         "price": {
           "question": "¿Cuánto cuesta?",
-          "answer": "Gratis mientras dure el piloto: sin tarjeta y sin compromiso. Cuando salgamos del piloto, el plan base va a costar menos que un no-show a la semana, y te avisamos 30 días antes. Ni un centavo antes de eso."
+          "answer": "Nada mientras dure el piloto: sin tarjeta y sin compromiso. Después, el plan base va a costar menos que un no-show a la semana, y te avisamos 30 días antes."
         }
       }
     },
     "cta": {
-      "headline": "Recupera las horas que tu equipo gasta en WhatsApp.",
-      "subheadline": "En menos de una hora tu clínica está agendando y confirmando por WhatsApp. Sin cambiar de número.",
-      "trust": "No pedimos tarjeta. No instalas nada. Onboarding acompañado por el equipo.",
+      "headline": "Recupera las horas que tu equipo pasa en WhatsApp.",
+      "subheadline": "Déjanos tus datos y dejamos tu clínica agendando y confirmando por WhatsApp en menos de una hora.",
+      "trust": "Sin tarjeta. El paciente no instala nada. Te acompañamos en el arranque.",
+      "orWhatsapp": "¿Prefieres hablar antes?",
+      "whatsappCta": "Escríbenos por WhatsApp",
+      "whatsappMessage": "Hola, quiero probar Showly en mi clínica.",
       "form": {
         "labels": {
           "name": "Tu nombre",
-          "phone": "WhatsApp de contacto",
-          "clinicType": "Tipo de negocio (opcional)",
-          "consent": "Acepto que me contacten por WhatsApp o email para coordinar la demo."
+          "phone": "Tu WhatsApp",
+          "clinicType": "Tipo de clínica (opcional)",
+          "consent": "Acepto que me contacten por WhatsApp o email para empezar el piloto."
         },
         "placeholders": {
-          "name": "Ej: María González",
+          "name": "María González",
           "phone": "+52 55 1234 5678",
           "clinicType": "Elige una opción"
         },
         "clinicTypes": {
           "consultorio": "Consultorio individual",
-          "clinica": "Clínica multi-profesional",
-          "estetica": "Estética o wellness",
+          "clinica": "Clínica con varios profesionales",
+          "estetica": "Estética o bienestar",
           "especialista": "Especialista independiente",
           "otro": "Otro"
         },
-        "submit": "Quiero probarlo",
+        "submit": "Unirme al piloto",
         "submitting": "Enviando…",
-        "successToast": "Recibimos tu mensaje. Te escribimos en breve.",
-        "successTitle": "Listo. Te contactamos en menos de 24 horas.",
-        "successBody": "Vamos a escribirte por WhatsApp para coordinar la demo y responder tus dudas.",
+        "successToast": "Recibimos tus datos. Te escribimos pronto.",
+        "successTitle": "Listo. Te escribimos en menos de 24 horas.",
+        "successBody": "Te contactamos por WhatsApp para dar de alta tu clínica y resolver tus dudas.",
         "errors": {
           "nameMin": "Ingresa al menos 2 caracteres.",
           "phoneInvalid": "Formato inválido. Ej: +52 55 1234 5678.",
@@ -1495,10 +1492,7 @@
           "validation": "Revisa los datos e intenta de nuevo.",
           "generic": "No pudimos enviar el mensaje. Prueba de nuevo."
         }
-      },
-      "whatsappCta": "Escribinos por WhatsApp",
-      "whatsappMessage": "Hola, quiero probar Showly en mi clínica.",
-      "orForm": "O dejanos tus datos y te escribimos nosotros."
+      }
     },
     "footer": {
       "brand": "Showly",

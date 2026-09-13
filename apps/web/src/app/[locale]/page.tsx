@@ -36,7 +36,7 @@ export default async function LandingPage({
   setRequestLocale(locale);
 
   return (
-    <div className="min-h-screen bg-white text-neutral-900">
+    <div className="min-h-screen bg-mist-50 font-display text-brand-navy">
       <Nav />
       <main id="main" tabIndex={-1}>
         <Hero />

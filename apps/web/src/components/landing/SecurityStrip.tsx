@@ -1,8 +1,6 @@
 import { useTranslations } from 'next-intl';
-import { Users2, Lock, EyeOff, KeyRound, ArrowRight } from 'lucide-react';
+import { ArrowRight, EyeOff, KeyRound, Lock, ShieldCheck, Users2 } from 'lucide-react';
 import { Link } from '@/i18n/routing';
-import { FadeIn } from './motion/FadeIn';
-import { Stagger, StaggerItem } from './motion/Stagger';
 
 const CHIPS = [
   { key: 'isolation', Icon: Users2 },
@@ -11,48 +9,38 @@ const CHIPS = [
   { key: 'accessControl', Icon: KeyRound },
 ] as const;
 
+// Franja comprimida de seguridad: un titular, cuatro hechos verificables en
+// el código y el enlace a /seguridad, donde está el detalle y lo que todavía
+// no tenemos (certificaciones).
 export function SecurityStrip() {
   const t = useTranslations('landing.securityStrip');
 
   return (
-    <section id="security" className="bg-mist-100 py-20 md:py-24">
-      <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-        <FadeIn className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between md:gap-8">
-          <h3 className="max-w-2xl font-display text-2xl font-medium leading-snug tracking-[-0.02em] text-brand-navy sm:text-3xl">
-            {t('headline')}
-          </h3>
-          <Link
-            href="/seguridad"
-            aria-label={t('ariaMore')}
-            className="group inline-flex items-center gap-2 rounded-full text-sm font-semibold text-brand-navy transition-colors hover:text-brand-teal"
-          >
-            <span>{t('ctaLabel')}</span>
-            <ArrowRight
-              className="h-4 w-4 transition-transform duration-300 ease-out-soft group-hover:translate-x-1"
-              aria-hidden="true"
-            />
-          </Link>
-        </FadeIn>
-
-        <Stagger
-          as="ul"
-          className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-2 md:mt-12 md:grid-cols-4"
-        >
+    <section id="security" className="border-y border-mist-200 bg-mist-100">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 sm:px-6 lg:flex-row lg:items-center lg:gap-10 lg:px-8">
+        <div className="flex items-start gap-3 lg:w-80 lg:shrink-0">
+          <ShieldCheck className="mt-0.5 h-6 w-6 shrink-0 text-teal-ink" aria-hidden="true" strokeWidth={1.75} />
+          <h2 className="text-lg font-semibold leading-snug text-brand-navy">{t('headline')}</h2>
+        </div>
+        <ul className="grid flex-1 grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
           {CHIPS.map(({ key, Icon }) => (
-            <StaggerItem
-              as="li"
-              key={key}
-              className="flex h-full items-center gap-3 rounded-2xl border border-mist-200 bg-mist-50 px-5 py-4 shadow-lift-sm"
-            >
-              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-teal/10 text-brand-teal ring-1 ring-inset ring-brand-teal/20">
-                <Icon className="h-4 w-4" aria-hidden="true" strokeWidth={1.75} />
-              </span>
-              <span className="text-sm font-medium leading-snug text-brand-navy">
-                {t(`chips.${key}.label`)}
-              </span>
-            </StaggerItem>
+            <li key={key} className="flex items-center gap-2.5 text-sm font-medium text-mist-700">
+              <Icon className="h-4 w-4 shrink-0 text-brand-navy" aria-hidden="true" strokeWidth={1.75} />
+              {t(`chips.${key}.label`)}
+            </li>
           ))}
-        </Stagger>
+        </ul>
+        <Link
+          href="/seguridad"
+          aria-label={t('ariaMore')}
+          className="group inline-flex shrink-0 items-center gap-2 text-sm font-semibold text-brand-navy underline decoration-brand-teal decoration-2 underline-offset-4"
+        >
+          {t('ctaLabel')}
+          <ArrowRight
+            className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1"
+            aria-hidden="true"
+          />
+        </Link>
       </div>
     </section>
   );
