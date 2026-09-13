@@ -91,6 +91,8 @@ describe('bot.messages (B7)', () => {
     expect(botCopy('es').reminder('', 'x', 'y', 'z')).toContain(
       `*${botCopy('es').wordYes}*`,
     );
+  });
+
   it('aiDisclosure es texto literal: ni placeholders ni comodines de LIKE (B6)', () => {
     // `BotService.shouldSendAiDisclosure` busca este texto TAL CUAL dentro del
     // `body` de los `Message OUT` para no repetir el aviso en 24 h. Dos formas
