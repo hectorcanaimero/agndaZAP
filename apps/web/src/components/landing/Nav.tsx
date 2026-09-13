@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { Menu, X } from 'lucide-react';
 import { Link } from '@/i18n/routing';
 import { Button } from '@/components/ui/button';
@@ -12,17 +12,20 @@ import { Logo } from './Logo';
 // porque solo animamos opacity/transform vía CSS.
 export function Nav() {
   const t = useTranslations('landing.nav');
+  const locale = useLocale();
+  // Con ruta y no sólo #ancla: /seguridad y las legales también usan esta nav.
+  const home = `/${locale}`;
   const [open, setOpen] = useState(false);
 
   const links = [
-    { href: '#how-it-works', label: t('howItWorks') },
-    { href: '#features', label: t('features') },
-    { href: '#pricing', label: t('pricing') },
-    { href: '#faq', label: t('faq') },
+    { href: `${home}#how-it-works`, label: t('howItWorks') },
+    { href: `${home}#features`, label: t('features') },
+    { href: `${home}#pricing`, label: t('pricing') },
+    { href: `${home}#faq`, label: t('faq') },
   ];
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-mist-200/60 bg-mist-50/85 backdrop-blur-lg">
+    <header className="sticky top-0 z-40 w-full border-b border-mist-200 bg-mist-50">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <Link href="/" aria-label="Showly" className="shrink-0">
           <Logo variant="full" />
@@ -53,10 +56,10 @@ export function Nav() {
           <Button
             asChild
             size="sm"
-            className="rounded-full bg-brand-navy px-5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-[#16375d]"
+            className="rounded-full bg-brand-navy px-5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-[#16375d] focus-visible:ring-2 focus-visible:ring-brand-teal focus-visible:ring-offset-2 focus-visible:ring-offset-mist-50"
           >
             <a
-              href="#cta"
+              href={`${home}#cta`}
               data-analytics="cta_click"
               data-analytics-location="nav"
             >
@@ -97,7 +100,7 @@ export function Nav() {
               {t('signIn')}
             </Link>
             <a
-              href="#cta"
+              href={`${home}#cta`}
               data-analytics="cta_click"
               data-analytics-location="nav-mobile"
               onClick={() => setOpen(false)}

@@ -25,7 +25,7 @@ export function Hero() {
             <Button
               asChild
               size="lg"
-              className="group h-14 rounded-full bg-brand-navy px-7 text-base font-semibold text-white shadow-lift-md transition-[transform,background-color] duration-300 ease-out-soft hover:-translate-y-0.5 hover:bg-[#16375d] active:translate-y-0"
+              className="group h-14 rounded-full bg-brand-navy px-7 text-base font-semibold text-white shadow-lift-md transition-[transform,background-color] duration-300 ease-out-soft hover:-translate-y-0.5 hover:bg-[#16375d] active:translate-y-0 focus-visible:ring-2 focus-visible:ring-brand-teal focus-visible:ring-offset-2 focus-visible:ring-offset-mist-50"
             >
               <a href="#cta" data-analytics="cta_click" data-analytics-location="hero">
                 {t('primaryCta')}
@@ -39,7 +39,7 @@ export function Hero() {
               asChild
               size="lg"
               variant="ghost"
-              className="h-14 rounded-full px-6 text-base font-semibold text-brand-navy hover:bg-brand-navy/5"
+              className="h-14 rounded-full px-6 text-base font-semibold text-brand-navy hover:bg-brand-navy/5 focus-visible:ring-2 focus-visible:ring-brand-teal focus-visible:ring-offset-2 focus-visible:ring-offset-mist-50"
             >
               {demoAvailable ? (
                 <a href="#demo" data-analytics="cta_click" data-analytics-location="hero-demo">

@@ -21,7 +21,7 @@ export function PricingSection() {
             </h2>
             <p className="mt-5 max-w-md text-lg leading-relaxed text-mist-600">{t('subheadline')}</p>
 
-            <div className="mt-8 rounded-xl bg-mist-100 p-5 lg:mt-auto">
+            <div className="mt-8 border-t border-mist-200 pt-6 lg:mt-auto">
               <h3 className="text-base font-semibold text-brand-navy">{t('afterTitle')}</h3>
               <p className="mt-2 text-sm leading-relaxed text-mist-700">{t('afterBody')}</p>
             </div>
@@ -45,7 +45,7 @@ export function PricingSection() {
             <Button
               asChild
               size="lg"
-              className="group mt-10 h-14 w-full rounded-full bg-brand-navy text-base font-semibold text-white transition-colors duration-200 hover:bg-[#16375d]"
+              className="group mt-10 h-14 w-full rounded-full bg-brand-navy text-base font-semibold text-white transition-colors duration-200 hover:bg-[#16375d] focus-visible:ring-2 focus-visible:ring-brand-teal focus-visible:ring-offset-2 focus-visible:ring-offset-white"
             >
               <a href="#cta" data-analytics="cta_click" data-analytics-location="pricing">
                 {t('cta')}

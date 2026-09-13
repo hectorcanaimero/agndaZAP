@@ -16,8 +16,8 @@ import { useEffect, useRef, useState } from 'react';
 // "La vida de una cita": el único bloque oscuro de la landing y su momento
 // de movimiento principal. En desktop los pasos avanzan con el scroll y la
 // agenda de al lado (sticky) cambia de estado; en mobile la agenda avanza
-// sola mientras está en pantalla. Con reduced-motion no hay autoplay: la
-// agenda muestra el día completo.
+// sola una vez mientras está en pantalla y se queda en el día completo
+// (WCAG 2.2.2: nada se mueve en bucle). Con reduced-motion no hay autoplay.
 //
 // Los datos de la agenda son de ejemplo y el aria-label lo dice. Los estados
 // son los reales del producto (PENDIENTE, CONFIRMADA, EN_RIESGO, ATENDIDA).
@@ -95,17 +95,18 @@ export function Lifecycle() {
     return () => observer.disconnect();
   }, [isDesktop]);
 
-  // Mobile: autoplay mientras la agenda se ve; reduced-motion → día completo.
+  // Mobile: un solo recorrido mientras la agenda se ve, y se queda en el día
+  // completo; reduced-motion → día completo directo.
   useEffect(() => {
     if (isDesktop) return;
     if (reduce) {
       setStep(STEPS.length - 1);
       return;
     }
-    if (!cardInView) return;
-    const id = setInterval(() => setStep((s) => (s + 1) % STEPS.length), 2600);
-    return () => clearInterval(id);
-  }, [isDesktop, reduce, cardInView]);
+    if (!cardInView || step >= STEPS.length - 1) return;
+    const id = setTimeout(() => setStep((s) => s + 1), 2600);
+    return () => clearTimeout(id);
+  }, [isDesktop, reduce, cardInView, step]);
 
   const rows = agendaFor(step);
   const stepKey = STEPS[step];
@@ -133,18 +134,26 @@ export function Lifecycle() {
                 >
                   <span
                     aria-hidden="true"
-                    className={`absolute -left-px top-5 h-8 w-px transition-colors duration-300 lg:top-1/2 lg:-translate-y-1/2 ${
+                    className={`absolute -left-px top-1/2 hidden h-8 w-px -translate-y-1/2 transition-colors duration-300 lg:block ${
                       active ? 'bg-brand-teal' : 'bg-transparent'
                     }`}
                   />
-                  <div
-                    className={`transition-opacity duration-300 ${
-                      active || !isDesktop ? 'opacity-100' : 'opacity-40'
-                    }`}
-                    aria-current={active ? 'step' : undefined}
-                  >
-                    <h3 className="text-xl font-semibold leading-snug sm:text-2xl">{t(`steps.${key}.title`)}</h3>
-                    <p className="mt-2 max-w-md text-base leading-relaxed text-white/70">
+                  {/* Atenuado con color y sólo en lg (sin esperar a isDesktop, que
+                      arranca en false y hacía parpadear). white/60 y white/55 sobre
+                      navy siguen por encima de 4.5:1. */}
+                  <div aria-current={active ? 'step' : undefined}>
+                    <h3
+                      className={`text-xl font-semibold leading-snug transition-colors duration-300 sm:text-2xl ${
+                        active ? 'text-white' : 'text-white lg:text-white/60'
+                      }`}
+                    >
+                      {t(`steps.${key}.title`)}
+                    </h3>
+                    <p
+                      className={`mt-2 max-w-md text-base leading-relaxed transition-colors duration-300 ${
+                        active ? 'text-white/80' : 'text-white/80 lg:text-white/55'
+                      }`}
+                    >
                       {t(`steps.${key}.body`)}
                     </p>
                   </div>
@@ -188,7 +197,7 @@ export function Lifecycle() {
                         <span className="w-11 shrink-0 text-sm tabular-nums text-white/60">{row.time}</span>
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-medium">{row.name}</span>
-                          <span className="block truncate text-xs text-white/50">{t(`card.services.${row.service}`)}</span>
+                          <span className="block truncate text-xs text-white/65">{t(`card.services.${row.service}`)}</span>
                         </span>
                         <motion.span
                           key={row.status}

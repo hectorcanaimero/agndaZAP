@@ -1,10 +1,11 @@
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { Link } from '@/i18n/routing';
 import { Logo } from './Logo';
 
 // Footer: la frase de Showly, dos columnas cortas de enlaces e idioma.
 export function Footer() {
   const t = useTranslations('landing.footer');
+  const home = `/${useLocale()}`;
   const year = new Date().getFullYear();
 
   return (
@@ -21,13 +22,13 @@ export function Footer() {
 
           {/* Product */}
           <div>
-            <h3 className="text-xs font-semibold uppercase tracking-widest text-mist-600">
+            <h3 className="text-sm font-semibold text-brand-navy">
               {t('columns.product.title')}
             </h3>
             <ul className="mt-4 space-y-3 text-sm">
               <li>
                 <a
-                  href="#how-it-works"
+                  href={`${home}#how-it-works`}
                   className="text-mist-700 transition-colors hover:text-brand-navy"
                 >
                   {t('columns.product.links.howItWorks')}
@@ -35,7 +36,7 @@ export function Footer() {
               </li>
               <li>
                 <a
-                  href="#features"
+                  href={`${home}#features`}
                   className="text-mist-700 transition-colors hover:text-brand-navy"
                 >
                   {t('columns.product.links.features')}
@@ -43,7 +44,7 @@ export function Footer() {
               </li>
               <li>
                 <a
-                  href="#pricing"
+                  href={`${home}#pricing`}
                   className="text-mist-700 transition-colors hover:text-brand-navy"
                 >
                   {t('columns.product.links.pricing')}
@@ -51,7 +52,7 @@ export function Footer() {
               </li>
               <li>
                 <a
-                  href="#faq"
+                  href={`${home}#faq`}
                   className="text-mist-700 transition-colors hover:text-brand-navy"
                 >
                   {t('columns.product.links.faq')}
@@ -70,7 +71,7 @@ export function Footer() {
 
           {/* Company */}
           <div>
-            <h3 className="text-xs font-semibold uppercase tracking-widest text-mist-600">
+            <h3 className="text-sm font-semibold text-brand-navy">
               {t('columns.company.title')}
             </h3>
             <ul className="mt-4 space-y-3 text-sm">

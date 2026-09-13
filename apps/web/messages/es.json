@@ -1240,7 +1240,7 @@
         "patient": "Hola, quiero una cita con la Dra. Ríos.",
         "bot1": "¡Hola! Estos son los próximos horarios con la Dra. Ríos:",
         "botOptions": "1. Mar 12, 09:30\n2. Mié 13, 15:00\n3. Jue 14, 11:00",
-        "botHint": "Responde con el número o escribe otra fecha.",
+        "botHint": "Responde con el número del horario que prefieras.",
         "patientReply": "1",
         "botConfirm": "Listo. Tu cita quedó para el martes 12 a las 9:30.",
         "reminderBadge": "Lunes 11, 9:30. Recordatorio automático",
@@ -1283,7 +1283,7 @@
           "body": "Lee tu agenda, propone opciones libres y crea la cita cuando el paciente elige."
         },
         "remind": {
-          "title": "Recordatorio 24 h y 3 h antes",
+          "title": "Recordatorio 24 h antes",
           "body": "El paciente confirma con un SÍ o pide reagendar, sin llamar a nadie."
         },
         "risk": {
@@ -1331,19 +1331,35 @@
         },
         "multiPro": {
           "title": "Una agenda por profesional",
-          "body": "Servicios, horarios y bloqueos de cada uno, y un calendario que se suscribe desde Google Calendar o el iPhone."
+          "body": "Servicios, horarios y bloqueos de cada uno, y un calendario que se suscribe desde Google Calendar o el iPhone.",
+          "specialties": {
+            "general": "Odontología general",
+            "ortho": "Ortodoncia"
+          }
         },
         "faq": {
           "title": "Responde lo que siempre preguntan",
-          "body": "Precios, dirección, horarios y formas de pago, con la información que tú cargaste. Nada inventado."
+          "body": "Precios, dirección, horarios y formas de pago, con la información que tú cargaste. Nada inventado.",
+          "demoQuestion": "¿Aceptan tarjeta?",
+          "demoAnswer": "Sí, aceptamos débito y crédito."
         },
         "feedback": {
-          "title": "Cada consulta, calificada",
-          "body": "Después de la visita, el paciente califica de 1 a 5 por el mismo WhatsApp."
+          "title": "Calificación después de la visita",
+          "body": "Si lo activas, el paciente califica de 1 a 5 por el mismo WhatsApp cuando la cita queda atendida."
         },
         "timezone": {
           "title": "En la hora de tu clínica",
-          "body": "Recordatorios en español o português que respetan tu zona horaria, feriados y bloqueos."
+          "body": "Cada clínica agenda y recuerda en su propia zona horaria, en español o português.",
+          "zones": {
+            "es": {
+              "city": "Ciudad de México",
+              "time": "09:30"
+            },
+            "pt": {
+              "city": "São Paulo",
+              "time": "12:30"
+            }
+          }
         }
       }
     },
@@ -1361,7 +1377,7 @@
         "body": "La página que usa el paciente cuando prefiere elegir en un calendario.",
         "cta": "Abrir la página de citas"
       },
-      "note": "Clínica ficticia: tu cita no llega a ningún consultorio real."
+      "note": "Clínica ficticia: tu cita no llega a ningún consultorio, pero sus mensajes sí te llegan por WhatsApp."
     },
     "pricing": {
       "headline": "Gratis durante el piloto.",
@@ -1372,7 +1388,7 @@
         "reminders": "Recordatorios 24 h y 3 h antes",
         "panel": "Panel para tu equipo: agenda, conversaciones y ausencias",
         "multiLang": "Español y português",
-        "onboarding": "Alta acompañada en menos de 1 hora",
+        "onboarding": "Alta acompañada por nuestro equipo",
         "unlimited": "Sin límite de citas ni de pacientes"
       },
       "cta": "Unirme al piloto",
@@ -1395,8 +1411,7 @@
           "label": "Panel protegido por defecto"
         }
       },
-      "ctaLabel": "Cómo protegemos tus datos",
-      "ariaMore": "Ver detalles sobre seguridad y protección de datos"
+      "ctaLabel": "Cómo protegemos tus datos"
     },
     "securityPage": {
       "metaTitle": "Seguridad y datos | Showly",
@@ -1454,8 +1469,8 @@
       }
     },
     "cta": {
-      "headline": "Recupera las horas que tu equipo pasa en WhatsApp.",
-      "subheadline": "Déjanos tus datos y dejamos tu clínica agendando y confirmando por WhatsApp en menos de una hora.",
+      "headline": "Empieza a recuperar las citas que hoy se pierden.",
+      "subheadline": "Déjanos tus datos y te ayudamos a dejar tu clínica agendando y confirmando por WhatsApp.",
       "trust": "Sin tarjeta. El paciente no instala nada. Te acompañamos en el arranque.",
       "orWhatsapp": "¿Prefieres hablar antes?",
       "whatsappCta": "Escríbenos por WhatsApp",
@@ -1465,7 +1480,7 @@
           "name": "Tu nombre",
           "phone": "Tu WhatsApp",
           "clinicType": "Tipo de clínica (opcional)",
-          "consent": "Acepto que me contacten por WhatsApp o email para empezar el piloto."
+          "consent": "Acepto que me contacten por WhatsApp para empezar el piloto."
         },
         "placeholders": {
           "name": "María González",

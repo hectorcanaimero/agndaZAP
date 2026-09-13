@@ -3,17 +3,18 @@ import { Plus } from 'lucide-react';
 
 const QUESTIONS = ['phone', 'install', 'business', 'onboarding', 'privacy', 'price'] as const;
 
+// Una sola columna de lectura: la FAQ es para leer, no para componer.
 export function FaqSection() {
   const t = useTranslations('landing.faq');
 
   return (
     <section id="faq" className="scroll-mt-16 py-20 lg:py-28">
-      <div className="mx-auto grid max-w-6xl gap-10 px-4 sm:px-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:gap-16 lg:px-8">
-        <h2 className="text-balance text-4xl font-semibold leading-[1.08] tracking-[-0.03em] text-brand-navy sm:text-5xl lg:sticky lg:top-24 lg:self-start">
+      <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+        <h2 className="text-balance text-4xl font-semibold leading-[1.08] tracking-[-0.03em] text-brand-navy sm:text-5xl">
           {t('headline')}
         </h2>
 
-        <div className="divide-y divide-mist-200 border-y border-mist-200">
+        <div className="mt-10 divide-y divide-mist-200 border-y border-mist-200 lg:mt-12">
           {QUESTIONS.map((q) => (
             <details key={q} className="group [&_summary::-webkit-details-marker]:hidden">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-6 py-5 text-left">

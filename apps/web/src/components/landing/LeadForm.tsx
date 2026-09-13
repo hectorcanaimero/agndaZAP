@@ -214,6 +214,7 @@ export function LeadForm() {
             id="lead-name"
             type="text"
             autoComplete="name"
+            className="h-11 rounded-lg border-mist-300"
             placeholder={t('placeholders.name')}
             aria-invalid={errors.name ? 'true' : 'false'}
             {...register('name')}
@@ -233,6 +234,7 @@ export function LeadForm() {
             id="lead-phone"
             type="tel"
             autoComplete="tel"
+            className="h-11 rounded-lg border-mist-300"
             placeholder={t('placeholders.phone')}
             aria-invalid={errors.phone ? 'true' : 'false'}
             {...register('phone')}
@@ -264,7 +266,7 @@ export function LeadForm() {
             });
           }}
         >
-          <SelectTrigger id="lead-clinic-type">
+          <SelectTrigger id="lead-clinic-type" className="h-11 rounded-lg border-mist-300">
             <SelectValue placeholder={t('placeholders.clinicType')} />
           </SelectTrigger>
           <SelectContent>
@@ -318,7 +320,7 @@ export function LeadForm() {
         type="submit"
         size="lg"
         disabled={submitting}
-        className="mt-6 h-12 w-full rounded-full bg-brand-navy text-base font-semibold text-white hover:bg-[#16375d]"
+        className="mt-6 h-12 w-full rounded-full bg-brand-navy text-base font-semibold text-white hover:bg-[#16375d] focus-visible:ring-2 focus-visible:ring-brand-teal focus-visible:ring-offset-2 focus-visible:ring-offset-white"
       >
         {submitting ? (
           t('submitting')

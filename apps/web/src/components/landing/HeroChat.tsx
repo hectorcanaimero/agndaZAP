@@ -87,8 +87,8 @@ export function HeroChat() {
                 {phase === 'typing' ? t('typing') : t('clinicStatus')}
               </div>
             </div>
-            <div aria-hidden="true" className="flex items-center gap-4 opacity-90">
-              <Video className="h-5 w-5" strokeWidth={2} />
+            <div aria-hidden="true" className="flex items-center gap-3 opacity-90 sm:gap-4">
+              <Video className="hidden h-5 w-5 sm:block" strokeWidth={2} />
               <Phone className="h-4 w-4" strokeWidth={2} />
               <MoreVertical className="h-5 w-5" strokeWidth={2} />
             </div>

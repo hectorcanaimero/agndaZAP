@@ -46,55 +46,57 @@ export function NoShowCalculator() {
         : nf.format(values.weekly);
 
   return (
-    <div className="rounded-2xl border border-mist-200 bg-white p-6 sm:p-8">
-      <h3 className="text-lg font-semibold text-brand-navy">{t('title')}</h3>
-
-      <div className="mt-6 space-y-6">
-        {FIELDS.map((f) => {
-          const id = `${baseId}-${f.key}`;
-          return (
-            <div key={f.key}>
-              <div className="flex items-baseline justify-between gap-4">
-                <label htmlFor={id} className="text-sm font-medium text-mist-700">
-                  {t(f.key)}
-                </label>
-                <output htmlFor={id} className="text-base font-semibold tabular-nums text-brand-navy">
-                  {display(f)}
-                </output>
+    <div className="grid overflow-hidden rounded-2xl border border-mist-200 bg-white lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+      <div className="p-6 sm:p-8 lg:p-10">
+        <h3 className="text-lg font-semibold text-brand-navy">{t('title')}</h3>
+        <div className="mt-6 space-y-6">
+          {FIELDS.map((f) => {
+            const id = `${baseId}-${f.key}`;
+            return (
+              <div key={f.key}>
+                <div className="flex items-baseline justify-between gap-4">
+                  <label htmlFor={id} className="text-sm font-medium text-mist-700">
+                    {t(f.key)}
+                  </label>
+                  <output htmlFor={id} className="text-base font-semibold tabular-nums text-brand-navy">
+                    {display(f)}
+                  </output>
+                </div>
+                <input
+                  id={id}
+                  type="range"
+                  min={f.min}
+                  max={f.max}
+                  step={f.step}
+                  value={values[f.key]}
+                  aria-valuetext={display(f)}
+                  onChange={(e) => setValues((v) => ({ ...v, [f.key]: Number(e.target.value) }))}
+                  className="mt-3 h-2 w-full cursor-pointer accent-brand-navy"
+                />
               </div>
-              <input
-                id={id}
-                type="range"
-                min={f.min}
-                max={f.max}
-                step={f.step}
-                value={values[f.key]}
-                onChange={(e) => setValues((v) => ({ ...v, [f.key]: Number(e.target.value) }))}
-                className="mt-3 h-2 w-full cursor-pointer accent-brand-navy"
-              />
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
-      <div className="mt-8 border-t border-mist-200 pt-6" aria-live="polite">
-        <p className="text-4xl font-semibold tracking-[-0.03em] tabular-nums text-brand-navy sm:text-5xl">
+      <div className="flex flex-col justify-center border-t border-mist-200 bg-mist-100 p-6 sm:p-8 lg:border-l lg:border-t-0 lg:p-10">
+        <p aria-live="polite" className="text-5xl font-semibold tracking-[-0.03em] tabular-nums text-brand-navy sm:text-6xl">
           {currency} {nf.format(moneyMonth)}
         </p>
-        <p className="mt-1 text-sm text-mist-600">{t('moneyMonth')}</p>
-        <dl className="mt-5 grid grid-cols-2 gap-4 text-sm">
+        <p className="mt-2 text-base text-mist-700">{t('moneyMonth')}</p>
+        <dl className="mt-8 grid grid-cols-2 gap-4 text-sm">
           <div>
-            <dt className="text-mist-600">{t('lostMonth')}</dt>
-            <dd className="mt-0.5 text-xl font-semibold tabular-nums text-brand-navy">{nf.format(lostMonth)}</dd>
+            <dt className="text-mist-700">{t('lostMonth')}</dt>
+            <dd className="mt-0.5 text-2xl font-semibold tabular-nums text-brand-navy">{nf.format(lostMonth)}</dd>
           </div>
           <div>
-            <dt className="text-mist-600">{t('moneyYear')}</dt>
-            <dd className="mt-0.5 text-xl font-semibold tabular-nums text-brand-navy">
+            <dt className="text-mist-700">{t('moneyYear')}</dt>
+            <dd className="mt-0.5 text-2xl font-semibold tabular-nums text-brand-navy">
               {currency} {nf.format(moneyMonth * 12)}
             </dd>
           </div>
         </dl>
-        <p className="mt-5 text-xs leading-relaxed text-mist-600">{t('note')}</p>
+        <p className="mt-8 text-sm leading-relaxed text-mist-700">{t('note')}</p>
       </div>
     </div>
   );

@@ -32,7 +32,6 @@ export function SecurityStrip() {
         </ul>
         <Link
           href="/seguridad"
-          aria-label={t('ariaMore')}
           className="group inline-flex shrink-0 items-center gap-2 text-sm font-semibold text-brand-navy underline decoration-brand-teal decoration-2 underline-offset-4"
         >
           {t('ctaLabel')}
