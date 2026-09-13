@@ -32,7 +32,7 @@ import {
   HandoffQueue,
   HANDOFF_QUEUE_TOKEN,
 } from '../conversations/handoff.queue';
-import { botCopy, BotCopy } from './bot.messages';
+import { botCopy, BotCopy, fillConfirmAppointment } from './bot.messages';
 import { chatBookingEnabled } from './chat-booking.flag';
 import { Intent, IntentService } from './intent.service';
 import {
@@ -601,17 +601,7 @@ export class BotService {
     manageUrl?: string | null;
   }): string {
     const template = this.pickVariant(input.copy.pools.confirmAppointment);
-    const manageLine = input.manageUrl
-      ? input.copy.manageLine(input.manageUrl)
-      : input.copy.manageLineFallback;
-    return template
-      .replace(/\{status\}/g, input.status)
-      .replace(/\{when\}/g, input.when)
-      .replace(/\{clinicName\}/g, input.clinicName)
-      .replace(/\{address\}/g, input.address)
-      .replace(/\{service\}/g, input.service)
-      .replace(/\{professional\}/g, input.professional)
-      .replace(/\{manageLine\}/g, manageLine);
+    return fillConfirmAppointment(input.copy, template, input);
   }
 
   async handleIncoming(input: {

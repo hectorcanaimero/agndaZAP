@@ -518,6 +518,38 @@ export const LINK_FIRST_POOLS: Record<BotLocale, LinkFirstPools> = {
   },
 };
 
+/**
+ * Rellena una variante de `pools.confirmAppointment`. Lo comparten el bot
+ * (cierre de la FSM) y el aviso por WhatsApp cuando el paciente agenda o mueve
+ * la cita desde la web (ADR 0023), para que los dos digan lo mismo.
+ */
+export function fillConfirmAppointment(
+  copy: BotCopy,
+  template: string,
+  input: {
+    status: string;
+    when: string;
+    clinicName: string;
+    address: string;
+    service: string;
+    professional: string;
+    /** Link de gestión (ADR 0020). Sin él caemos al "escríbeme *reagendar*". */
+    manageUrl?: string | null;
+  },
+): string {
+  const manageLine = input.manageUrl
+    ? copy.manageLine(input.manageUrl)
+    : copy.manageLineFallback;
+  return template
+    .replace(/\{status\}/g, input.status)
+    .replace(/\{when\}/g, input.when)
+    .replace(/\{clinicName\}/g, input.clinicName)
+    .replace(/\{address\}/g, input.address)
+    .replace(/\{service\}/g, input.service)
+    .replace(/\{professional\}/g, input.professional)
+    .replace(/\{manageLine\}/g, manageLine);
+}
+
 export function botCopy(locale: string | null | undefined): BotCopy {
   const base = BOT_COPY[botLocale(locale)];
   if (chatBookingEnabled()) return base;

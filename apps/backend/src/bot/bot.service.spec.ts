@@ -2921,6 +2921,8 @@ describe('BotService — FSM de agendamiento', () => {
     beforeEach(() => {
       // Por defecto el flag no existe: es el comportamiento de producción.
       delete process.env.BOT_CHAT_BOOKING_ENABLED;
+      // Fijo aquí: otros `describe` de este archivo lo cambian y no lo limpian.
+      process.env.WEB_BASE_URL = 'https://showly.us';
       prisma.appointment.update = jest.fn().mockResolvedValue({});
     });
 
@@ -2980,7 +2982,7 @@ describe('BotService — FSM de agendamiento', () => {
         await say('quero marcar uma consulta');
 
         expect(lastReply()).toBe(
-          botCopy('pt').bookingLink('http://localhost:3000/pt/agendar/clinica-a?t=tok-abc'),
+          botCopy('pt').bookingLink('https://showly.us/pt/agendar/clinica-a?t=tok-abc'),
         );
       });
 
@@ -3138,7 +3140,7 @@ describe('BotService — FSM de agendamiento', () => {
         await say('hola');
 
         const msg = lastReply();
-        expect(msg).toContain('http://localhost:3000/es/agendar/clinica-a');
+        expect(msg).toContain('https://showly.us/es/agendar/clinica-a');
         expect(msg).not.toMatch(/escr[ií]beme \*agendar\*/i);
       });
 
