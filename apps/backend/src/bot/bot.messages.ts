@@ -18,6 +18,8 @@
  * registro de Brasil.
  */
 
+import { chatBookingEnabled } from './chat-booking.flag';
+
 export type BotLocale = 'es' | 'pt';
 
 /** `clinic.locale` es un `String` libre en DB: cae a `es` si no reconocemos. */
@@ -41,6 +43,11 @@ export interface BotCopy {
   /** Saludo con cita próxima: la línea que describe el estado de la cita. */
   apptConfirmedLine(service: string, when: string): string;
   apptPendingLine(service: string, when: string): string;
+  /**
+   * Respuesta a "quiero agendar" sin FSM (ADR 0023). Sin "vence en 30 minutos":
+   * con el token caducado la web sigue agendando, solo sin datos precargados.
+   */
+  bookingLink(link: string): string;
   /** Cierre del agendamiento: línea con el link de gestión, o el fallback. */
   manageLine(url: string): string;
   manageLineFallback: string;
@@ -182,6 +189,8 @@ const es: BotCopy = {
     `Tu cita de ${service} del ${when} ya está confirmada.`,
   apptPendingLine: (service, when) =>
     `Veo que tienes una cita de ${service} el ${when}.`,
+  bookingLink: (link) =>
+    `¡Con gusto! Elige el servicio, el profesional y el horario que te queden mejor aquí:\n\n${link}\n\nCuando termines, te confirmo la cita por este chat.`,
   manageLine: (url) =>
     `\n\nSi necesitas cambiarla o cancelarla, entra aquí:\n${url}`,
   manageLineFallback: '\n\nSi necesitas cambiarla, escríbeme *reagendar*.',
@@ -265,7 +274,7 @@ const es: BotCopy = {
     'No encontré una cita próxima asociada a este número. Si necesitas ayuda, escribe *humano* para hablar con una persona.',
   appointmentConfirmed: '¡Listo! Tu cita quedó confirmada. Te esperamos.',
   appointmentCanceled:
-    'Tu cita fue cancelada. Cuando quieras, escríbeme para reagendar.',
+    'Tu cita fue cancelada. Si quieres otra, escríbeme *agendar*.',
   cancelNeedsWord: (link) =>
     link
       ? `Puedes cambiarla o cancelarla aquí:\n\n${link}\n\nSi prefieres, responde *CANCELAR* aquí mismo. No voy a cancelarla sin esa confirmación explícita.`
@@ -346,6 +355,8 @@ const pt: BotCopy = {
     `Sua consulta de ${service} de ${when} já está confirmada.`,
   apptPendingLine: (service, when) =>
     `Vi que você tem uma consulta de ${service} em ${when}.`,
+  bookingLink: (link) =>
+    `Com prazer! Escolha o serviço, o profissional e o horário que forem melhores para você aqui:\n\n${link}\n\nQuando terminar, confirmo a consulta por esta conversa.`,
   manageLine: (url) =>
     `\n\nSe precisar mudar ou cancelar, é por aqui:\n${url}`,
   manageLineFallback: '\n\nSe precisar mudar, escreva *remarcar*.',
@@ -428,7 +439,7 @@ const pt: BotCopy = {
     'Não encontrei uma consulta próxima associada a este número. Se precisar de ajuda, escreva *humano* para falar com uma pessoa.',
   appointmentConfirmed: 'Pronto! Sua consulta está confirmada. Esperamos você.',
   appointmentCanceled:
-    'Sua consulta foi cancelada. Quando quiser, escreva para remarcar.',
+    'Sua consulta foi cancelada. Se quiser outra, escreva *agendar*.',
   cancelNeedsWord: (link) =>
     link
       ? `Você pode mudar ou cancelar aqui:\n\n${link}\n\nSe preferir, responda *CANCELAR* por aqui mesmo. Não vou cancelar sem essa confirmação explícita.`
@@ -472,6 +483,46 @@ const pt: BotCopy = {
 /** Si alguien añade una clave a `es` y se olvida de `pt`, esto no compila. */
 export const BOT_COPY: Record<BotLocale, BotCopy> = { es, pt };
 
+/**
+ * Pools que cambian con el bot link-first (ADR 0023): los que prometían
+ * "escríbeme *agendar* y lo hacemos aquí". El resto de textos vale en los dos
+ * modos, porque escribir *agendar* o *reagendar* sigue funcionando: ahora
+ * responde con el link.
+ */
+type LinkFirstPools = Pick<BotCopy['pools'], 'greeting' | 'ctaAfterAnswer'>;
+
+export const LINK_FIRST_POOLS: Record<BotLocale, LinkFirstPools> = {
+  es: {
+    greeting: [
+      '¡Hola! Soy el asistente de {clinicName}. Puedes reservar tu cita aquí: {link}\n\nSi tienes otra duda, cuéntame.',
+      'Hola 👋 Soy el asistente de {clinicName}. Reserva tu cita en línea: {link}\n\nTambién puedo responder tus dudas.',
+      '¡Hola! Gracias por escribir a {clinicName}. Para reservar una cita usa nuestra página: {link}\n\n¿En qué te ayudo?',
+    ],
+    ctaAfterAnswer: [
+      '¿Quieres agendar? Reserva tu cita aquí: {link}',
+      'Si quieres una cita, resérvala aquí: {link}',
+      'Cuando quieras agendar, usa nuestra página: {link}',
+    ],
+  },
+  pt: {
+    greeting: [
+      'Olá! Sou o assistente da {clinicName}. Você pode marcar sua consulta aqui: {link}\n\nSe tiver outra dúvida, é só dizer.',
+      'Oi 👋 Sou o assistente da {clinicName}. Marque sua consulta online: {link}\n\nTambém posso responder suas dúvidas.',
+      'Olá! Obrigado por escrever para a {clinicName}. Para marcar uma consulta use nossa página: {link}\n\nComo posso ajudar?',
+    ],
+    ctaAfterAnswer: [
+      'Quer marcar uma consulta? Reserve aqui: {link}',
+      'Se quiser uma consulta, marque aqui: {link}',
+      'Quando quiser marcar, use nossa página: {link}',
+    ],
+  },
+};
+
 export function botCopy(locale: string | null | undefined): BotCopy {
-  return BOT_COPY[botLocale(locale)];
+  const base = BOT_COPY[botLocale(locale)];
+  if (chatBookingEnabled()) return base;
+  return {
+    ...base,
+    pools: { ...base.pools, ...LINK_FIRST_POOLS[botLocale(locale)] },
+  };
 }
