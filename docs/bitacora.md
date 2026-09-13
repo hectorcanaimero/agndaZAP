@@ -1,5 +1,20 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-12 — Panel: la cita de las 23:45 desaparecía de "próximas" (rama `fix/dashboard-today-spec-hora`)
+- Apareció como un test flaky (`dashboard.controller.spec` fallaba sólo pasadas
+  las ~22:30 hora de la clínica) y resultó ser un bug de verdad: `upcoming`
+  filtraba por `endAt < endOfToday`, así que una cita de las 23:45 que acaba a
+  las 00:15 contaba en `today.total` pero no salía en la lista. La clínica veía
+  "6 citas hoy" y 5 debajo, **al final del día**, que es justo cuando mira qué
+  le queda por atender.
+- El rango del día ya lo aplica la query sobre `startAt`; el filtro en memoria
+  sólo tiene que descartar las pasadas.
+- El reloj del spec queda fijado con `Settings.now` (no con fake timers: el
+  controller usa Luxon, y así el `now` del test y el del código son el mismo
+  instante). El test que quedaba a merced de la hora era el síntoma, no la
+  causa, pero un test que falla según cuándo se ejecute es ruido que acaba
+  ignorándose.
+- Verificado por mutación: con el filtro viejo, el test nuevo cae.
 ## 2026-09-13 — Rediseño de la landing: navy + teal, la vida de una cita y cero prueba inventada (rama `feat/landing-rediseno`)
 - **Por qué**: revisión con taste-skill, impeccable y marketing-psychology sobre código y capturas. Había un
   testimonio inventado (foto de stock), el copy se contradecía sobre el número de WhatsApp, cuatro textos para
