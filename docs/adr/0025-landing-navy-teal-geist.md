@@ -53,12 +53,13 @@ Decidido con el owner (2026-09-13):
 
 - **Positivas**: la página deja de afirmar cosas que no podemos respaldar; cada afirmación de producto se
   verificó contra el backend (recordatorios 24/3 h, `check-risk` con `confirmThresholdH`, feed iCal por
-  profesional, feedback 1-5). Página ~24% más corta en desktop y ~26% en mobile.
+  profesional, feedback 1-5). Página ~20% más corta en desktop y ~23% en mobile.
 - **Medición**: los eventos de Plausible no cambian de nombre (`hero_view`, `cta_click`, `lead_form_view`,
   `lead_submitted`); se suman ubicaciones `hero-demo`, `demo-whatsapp` y `demo-web` en `cta_click`. Comparar
   el embudo 2 semanas antes y después; con el tráfico actual un A/B no llega a significancia.
 - **A cargo del owner**: encender `NEXT_PUBLIC_DEMO_*` con un número WAHA propio para la demo; sin ellas la
-  sección no aparece. `/seguridad` y las páginas legales heredan Geist y `mist` pero no se rediseñaron.
-- **Riesgo**: la demo pública manda WhatsApp reales a quien agenda; mitigaciones en la nota.
+  sección no aparece. `/seguridad` y las páginas legales **no** se rediseñaron: usan los tokens `mist` pero sus wrappers siguen en Inter y conservan eyebrows (deriva anotada en `apps/web/DESIGN.md`).
+- **Riesgo**: la demo pública manda WhatsApp reales a quien agenda y hoy permite spam a terceros y no
+  tiene retención de datos de visitantes: son **bloqueantes antes de encenderla**, detallados en la nota.
 - El contrato visual vive en `apps/web/.impeccable/surfaces/src-app-locale-page-tsx.md` y los tokens en
   `apps/web/DESIGN.md`.

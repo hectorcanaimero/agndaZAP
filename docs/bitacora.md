@@ -16,7 +16,14 @@
   de Next, no solo el de desarrollo. Para ver el build sin levantar ningún proceso, Playwright intercepta las
   peticiones (`context.route`) y sirve `.next/server/app/<locale>.html` y `.next/static` desde disco.
   Funciona porque la landing es SSG.
-- Página ~24% más corta en desktop (9459 → 7204 px) y ~26% en mobile (13598 → 10074 px).
+- Página ~20% más corta en desktop (9459 → 7531 px) y ~23% en mobile (13598 → 10455 px).
+- **Revisión en dos frentes antes del PR** (code-reviewer + revisor visual independiente con capturas):
+  el mismo layout texto-izquierda/tarjeta-derecha se repetía en 5 secciones, los pasos inactivos del
+  bloque oscuro quedaban a ~2.4:1 (opacidad sobre texto ya translúcido), la agenda mobile se movía en
+  bucle (WCAG 2.2.2), la nav usaba anclas sin ruta que no funcionaban desde /seguridad y el copy de
+  calificación prometía más de lo que hace el backend (`followUpEnabled` es opt-in). Todo corregido.
+- **Lo que NO cierra esta rama**: la demo pública permite spam a terceros vía `/agendar` y no hay
+  retención de sus datos; quedan como bloqueantes en [[notas/2026-09-13-demo-publico-landing]].
 - Pendiente del owner: encender la demo con un número WAHA propio y medir el embudo de Plausible 2 semanas
   antes/después.
 
