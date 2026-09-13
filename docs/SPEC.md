@@ -69,11 +69,19 @@ Todas con `@Roles('SUPERADMIN')`, base `/api/admin/*` (ADR 0014, 0016).
 Todas con rate-limit por `slug+ip` (ADR 0003) y `SlugValidationPipe` (`^[a-z0-9-]{1,50}$`).
 Clínica inexistente o no `ACTIVE` → 404 en las tres.
 - `GET /api/public/clinics/:slug` → catálogo público (servicios, profesionales, TZ, dirección).
-- `GET /api/public/clinics/:slug/availability?serviceId&professionalId&from&days` → `Slot[]`.
+- `GET /api/public/clinics/:slug/availability?serviceId&professionalId&from&days` → `Slot[]`
+  (hasta 200 por petición; la web pide un día).
+- `GET /api/public/clinics/:slug/availability/days?serviceId&professionalId&from&days` →
+  `string[]` de fechas `YYYY-MM-DD` en la TZ de la clínica con al menos un hueco (`days` ≤ 60).
+  Alimenta el calendario de la web (ADR 0024).
 - `POST /api/public/clinics/:slug/appointments` → crea cita (201). Honeypot → 200 falso.
   Body: `serviceId, professionalId, startAt, name, phone (E.164), consent: true, token?`.
   `token` (ADR 0018) ata la cita a una conversación de WhatsApp: se consume atómicamente,
-  debe pertenecer al mismo `slug` y setea `source = BOT_WEB`; inválido/expirado → 400.
+  debe pertenecer al mismo `slug` y setea `source = BOT_WEB`. De otra clínica → 400.
+  Caducado o ya usado → la cita se crea como `PUBLIC`, sin conversación (ADR 0024): el token no
+  autoriza nada que el formulario no permita sin él. Si la creación falla, el token vuelve a Redis
+  con el TTL que le quedaba.
+  Tras crearla, **aviso por WhatsApp** al paciente con el link de gestión (ver §Bot).
 - `GET /api/public/scheduling/session/:token` → hidrata el form desde el token:
   `{ clinicSlug, name, phone, phoneEditable }`. 404 si no existe o venció (TTL 30 min).
 
@@ -89,7 +97,8 @@ Rate-limit 10/min. Token inválido, expirado, de otra clínica o cita inexistent
   canCancel, canReschedule }`. Del paciente solo sale el nombre: nunca el teléfono.
 - `POST /api/public/clinics/:slug/appointments/manage/:token/cancel` → `{ status: 'CANCELADA' }`.
   Cancela los recordatorios. Idempotente. 409 si el estado ya no lo permite.
-  Marca `Appointment.canceledByPatient` y **avisa a recepción** (ver abajo).
+  Marca `Appointment.canceledByPatient`, **avisa a recepción** (ver abajo) y al paciente por
+  WhatsApp (ver §Bot).
 - `POST /api/public/clinics/:slug/appointments/manage/:token/reschedule` body `{ startAtISO }`
   → `{ appointment: {…}, manageUrl }`. Los dos 409 posibles llevan `code` en el cuerpo para
   que el cliente ramifique sin mirar el texto: `RESCHEDULE_LIMIT` (agotó su cupo → derivar a la
@@ -97,7 +106,8 @@ Rate-limit 10/min. Token inválido, expirado, de otra clínica o cita inexistent
   que confundirlos manda al paciente al sitio equivocado. **Mueve la cita in-place (mismo `id`)**: crear una
   nueva y cancelar la vieja dejaría una fila `CANCELADA` por reagendamiento y el no-show rate
   se calcula sobre `ATENDIDA + NO_SHOW + CANCELADA`. 409 si el slot se ocupó. La web reutiliza
-  el `GET /availability` de arriba para ofrecer horarios.
+  el `GET /availability` de arriba para ofrecer horarios. Avisa al paciente por WhatsApp con el
+  horario nuevo y el link nuevo (ver §Bot).
 
 ### Invitaciones (público)
 - `GET /api/public/invitations/:token` → valida la invitación (existe, no expirada, no aceptada).
@@ -143,7 +153,11 @@ Rate-limit 10/min. Token inválido, expirado, de otra clínica o cita inexistent
     y `/gracias` no muestra el botón "Escribir a la clínica por WhatsApp" (`wa.me/<sin +>`).
   - **Nunca** se exponen teléfonos/emails de profesionales, usuarios ni pacientes,
     ni `wahaSession`/`autoConfirm`.
-- `GET /api/public/clinics/:slug/availability?serviceId&professionalId&from&days` → `Slot[]`.
+- `GET /api/public/clinics/:slug/availability?serviceId&professionalId&from&days` → `Slot[]`
+  (hasta 200 por petición; la web pide un día).
+- `GET /api/public/clinics/:slug/availability/days?serviceId&professionalId&from&days` →
+  `string[]` de fechas `YYYY-MM-DD` en la TZ de la clínica con al menos un hueco (`days` ≤ 60).
+  Alimenta el calendario de la web (ADR 0024).
 - `POST /api/public/clinics/:slug/appointments` → crea cita `source=PUBLIC` (honeypot + consent).
   Devuelve `{ id, startAt, endAt, status, manageUrl? }`. `manageUrl` es el link de gestión
   (ADR 0020) para que `/gracias` ofrezca cancelar o cambiar horario; se omite si no se pudo
@@ -279,8 +293,24 @@ paciente y no la clínica.
   En BullMQ, el `jobId` físico usa `reminder-{id}` y `risk-{apptId}` porque `:` es separador reservado de claves Redis; la relación lógica 1:1 se mantiene.
 
 ### Bot
+- **Link-first (ADR 0024, por defecto).** El bot no pregunta servicio, profesional ni horario:
+  - `Intent.AGENDAR` → link `WEB_BASE_URL/{locale}/agendar/{slug}?t={token}` con prefill. Sin
+    token (Redis caído) → el mismo link sin `?t=`. Sin servicios activos → `noServices`.
+  - `REAGENDAR` / `REPROGRAMAR` / `REMARCAR` e `Intent.REPROGRAMAR` → link de gestión
+    `/agendar/{slug}/cita?t=`. Sin link → `NEEDS_HUMAN`. La cita y sus recordatorios no cambian.
+  - Conversación con cualquier `flowStep` que no sea de NPS → se resetea; "cancelar"
+    pausa (`flowAborted`), si estaba moviendo una cita → link de gestión, si no → link de
+    agendamiento. Los pasos de NPS no cambian.
+  - `BOT_CHAT_BOOKING_ENABLED=true` restaura la FSM y sus textos (vuelta atrás del piloto).
+- **Aviso por WhatsApp de lo hecho en la web** (crear, mover, cancelar): solo si el paciente ya
+  tiene conversación con la clínica (por `appointment.conversationId`, o `patientId`/`phone` dentro
+  del tenant). Se envía al `chatId` de esa conversación, se persiste como `Message OUT` y se manda
+  aunque esté en `HUMAN`/`NEEDS_HUMAN`. Fail-open y sin esperar: nunca cambia la respuesta HTTP.
+  Nunca abre un chat nuevo desde el formulario público. Anti-spam: si la conversación no viene de
+  la cita (token), exige un mensaje `IN` en las últimas 24 h; dedupe por cita+tipo+horario, tope
+  de 4 avisos/hora por conversación, sin Redis no avisa. Timeout de 10 s al enviar.
 - Confirmaciones (`sí`, `cancelar`, etc.) se resuelven por regla determinista antes de invocar el LLM.
-- Las respuestas de recordatorio `SÍ`, `REAGENDAR` y `CANCELAR` no dependen del LLM: confirman, derivan a recepción para reagendar sin mover la cita todavía, o cancelan explícitamente la cita.
+- Las respuestas de recordatorio `SÍ`, `REAGENDAR` y `CANCELAR` no dependen del LLM: confirman, mandan el link de gestión para reagendar sin mover la cita todavía, o cancelan explícitamente la cita en el chat.
 - `CANCELAR`, `REAGENDAR`, `CONFIRMO` y `CONFIRMAR` son verbos explícitos y valen siempre.
   `SÍ`, `OK` y `DALE` son ambiguos: solo cuentan como confirmación si el bot preguntó
   primero. Hay contexto de confirmación cuando el último mensaje saliente de la conversación
@@ -297,7 +327,7 @@ paciente y no la clínica.
   "es para otra persona" es un mensaje normal.
 - El bot nunca crea ni cancela una cita sin confirmación explícita del paciente.
 - Si `Conversation.state = HUMAN`, el bot no responde.
-- La FSM de agendamiento se persiste en `Conversation.flowStep` + `flowData` y avanza por `ASK_SERVICE → ASK_PROFESSIONAL → ASK_SLOT → CONFIRM`; pasos auxiliares como captura de nombre deben preservar esos datos para que el flujo sea retomable.
+- Con el flag de vuelta atrás encendido, la FSM de agendamiento se persiste en `Conversation.flowStep` + `flowData` y avanza por `ASK_SERVICE → ASK_PROFESSIONAL → ASK_SLOT → CONFIRM`; pasos auxiliares como captura de nombre deben preservar esos datos para que el flujo sea retomable.
 - Si la conversación llega por `@lid` sin número (`phone = null`), el bot no aborta: manda un
   link `WEB_BASE_URL/{locale}/agendar/{slug}?t={token}` (token efímero en Redis, TTL 30 min,
   un token = una cita) y resetea la FSM. La cita creada por ese link queda con

@@ -15,7 +15,10 @@ import {
 } from '@nestjs/common';
 import { DateTime } from 'luxon';
 import { AvailabilityService, Slot } from '../scheduling/availability.service';
-import { SchedulingSessionService } from '../scheduling/scheduling-session.service';
+import {
+  SchedulingSessionData,
+  SchedulingSessionService,
+} from '../scheduling/scheduling-session.service';
 import {
   AppointmentSource,
   SchedulingService,
@@ -32,6 +35,7 @@ import { RescheduleByTokenDto } from './dto/reschedule-by-token.dto';
 import { RateLimit } from './rate-limit.guard';
 import { SlugValidationPipe } from './slug.pipe';
 import { normalizeE164 } from '../common/phone.util';
+import { PatientWhatsappNotifier } from './patient-whatsapp-notifier.service';
 
 /**
  * PublicController — Bloque 3 del roadmap.
@@ -64,14 +68,20 @@ export class PublicController {
    */
   private static readonly MAX_PATIENT_RESCHEDULES = 3;
 
+  /** Horarios por petición de `availability`: un día largo de servicios cortos cabe. */
+  static readonly MAX_SLOTS_PER_REQUEST = 200;
+  /** Horizonte del calendario de la web. */
+  static readonly MAX_CALENDAR_DAYS = 60;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly availability: AvailabilityService,
     private readonly scheduling: SchedulingService,
     private readonly sessions: SchedulingSessionService,
+    private readonly notifier: PatientWhatsappNotifier,
   ) {}
 
-  private parseAvailabilityDays(days?: string): number {
+  private parseAvailabilityDays(days?: string, max = 30): number {
     if (!days) return 7;
 
     const parsed = Number(days);
@@ -79,7 +89,7 @@ export class PublicController {
       throw new BadRequestException('days debe ser un entero');
     }
 
-    return Math.max(1, Math.min(30, parsed));
+    return Math.max(1, Math.min(max, parsed));
   }
 
   private assertValidAvailabilityFrom(from: string): void {
@@ -248,7 +258,53 @@ export class PublicController {
       professionalId,
       fromISO: from,
       days: parsedDays,
-      limit: 50,
+      // La web pide un día cada vez (calendario, ADR 0024). 50 cortaba un día
+      // con servicios cortos, y con 7 días dejaba ver solo los tres primeros.
+      limit: PublicController.MAX_SLOTS_PER_REQUEST,
+    });
+  }
+
+  /**
+   * `GET /:slug/availability/days` — días con al menos un horario libre, para
+   * marcar el calendario de la web. Mismas validaciones que `availability`;
+   * `days` hasta `MAX_CALENDAR_DAYS`.
+   */
+  @Get(':slug/availability/days')
+  @UseGuards(RateLimit(30, 'public-availability-days'))
+  async getAvailableDays(
+    @Param('slug', SlugValidationPipe) slug: string,
+    @Query('serviceId') serviceId: string,
+    @Query('professionalId') professionalId: string,
+    @Query('from') from: string,
+    @Query('days') days?: string,
+  ): Promise<string[]> {
+    if (!serviceId || !professionalId || !from) {
+      throw new BadRequestException(
+        'serviceId, professionalId y from son obligatorios',
+      );
+    }
+    this.assertValidAvailabilityFrom(from);
+
+    const clinic = await this.prisma.clinic.findFirst({
+      where: { slug, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    if (!clinic) {
+      throw new NotFoundException('clínica no encontrada');
+    }
+
+    await this.assertBookableSelection({
+      clinicId: clinic.id,
+      serviceId,
+      professionalId,
+    });
+
+    return this.availability.getAvailableDates({
+      clinicId: clinic.id,
+      serviceId,
+      professionalId,
+      fromISO: from,
+      days: this.parseAvailabilityDays(days, PublicController.MAX_CALENDAR_DAYS),
     });
   }
 
@@ -301,38 +357,45 @@ export class PublicController {
       throw new NotFoundException('clínica no encontrada');
     }
 
-    // 3) Si vino token, lo consumimos AHORA (single-use). Antes de crear la
+    // 3) Normalizamos phone a E.164 con `+` (helper único, ver phone.util).
+    // Antes de tocar el token: un teléfono inválido no debe quemarlo.
+    const normalizedPhone = normalizeE164(dto.phone);
+    if (!normalizedPhone) {
+      throw new BadRequestException('phone inválido');
+    }
+
+    // 4) Si vino token, lo consumimos AHORA (single-use). Antes de crear la
     // cita — así una race condition (doble click) no crea dos citas atadas al
-    // mismo token; la segunda invocación al POST recibe token null y sigue
-    // el flujo público normal (o 400 si el token era el único identificador).
+    // mismo token: la segunda invocación recibe token null y sigue como
+    // `PUBLIC`, y el `@@unique` del horario la rechaza con 409.
+    //
+    // Token caducado o ya usado → la cita se crea como `PUBLIC` (ADR 0024). El
+    // token no autoriza nada que el formulario público no permita sin él: solo
+    // ata la conversación. Con el bot mandando el link en vez de agendar por
+    // chat, abrirlo pasados 30 min es lo normal, y un 400 ahí le hacía perder
+    // la reserva a quien ya había elegido horario.
     //
     // Validación cross-tenant: el token guarda `clinicSlug` propio, tiene que
     // coincidir con el `:slug` de la URL. Un token de otra clínica → 400. Esto
     // corta cualquier intento de reusar un token en el slug equivocado.
     let source: AppointmentSource = 'PUBLIC';
     let conversationId: string | undefined;
+    let consumedSession: SchedulingSessionData | null = null;
     if (dto.token) {
       const session = await this.sessions.consume(dto.token);
       if (!session) {
-        throw new BadRequestException(
-          'el link expiró o ya fue usado — pide uno nuevo por WhatsApp',
-        );
-      }
-      if (session.clinicSlug !== slug) {
+        this.logger.log(`token de agendamiento caducado o usado, sigue como PUBLIC slug=${slug}`);
+      } else if (session.clinicSlug !== slug) {
         // Log de seguridad: alguien intentó reusar un token en otra clínica.
         this.logger.warn(
           `token/slug mismatch tokenSlug=${session.clinicSlug} urlSlug=${slug}`,
         );
         throw new BadRequestException('link inválido para esta clínica');
+      } else {
+        source = 'BOT_WEB';
+        conversationId = session.conversationId;
+        consumedSession = session;
       }
-      source = 'BOT_WEB';
-      conversationId = session.conversationId;
-    }
-
-    // 4) Normalizamos phone a E.164 con `+` (helper único, ver phone.util).
-    const normalizedPhone = normalizeE164(dto.phone);
-    if (!normalizedPhone) {
-      throw new BadRequestException('phone inválido');
     }
 
     // La guarda de PERSONA —si este chat tiene derecho a esta cita— vive en
@@ -363,6 +426,11 @@ export class PublicController {
         conversationId,
       }));
     } catch (e) {
+      // La cita no se creó: el token vuelve a Redis con el TTL que le quedaba,
+      // para que el reintento siga atado a la conversación (ADR 0024).
+      if (consumedSession && dto.token) {
+        await this.sessions.restore(dto.token, consumedSession);
+      }
       if (e instanceof ConflictException) {
         // Mensaje orientado al usuario final del form público. Se re-emite como
         // `SlotTakenException` para que el cuerpo lleve el `code` y la web no
@@ -392,6 +460,14 @@ export class PublicController {
         `no se pudo emitir el manage token slug=${slug} apptId=${appointment.id}: ${(e as Error).message}`,
       );
     }
+
+    // Sin `await`: el aviso nunca lanza y no debe retrasar la respuesta.
+    void this.notifier.notify({
+      clinicId: clinic.id,
+      appointmentId: appointment.id,
+      kind: 'created',
+      manageUrl,
+    });
 
     // Cero PII en la respuesta: NO devolvemos `patient.{name,phone}`. El frontend
     // ya tiene el nombre en su state; no hace falta reflejarlo. Esto minimiza
@@ -666,6 +742,11 @@ export class PublicController {
     await this.sessions.invalidateAllForAppointment(appointment.id);
 
     await this.alertReceptionOfPatientChange(appointment, 'cancel', {});
+    void this.notifier.notify({
+      clinicId: session.clinicId,
+      appointmentId: appointment.id,
+      kind: 'canceled',
+    });
 
     this.logger.log(
       `appointment canceled via link slug=${slug} apptId=${appointment.id}`,
@@ -756,6 +837,12 @@ export class PublicController {
     await this.alertReceptionOfPatientChange(appointment, 'reschedule', {
       newStartAt: updated.startAt,
       rescheduleCount: updated.rescheduleCount,
+    });
+    void this.notifier.notify({
+      clinicId: session.clinicId,
+      appointmentId: updated.id,
+      kind: 'rescheduled',
+      manageUrl,
     });
 
     this.logger.log(

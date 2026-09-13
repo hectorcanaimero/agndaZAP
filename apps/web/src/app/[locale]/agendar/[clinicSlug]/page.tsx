@@ -39,8 +39,8 @@ export default async function AgendarPage({
   // en el server (evita flash de form vacío) y pasamos como `prefill` al
   // client. Si el token es para otra clínica, redirigimos al slug correcto —
   // el paciente pinchó desde WA, no queremos pedirle "elegí clínica" acá.
-  // Si expiró/inválido, seguimos sin prefill: el usuario ve el form normal
-  // y (opcional en el futuro) mostramos un banner "tu link expiró".
+  // Si expiró/inválido, seguimos sin prefill: el usuario ve el form normal y
+  // la cita se crea igual como `PUBLIC` (ADR 0024); el token solo precarga.
   const search = await searchParams;
   const tokenParam = search.t;
   const token = Array.isArray(tokenParam) ? tokenParam[0] : tokenParam;
