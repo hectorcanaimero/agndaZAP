@@ -1,5 +1,25 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-12 — S44: el tono LATAM neutro, migrado de verdad y verificado (rama `fix/voseo-es-json`)
+- La nota `2026-09-10-tono-espanol-neutro` daba la migración por hecha y no lo
+  estaba: quedaban **55 cadenas en voseo** en `apps/web/messages/es.json`,
+  incluido el titular de la página pública ("Agendá tu cita") y el formulario de
+  agendamiento que ve el paciente.
+- Migradas todas. Ninguna estaba asertada en tests ni hardcodeada en `src/`:
+  los únicos aciertos fuera del JSON eran comentarios de código.
+- **El valor real está en el chequeo, no en la migración**: `scripts/i18n-check.mjs`
+  (que ya corría en CI) suma un tercer chequeo de tono.
+- **La primera versión del chequeo era una lista de 23 verbos y daba "✓ sin
+  voseo" sobre un fichero cuyo titular decía "Agendá tu cita"**. Una lista de
+  verbos no termina nunca. Ahora detecta por patrón (palabra acabada en á/é/í o
+  en -ás/-és/-ís) con una lista corta de excepciones legítimas.
+- Gotcha de JS al escribirlo: `\b` no considera carácter de palabra a las
+  vocales acentuadas, así que el límite caía **dentro** de "clínica" y el
+  chequeo reportaba "clí" como voseo. Los límites van con lookarounds
+  explícitos sobre la clase de letras españolas.
+- Verificado por mutación: con "Agendá", "Elegí" o "Podés" reinyectados, CI
+  falla.
+
 ## 2026-09-12 — B6: el aviso de "asistente automático" deja de repetirse en cada saludo (rama `feat/bot-disclosure-24h`)
 - **Antes**: `resolveBotMessage('greeting')` concatenaba `aiDisclosure` SIEMPRE. Un paciente que saluda tres veces en la semana leía tres veces que habla con un bot. **Ahora**: el primer saludo de la conversación siempre lo lleva, y después como mucho una vez cada 24 h.
 - **Sin estado nuevo**: no hay columna `disclosureShownAt` ni flag en `flowData`. `shouldSendAiDisclosure` pregunta si hay algún `Message OUT` de esa conversación en las últimas 24 h **cuyo cuerpo contenga el aviso**. La query cae en el índice `[conversationId, createdAt]` que ya existe.
