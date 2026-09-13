@@ -1351,13 +1351,6 @@
         }
       }
     },
-    "testimonial": {
-      "badge": "Piloto en curso",
-      "altPortrait": "Retrato de una dueña de clínica participante del piloto de Showly",
-      "quote": "Antes contestaba WhatsApp entre paciente y paciente. Ahora entro al panel a la mañana y ya tengo el día armado.",
-      "author": "Dueña de clínica",
-      "role": "Piloto Showly · LATAM"
-    },
     "pricing": {
       "eyebrow": "Precios",
       "headline": "Gratis mientras dure el piloto.",

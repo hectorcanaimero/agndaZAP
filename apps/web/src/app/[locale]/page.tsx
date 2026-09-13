@@ -6,7 +6,6 @@ import { ProblemSection } from '@/components/landing/ProblemSection';
 import { HowItWorksSection } from '@/components/landing/HowItWorksSection';
 import { FeaturesSection } from '@/components/landing/FeaturesSection';
 import { PricingSection } from '@/components/landing/PricingSection';
-import { Testimonial } from '@/components/landing/Testimonial';
 import { ForWhomSection } from '@/components/landing/ForWhomSection';
 import { SecurityStrip } from '@/components/landing/SecurityStrip';
 import { FaqSection } from '@/components/landing/FaqSection';
@@ -44,12 +43,11 @@ export default async function LandingPage({
         <HowItWorksSection />
         <FeaturesSection />
         {/*
-          Testimonial ANTES de Pricing: la prueba social desbloquea la
-          decisión de precio. SecurityStrip (comprimida, link a /seguridad)
-          después de Pricing para no competir con las secciones de venta.
+          Sin testimonios: no hay clínica en producción con un caso publicable
+          y apps/web/PRODUCT.md prohíbe inventarlos. SecurityStrip (comprimida,
+          link a /seguridad) después de Pricing para no competir con la venta.
         */}
         <ForWhomSection />
-        <Testimonial />
         <PricingSection />
         <SecurityStrip />
         <FaqSection />
