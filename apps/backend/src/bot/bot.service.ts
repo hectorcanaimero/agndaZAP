@@ -32,7 +32,8 @@ import {
   HandoffQueue,
   HANDOFF_QUEUE_TOKEN,
 } from '../conversations/handoff.queue';
-import { botCopy, BotCopy } from './bot.messages';
+import { botCopy, BotCopy, fillConfirmAppointment } from './bot.messages';
+import { chatBookingEnabled } from './chat-booking.flag';
 import { Intent, IntentService } from './intent.service';
 import {
   asksForSomethingElse,
@@ -63,6 +64,16 @@ type FlowStep =
   // responde 1-5, opcionalmente sigue con un comentario. Ver ADR 0012.
   | 'AWAITING_NPS_SCORE'
   | 'AWAITING_NPS_COMMENT';
+
+/**
+ * Pasos que siguen vivos con el bot link-first (ADR 0024): solo la encuesta.
+ * Se lista lo que se QUEDA y no lo que sale, para que un `flowStep` que nadie
+ * previó también salga al link en vez de caer en `startFlow`.
+ */
+const NPS_STEPS: ReadonlySet<string> = new Set<FlowStep>([
+  'AWAITING_NPS_SCORE',
+  'AWAITING_NPS_COMMENT',
+]);
 
 /** Datos acumulados durante la FSM, persistidos en Conversation.flowData. */
 interface FlowData {
@@ -601,17 +612,7 @@ export class BotService {
     manageUrl?: string | null;
   }): string {
     const template = this.pickVariant(input.copy.pools.confirmAppointment);
-    const manageLine = input.manageUrl
-      ? input.copy.manageLine(input.manageUrl)
-      : input.copy.manageLineFallback;
-    return template
-      .replace(/\{status\}/g, input.status)
-      .replace(/\{when\}/g, input.when)
-      .replace(/\{clinicName\}/g, input.clinicName)
-      .replace(/\{address\}/g, input.address)
-      .replace(/\{service\}/g, input.service)
-      .replace(/\{professional\}/g, input.professional)
-      .replace(/\{manageLine\}/g, manageLine);
+    return fillConfirmAppointment(input.copy, template, input);
   }
 
   async handleIncoming(input: {
@@ -750,6 +751,19 @@ export class BotService {
     }
 
     // 1) FSM activa: procesamos el paso ANTES de tocar el LLM.
+    //
+    // Con el bot link-first (ADR 0024) un paso de agendamiento solo puede
+    // venir de antes del despliegue, o de un rollback del flag que se apagó
+    // otra vez. No lo retomamos: el paciente atrapado en la lista de horarios
+    // recibe el link, que es justo lo que este cambio existe para darle.
+    if (
+      convo.flowStep &&
+      !NPS_STEPS.has(convo.flowStep) &&
+      !chatBookingEnabled()
+    ) {
+      await this.leaveChatBookingFlow(clinic, convo, normalized, phone);
+      return;
+    }
     if (convo.flowStep) {
       await this.handleFlowStep(clinic, convo, normalized, text, fromAudio);
       return;
@@ -877,7 +891,11 @@ export class BotService {
         break;
 
       case Intent.AGENDAR:
-        await this.startFlow(clinic, convo);
+        if (chatBookingEnabled()) {
+          await this.startFlow(clinic, convo);
+        } else {
+          await this.sendBookingLink(clinic, convo);
+        }
         break;
 
       case Intent.REPROGRAMAR:
@@ -1012,6 +1030,79 @@ export class BotService {
           this.resolveBotMessage(clinic, 'fallback'),
         );
     }
+  }
+
+  // ─────────────────────────── Link-first (ADR 0024) ───────────────────────────
+
+  /**
+   * "Quiero agendar" sin FSM: el link de la web con token, que llega con el
+   * nombre y el teléfono del chat y deja la cita atada a esta conversación
+   * (ADR 0018).
+   *
+   * Si el token no se puede emitir (Redis caído) manda el link público sin
+   * token: agendar tiene que seguir funcionando, aunque sea sin prefill.
+   */
+  private async sendBookingLink(
+    clinic: Clinic,
+    convo: Conversation,
+  ): Promise<void> {
+    const copy = this.copy(clinic);
+    const activeServices = await this.prisma.service.count({
+      where: { clinicId: clinic.id, active: true },
+    });
+    if (activeServices === 0) {
+      await this.reply(clinic.wahaSession, convo.chatId, convo.id, copy.noServices);
+      return;
+    }
+
+    let link: string;
+    try {
+      link = await this.buildSchedulingLink(convo, clinic);
+    } catch (e) {
+      this.logger.warn(
+        `no se pudo emitir el link de agendamiento clinicId=${clinic.id}: ${(e as Error).message}`,
+      );
+      link = this.publicSchedulingUrl(clinic);
+    }
+    await this.reply(
+      clinic.wahaSession,
+      convo.chatId,
+      convo.id,
+      copy.bookingLink(link),
+    );
+  }
+
+  /**
+   * Conversación que quedó a mitad de la FSM de agendamiento (desplegado el
+   * link-first con pacientes eligiendo horario). Se resetea y:
+   *  - "cancelar" / "salir" → se pausa, como hacía la FSM: en ese contexto el
+   *    paciente abandona la reserva, no está cancelando una cita;
+   *  - si estaba moviendo una cita → link de gestión;
+   *  - si no → link de agendamiento.
+   */
+  private async leaveChatBookingFlow(
+    clinic: Clinic,
+    convo: Conversation,
+    normalized: string,
+    phone: string | null,
+  ): Promise<void> {
+    const data = ((convo.flowData as unknown) as FlowData) ?? {};
+    await this.resetFlow(convo.id);
+
+    if (isFlowAbort(normalized)) {
+      await this.reply(
+        clinic.wahaSession,
+        convo.chatId,
+        convo.id,
+        this.copy(clinic).flowAborted,
+      );
+      return;
+    }
+    if (data.rescheduleOf) {
+      await this.handleReminderReply(clinic, convo, 'RESCHEDULE', phone);
+      return;
+    }
+    await this.sendBookingLink(clinic, convo);
   }
 
   // ─────────────────────────── FSM: entrada ───────────────────────────
@@ -2412,6 +2503,29 @@ export class BotService {
     // mueva, y apagarlos aquí la dejaba sin red justo cuando más riesgo de
     // no-show tiene (M2-c).
     const link = await this.manageLink(clinic, appt);
+
+    // Link-first (ADR 0024): mover la cita se hace en la web. Sin link no hay
+    // camino que no pase por la lista de horarios por chat, así que recepción.
+    if (!chatBookingEnabled()) {
+      if (!link) {
+        await this.markNeedsHuman(convo.id, clinic.id);
+        await this.reply(
+          clinic.wahaSession,
+          convo.chatId,
+          convo.id,
+          this.copy(clinic).cannotLinkChat,
+        );
+        return;
+      }
+      await this.reply(
+        clinic.wahaSession,
+        convo.chatId,
+        convo.id,
+        this.copy(clinic).rescheduleSlots(link),
+      );
+      return;
+    }
+
     const footer = link
       ? this.copy(clinic).rescheduleFooter(link)
       : '';

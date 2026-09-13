@@ -42,6 +42,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[adr/0022-fk-compuestas-multi-tenant|0022 — FKs compuestas para que el aislamiento entre clínicas no dependa del código]]
 - [[adr/0023-cota-de-gasto-en-stt|ADR 0023 — La cota de transcripción falla cerrada, y el ADR 0007 no]]
 - [[adr/0021-cola-bot-inbound|ADR 0021 — Cola `bot-inbound` entre el webhook de WAHA y el bot]]
+- [[adr/0024-bot-link-first|0024 — Bot link-first: agendar y reagendar por link, no por chat]]
 - [[adr/0025-landing-navy-teal-geist|0025 — Landing: navy + teal + Geist, la vida de una cita y cero prueba social inventada]]
 
 ## Specs de sprint (implementación)
@@ -49,6 +50,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[specs/2026-08-19-health-checks-uptime|2026-08-19 — Spec Health checks + Uptime (BetterStack) — Sprint día 3]]
 - [[specs/2026-08-20-admin-audit-impersonation|2026-08-20 — Spec AdminAudit + trail de impersonation — Sprint día 4]]
 - [[specs/2026-08-21-hmac-webhook-cookies|2026-08-21 — Spec HMAC webhook + hardening cookies — Sprint día 5]]
+- [[specs/2026-09-13-bot-link-first|2026-09-13 — Spec bot link-first: agendar y reagendar por link, aviso por WhatsApp]]
 
 ## Planes de implementación
 - [[plans/2026-09-11-p0-bot-reparto|2026-09-11 — P0 del bot: reparto entre sesiones]]
@@ -98,6 +100,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[notas/2026-09-12-presupuesto-stt-por-clinica|2026-09-12 — Cota diaria de transcripciones: detalles de implementación]]
 - [[notas/2026-09-12-confirmacion-escrita-por-voz|2026-09-12 — Por voz no se confirma ni se cancela una cita]]
 - [[notas/2026-09-12-waha-media-storage|2026-09-12 — WAHA no descarga los adjuntos si no se lo pides, y cuánto vive el fichero]]
+- [[notas/2026-09-13-ciclo-modulos-public-whatsapp|2026-09-13 — Ciclo PublicModule ↔ WhatsappModule: tests verdes, app que no arranca]]
 - [[notas/2026-09-13-demo-publico-landing|2026-09-13 — Demo pública en la landing: cómo se enciende y qué vigilar]]
 
 ## Análisis

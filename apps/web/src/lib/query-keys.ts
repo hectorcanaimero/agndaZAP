@@ -42,8 +42,9 @@ export const queryKeys = {
     status?: string;
   }) => ['appointments', filters] as const,
   /**
-   * Disponibilidad pública. `expandedRange` cambia el `days` param — clave que
-   * distingue entre 7 y 14 días.
+   * Disponibilidad pública. El calendario (`SlotPicker`) pide un día cada vez:
+   * `from` es ese día y `days` 1. Invalidar el prefijo `['availability', slug]`
+   * refresca todos los días cacheados de la clínica.
    */
   availability: (
     slug: string,
@@ -53,6 +54,14 @@ export const queryKeys = {
     days?: number,
   ) =>
     ['availability', slug, serviceId ?? '', professionalId ?? '', from ?? '', days ?? 7] as const,
+  /** Días con hueco para el calendario público (ADR 0024). */
+  availabilityDays: (
+    slug: string,
+    serviceId: string,
+    professionalId: string,
+    from: string,
+    days: number,
+  ) => ['availability-days', slug, serviceId, professionalId, from, days] as const,
   dashboardMetrics: ['dashboard', 'metrics'] as const,
   me: ['me'] as const,
   /**

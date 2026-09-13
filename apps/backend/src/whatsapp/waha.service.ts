@@ -42,7 +42,18 @@ export class WahaService {
     return phoneToChatId(phone);
   }
 
-  async sendText(session: string, phoneOrChatId: string, text: string): Promise<void> {
+  /**
+   * @param opts.timeoutMs corta la petición. Opcional a propósito: el bot y los
+   * recordatorios reintentan sus jobs, y un corte cuando WAHA tarda pero sí
+   * entrega duplicaría el mensaje al paciente. Lo usa el aviso de la web
+   * (ADR 0024), que se lanza sin esperar y no reintenta.
+   */
+  async sendText(
+    session: string,
+    phoneOrChatId: string,
+    text: string,
+    opts: { timeoutMs?: number } = {},
+  ): Promise<void> {
     const chatId = phoneOrChatId.includes('@')
       ? phoneOrChatId
       : this.toChatId(phoneOrChatId);
@@ -51,6 +62,7 @@ export class WahaService {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify({ session, chatId, text }),
+      ...(opts.timeoutMs ? { signal: AbortSignal.timeout(opts.timeoutMs) } : {}),
     });
 
     if (!res.ok) {
