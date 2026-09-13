@@ -45,7 +45,7 @@ const config: Config = {
         // (landing, /seguridad, legales). Reemplaza cream/warm (2026-09-13):
         // crema + serif display era el look por defecto del "SaaS cálido" y
         // no es la marca; la marca es navy + teal. Ver
-        // docs/adr/0023-landing-navy-teal-geist.md.
+        // docs/adr/0025-landing-navy-teal-geist.md.
         mist: {
           50: '#F7F9FB',
           100: '#EEF2F6',

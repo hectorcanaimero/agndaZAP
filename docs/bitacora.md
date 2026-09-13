@@ -1,5 +1,25 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-13 — Rediseño de la landing: navy + teal, la vida de una cita y cero prueba inventada (rama `feat/landing-rediseno`)
+- **Por qué**: revisión con taste-skill, impeccable y marketing-psychology sobre código y capturas. Había un
+  testimonio inventado (foto de stock), el copy se contradecía sobre el número de WhatsApp, cuatro textos para
+  la misma acción, bento con celdas vacías y el look "SaaS cálido" (Fraunces + crema) que no es la marca.
+- **Decisiones del owner**: la clínica puede usar su número pero recomendamos uno dedicado; demo pública
+  aprobada; navy + teal + Geist; un solo CTA ("Unirme al piloto"). Ver [[adr/0025-landing-navy-teal-geist]].
+- **Qué cambió**: hero con el chat que se confirma solo, franja de hechos, calculadora de costo de no-shows,
+  "la vida de una cita" (agenda que cambia de estado con el scroll), funcionalidades en 5 celdas, sección demo
+  (`NEXT_PUBLIC_DEMO_*`, ver [[notas/2026-09-13-demo-publico-landing]]), piloto con "¿y después?", FAQ y cierre.
+- **Verificado contra el backend antes de escribirlo**: EN_RIESGO no depende del recordatorio de 3 h sino del
+  job `check-risk` en `confirmThresholdH` (6 h en la demo); el primer borrador decía "si no responde el
+  recordatorio de 3 h" y era falso.
+- **Gotcha de verificación en el VPS**: el hook de servidores bloquea también el arranque en modo producción
+  de Next, no solo el de desarrollo. Para ver el build sin levantar ningún proceso, Playwright intercepta las
+  peticiones (`context.route`) y sirve `.next/server/app/<locale>.html` y `.next/static` desde disco.
+  Funciona porque la landing es SSG.
+- Página ~24% más corta en desktop (9459 → 7204 px) y ~26% en mobile (13598 → 10074 px).
+- Pendiente del owner: encender la demo con un número WAHA propio y medir el embudo de Plausible 2 semanas
+  antes/después.
+
 ## 2026-09-12 — S44: el tono LATAM neutro, migrado de verdad y verificado (rama `fix/voseo-es-json`)
 - La nota `2026-09-10-tono-espanol-neutro` daba la migración por hecha y no lo
   estaba: quedaban **55 cadenas en voseo** en `apps/web/messages/es.json`,

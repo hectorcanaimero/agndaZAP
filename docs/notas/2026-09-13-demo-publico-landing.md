@@ -6,7 +6,7 @@ tags: [landing, demo, waha, deploy]
 # Demo pública en la landing ("Pruébalo ahora")
 
 El owner aprobó (2026-09-13) exponer en la landing una clínica demo como prueba del producto,
-en lugar de testimonios que no existen. Ver [[adr/0023-landing-navy-teal-geist]].
+en lugar de testimonios que no existen. Ver [[adr/0025-landing-navy-teal-geist]].
 
 ## Cómo se enciende
 
