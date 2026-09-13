@@ -96,7 +96,7 @@ export function HeroChat() {
 
           {/* Alto fijo y mensajes anclados abajo: lo nuevo empuja lo viejo
               hacia arriba como en un chat real, sin mover el layout. */}
-          <div className="flex h-[440px] flex-col justify-end gap-2 overflow-hidden px-3 pb-4 sm:h-[470px]">
+          <div className="flex h-[440px] flex-col justify-end gap-2 overflow-hidden px-3 pb-4 [mask-image:linear-gradient(to_bottom,transparent,black_56px)] sm:h-[470px]">
             <Outgoing>{t('patient')}</Outgoing>
             <Incoming>
               <p>{t('bot1')}</p>

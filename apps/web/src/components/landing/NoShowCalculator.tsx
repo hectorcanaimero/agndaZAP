@@ -33,7 +33,7 @@ export function NoShowCalculator() {
     () => Object.fromEntries(FIELDS.map((f) => [f.key, f.initial])) as Record<Field['key'], number>,
   );
 
-  const nf = new Intl.NumberFormat(locale === 'pt' ? 'pt-BR' : 'es', { maximumFractionDigits: 0 });
+  const nf = new Intl.NumberFormat(locale === 'pt' ? 'pt-BR' : 'es-419', { maximumFractionDigits: 0 });
   const lostMonth = Math.round(values.weekly * (values.rate / 100) * WEEKS_PER_MONTH);
   const moneyMonth = lostMonth * values.value;
   const currency = t('currency');

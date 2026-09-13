@@ -20,7 +20,7 @@ export function Facts() {
         {FACTS.map(({ key, Icon }, i) => (
           <li
             key={key}
-            className={`flex items-center gap-3 py-5 text-sm font-medium text-brand-navy sm:text-[0.95rem] ${
+            className={`flex items-center gap-3 py-5 text-sm font-medium text-brand-navy sm:text-[0.95rem] lg:text-sm ${
               i % 2 === 1 ? 'pl-4 sm:pl-6' : 'pr-4 sm:pr-6'
             } lg:px-6 lg:first:pl-0 lg:[&:not(:first-child)]:border-l lg:[&:not(:first-child)]:border-mist-200`}
           >

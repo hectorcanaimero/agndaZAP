@@ -12,9 +12,9 @@ export function Hero() {
 
   return (
     <section className="relative overflow-hidden" data-analytics-view="hero_view">
-      <div className="mx-auto grid max-w-6xl items-center gap-12 px-4 pb-16 pt-10 sm:px-6 sm:pt-16 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-10 lg:px-8 lg:pb-24 lg:pt-20">
+      <div className="mx-auto grid max-w-6xl items-center gap-12 px-4 pb-16 pt-10 sm:px-6 sm:pt-16 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.65fr)] lg:gap-10 lg:px-8 lg:pb-24 lg:pt-20">
         <div className="min-w-0">
-          <h1 className="text-balance text-[2.6rem] font-semibold leading-[1.04] tracking-[-0.035em] text-brand-navy sm:text-6xl lg:text-[4.1rem]">
+          <h1 className="text-balance text-[2.6rem] font-semibold leading-[1.04] tracking-[-0.035em] text-brand-navy sm:text-6xl lg:text-[3.4rem] xl:text-[3.6rem]">
             {t('headline')}
           </h1>
           <p className="mt-6 max-w-[34rem] text-lg leading-relaxed text-mist-600 sm:text-xl">

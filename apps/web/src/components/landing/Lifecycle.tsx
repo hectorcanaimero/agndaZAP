@@ -129,7 +129,7 @@ export function Lifecycle() {
                     stepRefs.current[i] = el;
                   }}
                   data-step={i}
-                  className="relative flex py-5 pl-6 lg:min-h-[38vh] lg:items-center lg:py-0"
+                  className="relative flex py-5 pl-6 lg:min-h-[28vh] lg:items-center lg:py-0"
                 >
                   <span
                     aria-hidden="true"
@@ -154,7 +154,7 @@ export function Lifecycle() {
           </ol>
 
           <div className="order-1 lg:order-2">
-            <div className="lg:sticky lg:top-[calc(50vh-13rem)]">
+            <div className="lg:sticky lg:top-[calc(50vh-12rem)]">
               <div
                 ref={cardRef}
                 role="img"

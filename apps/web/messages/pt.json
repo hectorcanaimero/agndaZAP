@@ -1252,8 +1252,8 @@
     "facts": {
       "label": "O básico do Showly",
       "noApp": "O paciente não instala nada",
-      "number": "Com o seu número ou um dedicado",
-      "onboarding": "Pronta em menos de 1 hora",
+      "number": "Seu número ou um dedicado",
+      "onboarding": "Pronta em até 1 hora",
       "languages": "Em español e português"
     },
     "problem": {
