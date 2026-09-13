@@ -7,7 +7,7 @@ import { Link } from '@/i18n/routing';
  *
  * Es un documento de lectura, no una landing: una sola columna estrecha
  * (max-w-3xl), tipografía de prosa y encabezado con eyebrow + título en
- * Fraunces, como el resto de las páginas públicas. La misma paleta cream/warm
+ * Geist (`font-display`), como el resto de las páginas públicas. La misma paleta mist
  * del landing para que no se sienta un sitio distinto.
  *
  * El aviso "documento en revisión legal, versión piloto" va ARRIBA del
@@ -41,7 +41,7 @@ export function LegalArticle({ page, sections }: Props) {
   const tc = useTranslations('legal.common');
 
   return (
-    <article className="bg-cream-50 py-16 lg:py-24">
+    <article className="bg-mist-50 py-16 lg:py-24">
       <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
         <header>
           <span className="text-xs font-medium uppercase tracking-widest text-brand-teal">
@@ -53,8 +53,8 @@ export function LegalArticle({ page, sections }: Props) {
           >
             {tp('title')}
           </h1>
-          <p className="mt-2 text-sm text-warm-600">{tc('updatedAt')}</p>
-          <p className="mt-6 text-lg leading-relaxed text-warm-600">
+          <p className="mt-2 text-sm text-mist-600">{tc('updatedAt')}</p>
+          <p className="mt-6 text-lg leading-relaxed text-mist-600">
             {tp('intro')}
           </p>
         </header>
@@ -85,11 +85,11 @@ export function LegalArticle({ page, sections }: Props) {
               >
                 {tp(`sections.${key}.title`)}
               </h2>
-              <p className="mt-3 text-base leading-relaxed text-warm-600">
+              <p className="mt-3 text-base leading-relaxed text-mist-600">
                 {tp(`sections.${key}.body`)}
               </p>
               {items ? (
-                <ul className="mt-4 space-y-2 pl-5 text-base leading-relaxed text-warm-600 marker:text-brand-teal">
+                <ul className="mt-4 space-y-2 pl-5 text-base leading-relaxed text-mist-600 marker:text-brand-teal">
                   {items.map((item) => (
                     <li key={item} className="list-disc pl-1">
                       {tp(`sections.${key}.items.${item}`)}
@@ -101,8 +101,8 @@ export function LegalArticle({ page, sections }: Props) {
           ))}
         </div>
 
-        <footer className="mt-14 border-t border-warm-200 pt-8">
-          <p className="text-sm text-warm-600">
+        <footer className="mt-14 border-t border-mist-200 pt-8">
+          <p className="text-sm text-mist-600">
             {tc('contactLabel')}:{' '}
             <a
               href={`mailto:${tc('contactEmail')}`}

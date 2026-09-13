@@ -15,6 +15,33 @@
   causa, pero un test que falla según cuándo se ejecute es ruido que acaba
   ignorándose.
 - Verificado por mutación: con el filtro viejo, el test nuevo cae.
+## 2026-09-13 — Rediseño de la landing: navy + teal, la vida de una cita y cero prueba inventada (rama `feat/landing-rediseno`)
+- **Por qué**: revisión con taste-skill, impeccable y marketing-psychology sobre código y capturas. Había un
+  testimonio inventado (foto de stock), el copy se contradecía sobre el número de WhatsApp, cuatro textos para
+  la misma acción, bento con celdas vacías y el look "SaaS cálido" (Fraunces + crema) que no es la marca.
+- **Decisiones del owner**: la clínica puede usar su número pero recomendamos uno dedicado; demo pública
+  aprobada; navy + teal + Geist; un solo CTA ("Unirme al piloto"). Ver [[adr/0025-landing-navy-teal-geist]].
+- **Qué cambió**: hero con el chat que se confirma solo, franja de hechos, calculadora de costo de no-shows,
+  "la vida de una cita" (agenda que cambia de estado con el scroll), funcionalidades en 5 celdas, sección demo
+  (`NEXT_PUBLIC_DEMO_*`, ver [[notas/2026-09-13-demo-publico-landing]]), piloto con "¿y después?", FAQ y cierre.
+- **Verificado contra el backend antes de escribirlo**: EN_RIESGO no depende del recordatorio de 3 h sino del
+  job `check-risk` en `confirmThresholdH` (6 h en la demo); el primer borrador decía "si no responde el
+  recordatorio de 3 h" y era falso.
+- **Gotcha de verificación en el VPS**: el hook de servidores bloquea también el arranque en modo producción
+  de Next, no solo el de desarrollo. Para ver el build sin levantar ningún proceso, Playwright intercepta las
+  peticiones (`context.route`) y sirve `.next/server/app/<locale>.html` y `.next/static` desde disco.
+  Funciona porque la landing es SSG.
+- Página ~20% más corta en desktop (9459 → 7531 px) y ~23% en mobile (13598 → 10455 px).
+- **Revisión en dos frentes antes del PR** (code-reviewer + revisor visual independiente con capturas):
+  el mismo layout texto-izquierda/tarjeta-derecha se repetía en 5 secciones, los pasos inactivos del
+  bloque oscuro quedaban a ~2.4:1 (opacidad sobre texto ya translúcido), la agenda mobile se movía en
+  bucle (WCAG 2.2.2), la nav usaba anclas sin ruta que no funcionaban desde /seguridad y el copy de
+  calificación prometía más de lo que hace el backend (`followUpEnabled` es opt-in). Todo corregido.
+- **Lo que NO cierra esta rama**: la demo pública permite spam a terceros vía `/agendar` y no hay
+  retención de sus datos; quedan como bloqueantes en [[notas/2026-09-13-demo-publico-landing]].
+- Pendiente del owner: encender la demo con un número WAHA propio y medir el embudo de Plausible 2 semanas
+  antes/después.
+
 ## 2026-09-12 — M10 PR 5: por voz no se confirma ni se cancela (rama `feat/confirmacion-escrita-audio`)
 - Cierra el riesgo que el PR 4 dejó anotado como condición para encender
   `STT_ENABLED`. Detalle en [[notas/2026-09-12-confirmacion-escrita-por-voz]].
