@@ -4,7 +4,7 @@ import { Nav } from '@/components/landing/Nav';
 import { Hero } from '@/components/landing/Hero';
 import { Facts } from '@/components/landing/Facts';
 import { ProblemSection } from '@/components/landing/ProblemSection';
-import { HowItWorksSection } from '@/components/landing/HowItWorksSection';
+import { Lifecycle } from '@/components/landing/Lifecycle';
 import { FeaturesSection } from '@/components/landing/FeaturesSection';
 import { PricingSection } from '@/components/landing/PricingSection';
 import { SecurityStrip } from '@/components/landing/SecurityStrip';
@@ -41,7 +41,7 @@ export default async function LandingPage({
         <Hero />
         <Facts />
         <ProblemSection />
-        <HowItWorksSection />
+        <Lifecycle />
         <FeaturesSection />
         {/*
           Sin testimonios: no hay clínica en producción con un caso publicable

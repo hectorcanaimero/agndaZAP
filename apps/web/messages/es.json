@@ -1215,23 +1215,6 @@
       "title": "Showly | Agendamiento por WhatsApp para clínicas",
       "description": "Showly agenda, confirma y recuerda las citas de tu clínica por WhatsApp. Menos no-shows, más pacientes atendidos."
     },
-    "agendaLive": {
-      "todayLabel": "Hoy",
-      "liveLabel": "En vivo",
-      "status": {
-        "attended": "Atendida",
-        "confirmed": "Confirmada",
-        "pending": "Pendiente",
-        "atRisk": "En riesgo"
-      },
-      "countLabels": {
-        "confirmed": "confirmadas",
-        "pending": "pendientes",
-        "atRisk": "en riesgo"
-      },
-      "toastLabel": "Recordatorio enviado",
-      "toastMessage": "Andrés confirmó su cita de las 11:15 por WhatsApp."
-    },
     "nav": {
       "brand": "Showly",
       "howItWorks": "Cómo funciona",
@@ -1288,30 +1271,53 @@
         "note": "Es un cálculo con tus números, no una promesa. Cambia los valores."
       }
     },
-    "howItWorks": {
-      "eyebrow": "Cómo funciona",
-      "headline": "Tres pasos. Sin apps que instalar.",
+    "lifecycle": {
+      "headline": "Así se confirma una cita sin que nadie la persiga.",
       "steps": {
-        "one": {
-          "number": "01",
-          "title": "El paciente escribe por WhatsApp.",
-          "body": "Al mismo número de siempre. No instala nada, no crea cuentas. Solo pregunta."
+        "write": {
+          "title": "El paciente escribe",
+          "body": "Al WhatsApp de la clínica, a cualquier hora. No descarga nada ni crea cuentas."
         },
-        "two": {
-          "number": "02",
-          "title": "Showly agenda, confirma y recuerda.",
-          "body": "Entiende la consulta, ofrece horarios reales de tu agenda, crea la cita y envía recordatorios 24h y 3h antes."
+        "book": {
+          "title": "Showly ofrece horarios reales",
+          "body": "Lee tu agenda, propone opciones libres y crea la cita cuando el paciente elige."
         },
-        "three": {
-          "number": "03",
-          "title": "Tú ves todo desde el panel.",
-          "body": "Agenda visual, bandeja de conversaciones y ausencias del día en un vistazo. Toma la conversación cuando quieras."
+        "remind": {
+          "title": "Recordatorio 24 h y 3 h antes",
+          "body": "El paciente confirma con un SÍ o pide reagendar, sin llamar a nadie."
+        },
+        "risk": {
+          "title": "Si no confirma a tiempo, queda en riesgo",
+          "body": "Unas horas antes, la cita sin confirmar se marca en riesgo en tu agenda, con tiempo para llamar o llenar el hueco."
+        },
+        "panel": {
+          "title": "Recepción lo ve todo en el panel",
+          "body": "Agenda del día, conversaciones y ausencias en una pantalla. Toma el chat cuando quieras."
         }
       },
-      "steps_alt": {
-        "one": "Ilustración de un chat de WhatsApp con un paciente pidiendo turno",
-        "two": "Ilustración de Showly ofreciendo horarios y confirmando la cita en WhatsApp",
-        "three": "Ilustración del panel web de Showly con la agenda del día y las conversaciones"
+      "card": {
+        "label": "Agenda de ejemplo de una clínica con Showly",
+        "day": "Martes 12",
+        "status": {
+          "writing": "Escribiendo",
+          "pending": "Pendiente",
+          "confirmed": "Confirmada",
+          "atRisk": "En riesgo",
+          "attended": "Atendida"
+        },
+        "services": {
+          "cleaning": "Limpieza dental",
+          "firstVisit": "Primera consulta",
+          "control": "Control",
+          "ortho": "Ortodoncia"
+        },
+        "events": {
+          "write": "Sofía escribió: «¿Tienen hora el martes?»",
+          "book": "Cita creada por WhatsApp para las 10:30",
+          "remind": "Recordatorio de 24 h: Sofía respondió SÍ",
+          "risk": "Andrés no confirmó a tiempo: su cita queda en riesgo",
+          "panel": "El día a la vista: 2 confirmadas y 1 en riesgo"
+        }
       }
     },
     "features": {
