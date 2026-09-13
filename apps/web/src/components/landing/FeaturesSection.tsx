@@ -1,116 +1,116 @@
 import { useTranslations } from 'next-intl';
-import {
-  IconReminder,
-  IconHandoff,
-  IconMultiPro,
-  IconKnowledge,
-  IconFeedback,
-  IconMultiLang,
-} from './icons';
-import { FadeIn } from './motion/FadeIn';
-import { Stagger, StaggerItem } from './motion/Stagger';
+import { CalendarSync, Headset, Star } from 'lucide-react';
+import type { ReactNode } from 'react';
 
-// Anchor card = recordatorios (el diferenciador real anti no-show). Se
-// eleva visualmente con doble tamaño, ilustración ambiental (gradient +
-// glow) y typography display. Los 5 restantes caen en grid 3x2 con misma
-// jerarquía. Rompe la uniformidad "6 cards clonadas" sin caer en el bento
-// asimétrico roto del batch previo (usamos grid explícito, no auto-flow).
-const SUPPORTING = [
-  { key: 'handoff', Icon: IconHandoff },
-  { key: 'multiPro', Icon: IconMultiPro },
-  { key: 'faq', Icon: IconKnowledge },
-  { key: 'feedback', Icon: IconFeedback },
-  { key: 'multiTenant', Icon: IconMultiLang },
+// Cinco funcionalidades, cinco celdas (lg: 4+2 / 2+2+2; md: 2 / 1+1 / 1+1;
+// mobile: 1 columna). Los recordatorios no están acá porque son la sección
+// <Lifecycle />. Cada celda muestra un fragmento de la UI real del producto
+// (burbujas de WhatsApp, agenda, zona horaria) en vez de un ícono suelto.
+const PROFESSIONALS = [
+  { name: 'Dra. Ríos', specialty: 'general' },
+  { name: 'Dr. Soto', specialty: 'ortho' },
 ] as const;
 
 export function FeaturesSection() {
   const t = useTranslations('landing.features');
 
   return (
-    <section id="features" className="bg-cream-50 py-24 lg:py-32">
+    <section id="features" className="scroll-mt-16 py-20 lg:py-28">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-        <FadeIn className="max-w-2xl">
-          <h2
-            className="font-display text-4xl font-medium leading-[1.05] tracking-[-0.03em] text-brand-navy sm:text-5xl lg:text-6xl text-balance"
-            style={{ overflowWrap: 'anywhere', fontOpticalSizing: 'auto' }}
-          >
-            {t('headline')}
-          </h2>
-        </FadeIn>
+        <h2 className="max-w-2xl text-balance text-4xl font-semibold leading-[1.08] tracking-[-0.03em] text-brand-navy sm:text-5xl">
+          {t('headline')}
+        </h2>
 
-        <div className="mt-14 grid gap-5 lg:mt-20 lg:grid-cols-12">
-          <FadeIn
-            as="article"
-            className="group relative overflow-hidden rounded-[2rem] border border-brand-navy/15 bg-brand-navy p-8 text-white shadow-warm-xl transition-transform duration-500 ease-out-soft hover:-translate-y-1 sm:p-10 lg:col-span-7 lg:row-span-2 lg:min-h-[420px]"
-          >
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0 opacity-70 [background-image:radial-gradient(at_20%_10%,rgba(40,217,185,0.35),transparent_55%),radial-gradient(at_100%_100%,rgba(40,217,185,0.15),transparent_50%)]"
-            />
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0 bg-grain opacity-[0.05] mix-blend-overlay"
-            />
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute -right-24 -bottom-24 h-72 w-72 rounded-full bg-brand-teal/20 blur-3xl transition-transform duration-700 ease-out-soft group-hover:scale-110"
-            />
+        <div className="mt-12 grid gap-4 md:grid-cols-2 lg:mt-16 lg:grid-cols-6">
+          <Cell className="bg-mist-100 md:col-span-2 lg:col-span-4" title={t('items.handoff.title')} body={t('items.handoff.body')} wide>
+            <Bubble side="patient">{t('items.handoff.demoPatient')}</Bubble>
+            <p className="mx-auto mt-2 flex w-fit items-center gap-1.5 rounded-full bg-brand-navy px-3 py-1.5 text-xs font-semibold text-white">
+              <Headset className="h-3.5 w-3.5 text-brand-teal" />
+              {t('items.handoff.demoTaken')}
+            </p>
+          </Cell>
 
-            <div className="relative flex h-full flex-col">
-              <span className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-brand-teal ring-1 ring-inset ring-white/15 backdrop-blur-sm">
-                <IconReminder className="h-7 w-7" />
-              </span>
-              <h3 className="mt-8 max-w-md font-display text-3xl font-medium leading-tight tracking-[-0.02em] text-white sm:text-4xl">
-                {t('items.reminders.title')}
-              </h3>
-              <p className="mt-4 max-w-md text-base leading-relaxed text-white/80 sm:text-lg">
-                {t('items.reminders.body')}
-              </p>
-              <div className="mt-auto flex items-center gap-2 pt-8 text-sm font-medium text-brand-teal">
-                <span
-                  aria-hidden="true"
-                  className="relative inline-flex h-2 w-2"
-                >
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-teal opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-brand-teal" />
-                </span>
-                {t('items.reminders.tag')}
-              </div>
-            </div>
-          </FadeIn>
+          <Cell className="border border-mist-200 bg-white lg:col-span-2" title={t('items.faq.title')} body={t('items.faq.body')}>
+            <Bubble side="patient">{t('items.faq.demoQuestion')}</Bubble>
+            <Bubble side="bot">{t('items.faq.demoAnswer')}</Bubble>
+          </Cell>
 
-          <Stagger
-            className="contents"
-            gap={0.08}
-          >
-            {SUPPORTING.map(({ key, Icon }, i) => (
-              <StaggerItem
-                as="article"
-                key={key}
-                className={`group relative flex min-w-0 flex-col overflow-hidden rounded-[1.75rem] border border-warm-200 bg-cream-50 p-6 shadow-warm-sm transition-all duration-300 ease-out-soft hover:-translate-y-1 hover:border-brand-teal/40 hover:shadow-warm-lg lg:col-span-5 ${
-                  i === 0 ? 'lg:col-start-8' : 'lg:col-span-4'
-                } ${i >= 1 && i <= 3 ? 'lg:col-span-4' : ''}`}
-              >
-                <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute -right-14 -top-14 h-32 w-32 rounded-full bg-brand-teal/8 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
-                />
-                <div className="relative">
-                  <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-teal/10 text-brand-teal ring-1 ring-inset ring-brand-teal/20 transition-transform duration-300 ease-back-out group-hover:scale-110">
-                    <Icon className="h-5 w-5" />
+          <Cell className="border border-mist-200 bg-white lg:col-span-2" title={t('items.multiPro.title')} body={t('items.multiPro.body')}>
+            <ul className="divide-y divide-mist-200 rounded-xl border border-mist-200 text-sm">
+              {PROFESSIONALS.map((p) => (
+                <li key={p.name} className="flex items-center justify-between gap-3 px-3 py-2">
+                  <span className="min-w-0">
+                    <span className="block font-medium text-brand-navy">{p.name}</span>
+                    <span className="block text-xs text-mist-600">{t(`items.multiPro.specialties.${p.specialty}`)}</span>
                   </span>
-                  <h3 className="mt-5 text-lg font-semibold leading-snug text-brand-navy">
-                    {t(`items.${key}.title`)}
-                  </h3>
-                  <p className="mt-2 text-[0.95rem] leading-relaxed text-warm-600">
-                    {t(`items.${key}.body`)}
-                  </p>
-                </div>
-              </StaggerItem>
-            ))}
-          </Stagger>
+                  <CalendarSync className="h-4 w-4 shrink-0 text-teal-ink" strokeWidth={1.75} />
+                </li>
+              ))}
+            </ul>
+          </Cell>
+
+          <Cell className="bg-brand-teal/15 lg:col-span-2" title={t('items.feedback.title')} body={t('items.feedback.body')}>
+            <div className="flex gap-1 text-brand-navy">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <Star key={i} className="h-5 w-5" fill={i < 4 ? 'currentColor' : 'none'} strokeWidth={1.75} />
+              ))}
+            </div>
+          </Cell>
+
+          <Cell className="border border-mist-200 bg-white lg:col-span-2" title={t('items.timezone.title')} body={t('items.timezone.body')}>
+            <ul className="space-y-2 text-sm">
+              {(['es', 'pt'] as const).map((k) => (
+                <li key={k} className="flex items-center justify-between rounded-lg bg-mist-100 px-3 py-2">
+                  <span className="font-medium text-brand-navy">{t(`items.timezone.zones.${k}.city`)}</span>
+                  <span className="tabular-nums text-mist-700">{t(`items.timezone.zones.${k}.time`)}</span>
+                </li>
+              ))}
+            </ul>
+          </Cell>
         </div>
       </div>
     </section>
+  );
+}
+
+function Cell({
+  className,
+  title,
+  body,
+  wide,
+  children,
+}: {
+  className: string;
+  title: string;
+  body: string;
+  wide?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <article
+      className={`flex min-w-0 flex-col justify-between gap-8 rounded-2xl p-6 sm:p-8 ${
+        wide ? 'lg:flex-row lg:items-end' : ''
+      } ${className}`}
+    >
+      <div className="min-w-0 flex-1">
+        <h3 className="text-xl font-semibold leading-snug text-brand-navy">{title}</h3>
+        <p className="mt-2 max-w-md text-base leading-relaxed text-mist-600">{body}</p>
+      </div>
+      <div aria-hidden="true" className={wide ? 'w-full max-w-sm shrink-0 lg:w-72' : 'w-full'}>
+        {children}
+      </div>
+    </article>
+  );
+}
+
+function Bubble({ side, children }: { side: 'patient' | 'bot'; children: ReactNode }) {
+  return side === 'patient' ? (
+    <p className="ml-auto mt-2 w-fit max-w-[90%] rounded-2xl rounded-br-md bg-[#D9FDD3] px-3 py-2 text-sm text-neutral-900 first:mt-0">
+      {children}
+    </p>
+  ) : (
+    <p className="mt-2 w-fit max-w-[90%] rounded-2xl rounded-bl-md bg-mist-100 px-3 py-2 text-sm text-neutral-900">
+      {children}
+    </p>
   );
 }

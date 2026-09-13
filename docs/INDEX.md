@@ -42,6 +42,7 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[adr/0022-fk-compuestas-multi-tenant|0022 — FKs compuestas para que el aislamiento entre clínicas no dependa del código]]
 - [[adr/0021-cola-bot-inbound|ADR 0021 — Cola `bot-inbound` entre el webhook de WAHA y el bot]]
 - [[adr/0024-bot-link-first|0024 — Bot link-first: agendar y reagendar por link, no por chat]]
+- [[adr/0025-landing-navy-teal-geist|0025 — Landing: navy + teal + Geist, la vida de una cita y cero prueba social inventada]]
 
 ## Specs de sprint (implementación)
 - [[specs/2026-08-18-observabilidad-pino-axiom-sentry|2026-08-18 — Spec Observabilidad (Pino + Axiom + Sentry) — Sprint 40 clínicas día 1-2]]
@@ -95,8 +96,10 @@ Mapa de la base de conocimiento. Mantener actualizado al crear notas nuevas.
 - [[notas/2026-09-11-revision-fks-compuestas-restantes|2026-09-11 — Los otros 9 pares del ADR 0022: cuáles merecen FK compuesta]]
 - [[notas/2026-09-12-stt-descarga-segura|2026-09-12 — Transcribir notas de voz: por qué el servicio desconfía de su propia URL]]
 - [[notas/2026-09-12-stt-cableado-notas-de-voz|2026-09-12 — Cablear la transcripción: quién decide qué, y qué pasa cuando algo falla]]
+- [[notas/2026-09-12-confirmacion-escrita-por-voz|2026-09-12 — Por voz no se confirma ni se cancela una cita]]
 - [[notas/2026-09-12-waha-media-storage|2026-09-12 — WAHA no descarga los adjuntos si no se lo pides, y cuánto vive el fichero]]
 - [[notas/2026-09-13-ciclo-modulos-public-whatsapp|2026-09-13 — Ciclo PublicModule ↔ WhatsappModule: tests verdes, app que no arranca]]
+- [[notas/2026-09-13-demo-publico-landing|2026-09-13 — Demo pública en la landing: cómo se enciende y qué vigilar]]
 
 ## Análisis
 - [[analisis/2026-09-11-chatbot-analisis-tecnico|2026-09-11 — Análisis técnico del asistente de WhatsApp]] — premisas, bugs (B1-B10), mejoras (M1-M10), seguimiento (S1-S5) y checklist por prioridad

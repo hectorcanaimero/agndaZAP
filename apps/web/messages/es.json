@@ -1214,178 +1214,194 @@
       "title": "Showly | Agendamiento por WhatsApp para clínicas",
       "description": "Showly agenda, confirma y recuerda las citas de tu clínica por WhatsApp. Menos no-shows, más pacientes atendidos."
     },
-    "agendaLive": {
-      "todayLabel": "Hoy",
-      "liveLabel": "En vivo",
-      "status": {
-        "attended": "Atendida",
-        "confirmed": "Confirmada",
-        "pending": "Pendiente",
-        "atRisk": "En riesgo"
-      },
-      "countLabels": {
-        "confirmed": "confirmadas",
-        "pending": "pendientes",
-        "atRisk": "en riesgo"
-      },
-      "toastLabel": "Recordatorio enviado",
-      "toastMessage": "Andrés confirmó su cita de las 11:15 por WhatsApp."
-    },
     "nav": {
       "brand": "Showly",
       "howItWorks": "Cómo funciona",
       "features": "Funcionalidades",
-      "pricing": "Precios",
+      "pricing": "Precio",
       "faq": "Preguntas",
       "signIn": "Iniciar sesión",
-      "primaryCta": "Solicita tu demo",
+      "primaryCta": "Unirme al piloto",
       "openMenu": "Abrir menú",
       "closeMenu": "Cerrar menú"
     },
     "hero": {
-      "eyebrow": "Agendamiento por WhatsApp para clínicas",
       "headline": "Deja de perder pacientes por no-show.",
-      "subheadline": "El paciente escribe al WhatsApp de siempre. Showly agenda, confirma y recuerda. Nadie descarga nada, tu equipo no aprende nada nuevo.",
-      "primaryCta": "Solicita tu demo",
-      "secondaryCta": "Ver cómo funciona",
-      "trust": "En piloto con clínicas de LATAM y Brasil.",
-      "trustStrip": {
-        "pilot": "En piloto con clínicas de LATAM",
-        "whatsapp": "El WhatsApp que ya usan tus pacientes",
-        "onboarding": "Onboarding en menos de 1 hora",
-        "multilang": "Español y português"
-      },
+      "subheadline": "Tus pacientes escriben al WhatsApp de la clínica. Showly agenda, confirma y recuerda cada cita por ti.",
+      "primaryCta": "Unirme al piloto",
+      "secondaryCta": "Probar el bot",
+      "secondaryCtaFallback": "Ver cómo funciona",
       "mock": {
+        "label": "Conversación de ejemplo entre un paciente y Showly por WhatsApp",
         "clinicName": "Clínica Aurora",
         "clinicStatus": "en línea",
+        "typing": "escribiendo…",
         "patient": "Hola, quiero una cita con la Dra. Ríos.",
         "bot1": "¡Hola! Estos son los próximos horarios con la Dra. Ríos:",
-        "botOptions": "1. Mar 12 · 09:30\n2. Mié 13 · 15:00\n3. Jue 14 · 11:00",
-        "botHint": "Responde con el número o escribe otra fecha.",
+        "botOptions": "1. Mar 12, 09:30\n2. Mié 13, 15:00\n3. Jue 14, 11:00",
+        "botHint": "Responde con el número del horario que prefieras.",
         "patientReply": "1",
-        "botConfirm": "Listo. Cita confirmada para el martes 12 a las 9:30. ✅",
-        "reminderBadge": "Recordatorio automático 24h antes",
-        "reminderText": "Hola María, te esperamos mañana a las 9:30. Responde SÍ para confirmar, REAGENDAR para cambiar."
-      },
-      "whatsappCta": "Escribinos por WhatsApp",
-      "whatsappMessage": "Hola, quiero saber más sobre Showly para mi clínica."
-    },
-    "problem": {
-      "eyebrow": "El problema",
-      "headline": "El WhatsApp de tu clínica se volvió un caos.",
-      "subheadline": "El no-show es el impuesto invisible de tu clínica. Nadie lo mide, pero todos lo pagan: el hueco en la agenda, el paciente que no vuelve y el equipo que ya no confía en los recordatorios manuales.",
-      "points": {
-        "one": {
-          "title": "La recepción vive respondiendo.",
-          "body": "Cien mensajes al día para agendar, mover y confirmar. Se le va el turno en el chat."
-        },
-        "two": {
-          "title": "Nadie confirma sistemáticamente.",
-          "body": "Los recordatorios los mandas tú, cuando puedes. La mitad no responde."
-        },
-        "three": {
-          "title": "El horario se pierde.",
-          "body": "Cuando alguien no aparece, ese slot ya no se recupera. Y no sabes cuánto te costó."
-        }
-      },
-      "callout": {
-        "headline": "3 no-shows por semana.",
-        "body": "12 al mes. Un mes entero de agenda perdida en el año."
+        "botConfirm": "Listo. Tu cita quedó para el martes 12 a las 9:30.",
+        "reminderBadge": "Lunes 11, 9:30. Recordatorio automático",
+        "reminderText": "Hola María, te esperamos mañana a las 9:30. Responde SÍ para confirmar o REAGENDAR para cambiarla.",
+        "patientConfirm": "SÍ",
+        "confirmedChip": "Cita confirmada en la agenda"
       }
     },
-    "howItWorks": {
-      "eyebrow": "Cómo funciona",
-      "headline": "Tres pasos. Sin apps que instalar.",
+    "facts": {
+      "label": "Lo básico de Showly",
+      "noApp": "El paciente no instala nada",
+      "number": "Tu número o uno dedicado",
+      "onboarding": "Lista en menos de 1 hora",
+      "languages": "En español y português"
+    },
+    "problem": {
+      "headline": "Cada no-show es una hora que no vuelve.",
+      "body": "La recepción responde WhatsApp todo el día, los recordatorios salen cuando alguien se acuerda y nadie mide los huecos que quedan en la agenda.",
+      "calc": {
+        "title": "¿Cuánto te cuestan hoy los no-shows?",
+        "weekly": "Citas por semana",
+        "rate": "Pacientes que no llegan",
+        "value": "Valor promedio de una consulta",
+        "currency": "$",
+        "lostMonth": "citas perdidas al mes",
+        "moneyMonth": "que dejan de entrar cada mes",
+        "moneyYear": "al año",
+        "note": "Es un cálculo con tus números, no una promesa. Cambia los valores."
+      }
+    },
+    "lifecycle": {
+      "headline": "Así se confirma una cita sin que nadie la persiga.",
       "steps": {
-        "one": {
-          "number": "01",
-          "title": "El paciente escribe por WhatsApp.",
-          "body": "Al mismo número de siempre. No instala nada, no crea cuentas. Solo pregunta."
+        "write": {
+          "title": "El paciente escribe",
+          "body": "Al WhatsApp de la clínica, a cualquier hora. No descarga nada ni crea cuentas."
         },
-        "two": {
-          "number": "02",
-          "title": "Showly agenda, confirma y recuerda.",
-          "body": "Entiende la consulta, ofrece horarios reales de tu agenda, crea la cita y envía recordatorios 24h y 3h antes."
+        "book": {
+          "title": "Showly ofrece horarios reales",
+          "body": "Lee tu agenda, propone opciones libres y crea la cita cuando el paciente elige."
         },
-        "three": {
-          "number": "03",
-          "title": "Tú ves todo desde el panel.",
-          "body": "Agenda visual, bandeja de conversaciones y ausencias del día en un vistazo. Toma la conversación cuando quieras."
+        "remind": {
+          "title": "Recordatorio 24 h antes",
+          "body": "El paciente confirma con un SÍ o pide reagendar, sin llamar a nadie."
+        },
+        "risk": {
+          "title": "Si no confirma a tiempo, queda en riesgo",
+          "body": "Unas horas antes, la cita sin confirmar se marca en riesgo en tu agenda, con tiempo para llamar o llenar el hueco."
+        },
+        "panel": {
+          "title": "Recepción lo ve todo en el panel",
+          "body": "Agenda del día, conversaciones y ausencias en una pantalla. Toma el chat cuando quieras."
         }
       },
-      "steps_alt": {
-        "one": "Ilustración de un chat de WhatsApp con un paciente pidiendo turno",
-        "two": "Ilustración de Showly ofreciendo horarios y confirmando la cita en WhatsApp",
-        "three": "Ilustración del panel web de Showly con la agenda del día y las conversaciones"
+      "card": {
+        "label": "Agenda de ejemplo de una clínica con Showly",
+        "day": "Martes 12",
+        "status": {
+          "writing": "Escribiendo",
+          "pending": "Pendiente",
+          "confirmed": "Confirmada",
+          "atRisk": "En riesgo",
+          "attended": "Atendida"
+        },
+        "services": {
+          "cleaning": "Limpieza dental",
+          "firstVisit": "Primera consulta",
+          "control": "Control",
+          "ortho": "Ortodoncia"
+        },
+        "events": {
+          "write": "Sofía escribió: «¿Tienen hora el martes?»",
+          "book": "Cita creada por WhatsApp para las 10:30",
+          "remind": "Recordatorio de 24 h: Sofía respondió SÍ",
+          "risk": "Andrés no confirmó a tiempo: su cita queda en riesgo",
+          "panel": "El día a la vista: 2 confirmadas y 1 en riesgo"
+        }
       }
     },
     "features": {
-      "eyebrow": "Funcionalidades",
-      "headline": "Lo que tu clínica pide todos los días.",
+      "headline": "Lo que la recepción deja de hacer a mano.",
       "items": {
-        "reminders": {
-          "title": "Recordatorios que confirman",
-          "body": "24h y 3h antes de cada cita, en automático. El paciente confirma con un SÍ o pide reagendar. Tú te enteras solo si algo cambia.",
-          "tag": "Anti no-show en vivo"
-        },
         "handoff": {
           "title": "Tu equipo toma el chat cuando quiere",
-          "body": "Cuando el paciente pide una persona o tú quieres entrar, tu equipo toma la conversación y Showly se calla."
+          "body": "Si el paciente pide una persona o tú quieres entrar, tomas la conversación y Showly se calla.",
+          "demoPatient": "¿Puedo hablar con alguien de la clínica?",
+          "demoTaken": "Recepción tomó la conversación"
         },
         "multiPro": {
-          "title": "Cada profesional con su agenda",
-          "body": "Cada profesional con sus servicios, horarios y bloqueos. Se sincroniza con tu Google Calendar o iPhone sin instalar nada."
+          "title": "Una agenda por profesional",
+          "body": "Servicios, horarios y bloqueos de cada uno, y un calendario que se suscribe desde Google Calendar o el iPhone.",
+          "specialties": {
+            "general": "Odontología general",
+            "ortho": "Ortodoncia"
+          }
         },
         "faq": {
-          "title": "Responde tus preguntas frecuentes",
-          "body": "Precios, dirección, horarios, formas de pago. Showly responde con lo que tú cargaste. Nada de inventos."
+          "title": "Responde lo que siempre preguntan",
+          "body": "Precios, dirección, horarios y formas de pago, con la información que tú cargaste. Nada inventado.",
+          "demoQuestion": "¿Aceptan tarjeta?",
+          "demoAnswer": "Sí, aceptamos débito y crédito."
         },
         "feedback": {
-          "title": "Califica cada consulta",
-          "body": "El paciente califica de 1 a 5 estrellas después de cada visita. Sin formularios externos ni links raros."
+          "title": "Calificación después de la visita",
+          "body": "Si lo activas, el paciente califica de 1 a 5 por el mismo WhatsApp cuando la cita queda atendida."
         },
-        "multiTenant": {
-          "title": "Español y português, cada clínica en su hora",
-          "body": "Español y português. Cada clínica configura su zona horaria. Los recordatorios respetan feriados y bloqueos."
+        "timezone": {
+          "title": "En la hora de tu clínica",
+          "body": "Cada clínica agenda y recuerda en su propia zona horaria, en español o português.",
+          "zones": {
+            "es": {
+              "city": "Ciudad de México",
+              "time": "09:30"
+            },
+            "pt": {
+              "city": "São Paulo",
+              "time": "12:30"
+            }
+          }
         }
       }
     },
-    "testimonial": {
-      "badge": "Piloto en curso",
-      "altPortrait": "Retrato de una dueña de clínica participante del piloto de Showly",
-      "quote": "Antes contestaba WhatsApp entre paciente y paciente. Ahora entro al panel a la mañana y ya tengo el día armado.",
-      "author": "Dueña de clínica",
-      "role": "Piloto Showly · LATAM"
+    "demo": {
+      "headline": "No nos creas: pruébalo ahora.",
+      "body": "Es una clínica dental de ejemplo con el mismo Showly que usaría la tuya. Pide una cita y mira qué pasa.",
+      "whatsapp": {
+        "title": "Escríbele al bot",
+        "body": "Te responde por WhatsApp como a cualquier paciente.",
+        "cta": "Abrir WhatsApp",
+        "message": "Hola, quiero agendar una cita."
+      },
+      "web": {
+        "title": "Agenda desde la web",
+        "body": "La página que usa el paciente cuando prefiere elegir en un calendario.",
+        "cta": "Abrir la página de citas"
+      },
+      "note": "Clínica ficticia: tu cita no llega a ningún consultorio, pero sus mensajes sí te llegan por WhatsApp."
     },
     "pricing": {
-      "eyebrow": "Precios",
-      "headline": "Gratis mientras dure el piloto.",
-      "subheadline": "Sin tarjeta, sin compromiso. Te acompañamos hasta que la clínica agende sola.",
-      "badge": "Piloto",
-      "price": "Gratis",
-      "priceNote": "mientras dure el piloto",
-      "description": "No pedimos tarjeta ni firma de compromiso. Te acompañamos en el arranque hasta que la clínica agende sola.",
-      "includesTitle": "Todo incluido",
+      "headline": "Gratis durante el piloto.",
+      "subheadline": "Sin tarjeta y sin contrato. Te acompañamos hasta que tu clínica agende sola.",
+      "includesTitle": "Incluye todo",
       "features": {
-        "bot": "Bot de agendamiento por WhatsApp",
-        "reminders": "Recordatorios 24h y 3h antes",
-        "panel": "Panel web para tu equipo (agenda, bandeja, dashboard)",
+        "bot": "Agendamiento por WhatsApp",
+        "reminders": "Recordatorios 24 h y 3 h antes",
+        "panel": "Panel para tu equipo: agenda, conversaciones y ausencias",
         "multiLang": "Español y português",
-        "onboarding": "Onboarding acompañado en menos de 1 hora",
+        "onboarding": "Alta acompañada por nuestro equipo",
         "unlimited": "Sin límite de citas ni de pacientes"
       },
-      "cta": "Quiero entrar al piloto",
-      "afterPilot": "Cuando salgamos del piloto te avisamos 30 días antes. Ni un centavo antes de eso."
+      "cta": "Unirme al piloto",
+      "afterTitle": "¿Y cuando termine el piloto?",
+      "afterBody": "El plan base va a costar menos que un no-show a la semana. Te avisamos 30 días antes y tú decides si sigues. No cobramos nada antes de eso."
     },
     "securityStrip": {
-      "eyebrow": "Seguridad y datos",
-      "headline": "Los datos de tus pacientes están aislados por clínica.",
+      "headline": "Los datos de tus pacientes quedan aislados por clínica.",
       "chips": {
         "isolation": {
           "label": "Aislamiento por clínica"
         },
         "dedicated": {
-          "label": "WhatsApp dedicado"
+          "label": "Sesión de WhatsApp propia"
         },
         "noPii": {
           "label": "Sin datos personales en logs"
@@ -1394,8 +1410,7 @@
           "label": "Panel protegido por defecto"
         }
       },
-      "ctaLabel": "Cómo protegemos tus datos",
-      "ariaMore": "Ver detalles sobre seguridad y protección de datos"
+      "ctaLabel": "Cómo protegemos tus datos"
     },
     "securityPage": {
       "metaTitle": "Seguridad y datos | Showly",
@@ -1423,86 +1438,66 @@
       },
       "footnote": "Estamos en piloto: todavía no tenemos certificaciones formales como HIPAA o ISO 27001. Lo que sí tenemos son estas garantías escritas en el código, y las podemos mostrar cuando quieras."
     },
-    "forWhom": {
-      "eyebrow": "Para quién",
-      "headline": "Si tu clínica agenda por WhatsApp, Showly es para ti.",
-      "cards": {
-        "consultorios": {
-          "title": "Consultorios pequeños",
-          "body": "Uno a tres profesionales, agenda mixta, recepción compartida."
-        },
-        "clinicas": {
-          "title": "Clínicas polivalentes",
-          "body": "Varios servicios, múltiples profesionales, agenda con feriados y bloqueos."
-        },
-        "estetica": {
-          "title": "Centros de estética y bienestar",
-          "body": "Turnos por sesión, tratamientos con buffer entre citas."
-        },
-        "especialistas": {
-          "title": "Especialistas",
-          "body": "Odontología, kinesiología, psicología, nutrición. Cada uno con su ritmo."
-        }
-      }
-    },
     "faq": {
-      "eyebrow": "Preguntas frecuentes",
       "headline": "Lo que suelen preguntarnos.",
       "items": {
         "phone": {
-          "question": "¿Necesito un número de WhatsApp nuevo?",
-          "answer": "Sí. Recomendamos un número dedicado para la clínica, distinto del personal. Puede ser prepago o corporativo."
+          "question": "¿Tengo que cambiar el número de WhatsApp?",
+          "answer": "No. Puedes usar el número que ya tiene la clínica. Te recomendamos uno dedicado (prepago o corporativo) para que el bot no se mezcle con el uso personal ni con chats que no son de pacientes."
         },
         "install": {
           "question": "¿El paciente tiene que instalar algo?",
-          "answer": "No. El paciente solo escribe al WhatsApp de la clínica, como siempre. No hay apps, cuentas ni descargas."
+          "answer": "No. El paciente escribe al WhatsApp de la clínica, como siempre. No hay apps, cuentas ni descargas."
         },
         "business": {
           "question": "¿Funciona con WhatsApp Business?",
-          "answer": "Sí. Usamos un número dedicado que puede ser Business. En la fase piloto usamos WAHA (una integración no oficial) para bajar costos."
+          "answer": "Sí, con WhatsApp y con WhatsApp Business. Hoy nos conectamos con una integración no oficial (WAHA), que mantiene el costo bajo. Por eso recomendamos un número dedicado: si algo falla, tu número principal no se toca."
         },
         "onboarding": {
           "question": "¿Cuánto tarda dar de alta mi clínica?",
-          "answer": "Menos de una hora. Cargamos servicios, profesionales y horarios contigo. La misma tarde ya recibes citas por WhatsApp."
+          "answer": "Menos de una hora. Cargamos contigo servicios, profesionales y horarios. Esa misma tarde ya recibes citas por WhatsApp."
         },
         "privacy": {
           "question": "¿Los datos de mis pacientes están seguros?",
-          "answer": "Sí. Todo cifrado en tránsito, datos aislados por clínica, y minimizamos lo que se almacena. Los mensajes viven en tu sesión de WhatsApp."
+          "answer": "Todo viaja cifrado, los datos quedan aislados por clínica y guardamos lo mínimo. Todavía no tenemos certificaciones formales; en /seguridad te contamos qué está hecho en el código."
         },
         "price": {
           "question": "¿Cuánto cuesta?",
-          "answer": "Gratis mientras dure el piloto: sin tarjeta y sin compromiso. Cuando salgamos del piloto, el plan base va a costar menos que un no-show a la semana, y te avisamos 30 días antes. Ni un centavo antes de eso."
+          "answer": "Nada mientras dure el piloto: sin tarjeta y sin compromiso. Después, el plan base va a costar menos que un no-show a la semana, y te avisamos 30 días antes."
         }
       }
     },
     "cta": {
-      "headline": "Recupera las horas que tu equipo gasta en WhatsApp.",
-      "subheadline": "En menos de una hora tu clínica está agendando y confirmando por WhatsApp. Sin cambiar de número.",
-      "trust": "No pedimos tarjeta. No instalas nada. Onboarding acompañado por el equipo.",
+      "headline": "Empieza a recuperar las citas que hoy se pierden.",
+      "subheadline": "Déjanos tus datos y te ayudamos a dejar tu clínica agendando y confirmando por WhatsApp.",
+      "trust": "Sin tarjeta. El paciente no instala nada. Te acompañamos en el arranque.",
+      "orWhatsapp": "¿Prefieres hablar antes?",
+      "whatsappCta": "Escríbenos por WhatsApp",
+      "whatsappMessage": "Hola, quiero probar Showly en mi clínica.",
       "form": {
         "labels": {
           "name": "Tu nombre",
-          "phone": "WhatsApp de contacto",
-          "clinicType": "Tipo de negocio (opcional)",
-          "consent": "Acepto que me contacten por WhatsApp o email para coordinar la demo."
+          "phone": "Tu WhatsApp",
+          "clinicType": "Tipo de clínica (opcional)",
+          "consent": "Acepto que me contacten por WhatsApp para empezar el piloto."
         },
         "placeholders": {
-          "name": "Ej: María González",
+          "name": "María González",
           "phone": "+52 55 1234 5678",
           "clinicType": "Elige una opción"
         },
         "clinicTypes": {
           "consultorio": "Consultorio individual",
-          "clinica": "Clínica multi-profesional",
-          "estetica": "Estética o wellness",
+          "clinica": "Clínica con varios profesionales",
+          "estetica": "Estética o bienestar",
           "especialista": "Especialista independiente",
           "otro": "Otro"
         },
-        "submit": "Quiero probarlo",
+        "submit": "Unirme al piloto",
         "submitting": "Enviando…",
-        "successToast": "Recibimos tu mensaje. Te escribimos en breve.",
-        "successTitle": "Listo. Te contactamos en menos de 24 horas.",
-        "successBody": "Vamos a escribirte por WhatsApp para coordinar la demo y responder tus dudas.",
+        "successToast": "Recibimos tus datos. Te escribimos pronto.",
+        "successTitle": "Listo. Te escribimos en menos de 24 horas.",
+        "successBody": "Te contactamos por WhatsApp para dar de alta tu clínica y resolver tus dudas.",
         "errors": {
           "nameMin": "Ingresa al menos 2 caracteres.",
           "phoneInvalid": "Formato inválido. Ej: +52 55 1234 5678.",
@@ -1511,10 +1506,7 @@
           "validation": "Revisa los datos e intenta de nuevo.",
           "generic": "No pudimos enviar el mensaje. Prueba de nuevo."
         }
-      },
-      "whatsappCta": "Escribinos por WhatsApp",
-      "whatsappMessage": "Hola, quiero probar Showly en mi clínica.",
-      "orForm": "O dejanos tus datos y te escribimos nosotros."
+      }
     },
     "footer": {
       "brand": "Showly",

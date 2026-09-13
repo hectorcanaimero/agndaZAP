@@ -58,15 +58,15 @@ type LeadFormValues = z.infer<typeof leadSchema>;
 /**
  * Form inline para captura de leads en la landing (FinalCta).
  *
- * Diseño visual: fondo blanco redondeado sobre el card gradient verde del
- * FinalCta — contraste alto + focus rings visibles para accesibilidad.
+ * Diseño visual: tarjeta blanca con borde mist sobre el fondo mist-100 del
+ * FinalCta; contraste alto y focus rings visibles para accesibilidad.
  * Cuando el submit es exitoso mostramos un empty-state de éxito INLINE
  * (no navegamos, no recargamos) — el patrón de "form desaparece, aparece
  * checkmark verde" tiene mejor perceived responsiveness que un toast solo.
  *
  * Manejo de errores:
- * - 429 → mensaje "muchas solicitudes, probá en un minuto" + toast.
- * - 400 (validation server) → mensaje genérico "revisá los datos" + toast.
+ * - 429 → mensaje "muchas solicitudes, prueba en un minuto" + toast.
+ * - 400 (validation server) → mensaje genérico "revisa los datos" + toast.
  * - Red/otro → toast genérico. El form queda editable.
  * Además del toast (efímero), el mismo mensaje queda en un banner inline
  * `role="alert"` sobre el botón (mismo patrón que `ScheduleForm`), que se
@@ -113,7 +113,7 @@ export function LeadForm() {
         name: values.name,
         phone: values.phone,
         // '' → undefined: el schema del backend rechaza '' (no está en la
-        // whitelist de clinicType), así que normalizamos acá.
+        // whitelist de clinicType), así que normalizamos aquí.
         clinicType:
           values.clinicType && values.clinicType.length > 0
             ? values.clinicType
@@ -168,16 +168,16 @@ export function LeadForm() {
       <div
         role="status"
         aria-live="polite"
-        className="flex items-start gap-4 rounded-2xl bg-white p-6 shadow-lg sm:p-8"
+        className="flex items-start gap-4 rounded-2xl border border-mist-200 bg-white p-6 sm:p-8"
       >
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-teal/15 text-brand-navy">
           <CheckCircle2 className="h-6 w-6" aria-hidden="true" />
         </div>
         <div className="min-w-0">
-          <h3 className="text-lg font-semibold text-neutral-950 sm:text-xl">
+          <h3 className="text-lg font-semibold text-brand-navy sm:text-xl">
             {t('successTitle')}
           </h3>
-          <p className="mt-2 text-sm text-neutral-600 sm:text-base">
+          <p className="mt-2 text-sm text-mist-600 sm:text-base">
             {t('successBody')}
           </p>
         </div>
@@ -189,7 +189,7 @@ export function LeadForm() {
     <form
       onSubmit={handleSubmit(onSubmit)}
       onChange={clearSubmitError}
-      className="rounded-2xl bg-white p-6 shadow-lg sm:p-8"
+      className="rounded-2xl border border-mist-200 bg-white p-6 sm:p-8"
       noValidate
       data-analytics-view="lead_form_view"
     >
@@ -207,13 +207,14 @@ export function LeadForm() {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="lead-name" className="text-sm font-medium text-neutral-800">
+          <Label htmlFor="lead-name" className="text-sm font-medium text-brand-navy">
             {t('labels.name')}
           </Label>
           <Input
             id="lead-name"
             type="text"
             autoComplete="name"
+            className="h-11 rounded-lg border-mist-300"
             placeholder={t('placeholders.name')}
             aria-invalid={errors.name ? 'true' : 'false'}
             {...register('name')}
@@ -226,13 +227,14 @@ export function LeadForm() {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="lead-phone" className="text-sm font-medium text-neutral-800">
+          <Label htmlFor="lead-phone" className="text-sm font-medium text-brand-navy">
             {t('labels.phone')}
           </Label>
           <Input
             id="lead-phone"
             type="tel"
             autoComplete="tel"
+            className="h-11 rounded-lg border-mist-300"
             placeholder={t('placeholders.phone')}
             aria-invalid={errors.phone ? 'true' : 'false'}
             {...register('phone')}
@@ -246,7 +248,7 @@ export function LeadForm() {
       </div>
 
       <div className="mt-4 space-y-2">
-        <Label htmlFor="lead-clinic-type" className="text-sm font-medium text-neutral-800">
+        <Label htmlFor="lead-clinic-type" className="text-sm font-medium text-brand-navy">
           {t('labels.clinicType')}
         </Label>
         {/*
@@ -264,7 +266,7 @@ export function LeadForm() {
             });
           }}
         >
-          <SelectTrigger id="lead-clinic-type">
+          <SelectTrigger id="lead-clinic-type" className="h-11 rounded-lg border-mist-300">
             <SelectValue placeholder={t('placeholders.clinicType')} />
           </SelectTrigger>
           <SelectContent>
@@ -291,7 +293,7 @@ export function LeadForm() {
         />
         <Label
           htmlFor="lead-consent"
-          className="cursor-pointer text-xs font-normal leading-relaxed text-neutral-600"
+          className="cursor-pointer text-sm font-normal leading-relaxed text-mist-700"
         >
           {t('labels.consent')}
         </Label>
@@ -314,17 +316,11 @@ export function LeadForm() {
         </div>
       ) : null}
 
-      {/*
-        Batch 4: invertimos la jerarquía cromática — teal como acento sobre
-        el fondo navy del FinalCta. El texto en navy garantiza contraste
-        AA sobre teal (#28D9B9). El botón mantiene h-12 y w-full para no
-        romper el ritmo del form.
-      */}
       <Button
         type="submit"
         size="lg"
         disabled={submitting}
-        className="mt-6 h-12 w-full bg-brand-teal text-brand-navy text-base font-semibold shadow-sm hover:bg-brand-teal/90"
+        className="mt-6 h-12 w-full rounded-full bg-brand-navy text-base font-semibold text-white hover:bg-[#16375d] focus-visible:ring-2 focus-visible:ring-brand-teal focus-visible:ring-offset-2 focus-visible:ring-offset-white"
       >
         {submitting ? (
           t('submitting')

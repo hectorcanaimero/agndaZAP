@@ -2,12 +2,12 @@ import type { Metadata } from 'next';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { Nav } from '@/components/landing/Nav';
 import { Hero } from '@/components/landing/Hero';
+import { Facts } from '@/components/landing/Facts';
 import { ProblemSection } from '@/components/landing/ProblemSection';
-import { HowItWorksSection } from '@/components/landing/HowItWorksSection';
+import { Lifecycle } from '@/components/landing/Lifecycle';
 import { FeaturesSection } from '@/components/landing/FeaturesSection';
+import { DemoSection } from '@/components/landing/DemoSection';
 import { PricingSection } from '@/components/landing/PricingSection';
-import { Testimonial } from '@/components/landing/Testimonial';
-import { ForWhomSection } from '@/components/landing/ForWhomSection';
 import { SecurityStrip } from '@/components/landing/SecurityStrip';
 import { FaqSection } from '@/components/landing/FaqSection';
 import { FaqJsonLd } from '@/components/landing/FaqJsonLd';
@@ -36,20 +36,20 @@ export default async function LandingPage({
   setRequestLocale(locale);
 
   return (
-    <div className="min-h-screen bg-white text-neutral-900">
+    <div className="min-h-screen bg-mist-50 font-display text-brand-navy">
       <Nav />
       <main id="main" tabIndex={-1}>
         <Hero />
+        <Facts />
         <ProblemSection />
-        <HowItWorksSection />
+        <Lifecycle />
         <FeaturesSection />
+        <DemoSection />
         {/*
-          Testimonial ANTES de Pricing: la prueba social desbloquea la
-          decisión de precio. SecurityStrip (comprimida, link a /seguridad)
-          después de Pricing para no competir con las secciones de venta.
+          Sin testimonios: no hay clínica en producción con un caso publicable
+          y apps/web/PRODUCT.md prohíbe inventarlos. SecurityStrip (comprimida,
+          link a /seguridad) después de Pricing para no competir con la venta.
         */}
-        <ForWhomSection />
-        <Testimonial />
         <PricingSection />
         <SecurityStrip />
         <FaqSection />

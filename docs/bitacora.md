@@ -13,6 +13,80 @@
 - **Pendiente**: medir la conversión `BOT_WEB` en el piloto; borrar la FSM y el flag al cerrarlo. Los PRs abiertos #103 y #105 tocan `bot.service.ts` (ver consecuencias del ADR para el #103).
 - **Local**: faltaba `WEB_BASE_URL` en el `.env` del VPS, así que los links salían con `localhost:3000`.
 
+## 2026-09-12 — Panel: la cita de las 23:45 desaparecía de "próximas" (rama `fix/dashboard-today-spec-hora`)
+- Apareció como un test flaky (`dashboard.controller.spec` fallaba sólo pasadas
+  las ~22:30 hora de la clínica) y resultó ser un bug de verdad: `upcoming`
+  filtraba por `endAt < endOfToday`, así que una cita de las 23:45 que acaba a
+  las 00:15 contaba en `today.total` pero no salía en la lista. La clínica veía
+  "6 citas hoy" y 5 debajo, **al final del día**, que es justo cuando mira qué
+  le queda por atender.
+- El rango del día ya lo aplica la query sobre `startAt`; el filtro en memoria
+  sólo tiene que descartar las pasadas.
+- El reloj del spec queda fijado con `Settings.now` (no con fake timers: el
+  controller usa Luxon, y así el `now` del test y el del código son el mismo
+  instante). El test que quedaba a merced de la hora era el síntoma, no la
+  causa, pero un test que falla según cuándo se ejecute es ruido que acaba
+  ignorándose.
+- Verificado por mutación: con el filtro viejo, el test nuevo cae.
+## 2026-09-13 — Rediseño de la landing: navy + teal, la vida de una cita y cero prueba inventada (rama `feat/landing-rediseno`)
+- **Por qué**: revisión con taste-skill, impeccable y marketing-psychology sobre código y capturas. Había un
+  testimonio inventado (foto de stock), el copy se contradecía sobre el número de WhatsApp, cuatro textos para
+  la misma acción, bento con celdas vacías y el look "SaaS cálido" (Fraunces + crema) que no es la marca.
+- **Decisiones del owner**: la clínica puede usar su número pero recomendamos uno dedicado; demo pública
+  aprobada; navy + teal + Geist; un solo CTA ("Unirme al piloto"). Ver [[adr/0025-landing-navy-teal-geist]].
+- **Qué cambió**: hero con el chat que se confirma solo, franja de hechos, calculadora de costo de no-shows,
+  "la vida de una cita" (agenda que cambia de estado con el scroll), funcionalidades en 5 celdas, sección demo
+  (`NEXT_PUBLIC_DEMO_*`, ver [[notas/2026-09-13-demo-publico-landing]]), piloto con "¿y después?", FAQ y cierre.
+- **Verificado contra el backend antes de escribirlo**: EN_RIESGO no depende del recordatorio de 3 h sino del
+  job `check-risk` en `confirmThresholdH` (6 h en la demo); el primer borrador decía "si no responde el
+  recordatorio de 3 h" y era falso.
+- **Gotcha de verificación en el VPS**: el hook de servidores bloquea también el arranque en modo producción
+  de Next, no solo el de desarrollo. Para ver el build sin levantar ningún proceso, Playwright intercepta las
+  peticiones (`context.route`) y sirve `.next/server/app/<locale>.html` y `.next/static` desde disco.
+  Funciona porque la landing es SSG.
+- Página ~20% más corta en desktop (9459 → 7531 px) y ~23% en mobile (13598 → 10455 px).
+- **Revisión en dos frentes antes del PR** (code-reviewer + revisor visual independiente con capturas):
+  el mismo layout texto-izquierda/tarjeta-derecha se repetía en 5 secciones, los pasos inactivos del
+  bloque oscuro quedaban a ~2.4:1 (opacidad sobre texto ya translúcido), la agenda mobile se movía en
+  bucle (WCAG 2.2.2), la nav usaba anclas sin ruta que no funcionaban desde /seguridad y el copy de
+  calificación prometía más de lo que hace el backend (`followUpEnabled` es opt-in). Todo corregido.
+- **Lo que NO cierra esta rama**: la demo pública permite spam a terceros vía `/agendar` y no hay
+  retención de sus datos; quedan como bloqueantes en [[notas/2026-09-13-demo-publico-landing]].
+- Pendiente del owner: encender la demo con un número WAHA propio y medir el embudo de Plausible 2 semanas
+  antes/después.
+
+## 2026-09-12 — M10 PR 5: por voz no se confirma ni se cancela (rama `feat/confirmacion-escrita-audio`)
+- Cierra el riesgo que el PR 4 dejó anotado como condición para encender
+  `STT_ENABLED`. Detalle en [[notas/2026-09-12-confirmacion-escrita-por-voz]].
+- **El criterio acabó siendo "muta una cita o secuestra el estado de forma no
+  obvia"**, no el "muta una cita" con el que empecé. La revisión mostró que
+  `REAGENDAR` no toca la cita pero pone la FSM en `ASK_SLOT`, y desde ahí el
+  parser de recordatorios queda inalcanzable: un reagendar mal transcrito
+  secuestra la conversación. Con ese criterio entraron también `isFlowAbort`,
+  `Intent.REPROGRAMAR` y el score de NPS (`recordFeedback` es create-once: un
+  "cinco" mal transcrito es la nota permanente de esa visita).
+- **El guard era una trampa.** Voz → eco → voz → eco, sin salida, y encima
+  cortocircuitando la escalera de rescate de la FSM. Quien manda notas de voz
+  suele ser quien peor escribe. A la segunda va a `NEEDS_HUMAN`, y el contador
+  es fail-closed **hacia la persona**: ante un Redis mudo, mejor un hilo en la
+  bandeja que un bucle.
+- **El eco se comía su propio contexto.** Se persiste como `Message OUT` y
+  `hasConfirmationContext` mira el último `OUT` buscando `*SÍ*` — sin la palabra
+  dentro, el paciente escribía lo que se le pidió y le salía el menú. Ahora el
+  eco lleva la palabra en negrita y en el idioma de la clínica (`*SIM*` en pt,
+  que es la que usa el recordatorio al que responde).
+- **En `NEEDS_HUMAN` no se ecoa**: el bot está callado a propósito y el eco se
+  saltaba el throttle de 4 h del aviso de espera.
+- El eco va saneado: es la única ruta por la que texto del paciente se promueve
+  a la voz del bot (`buildConversationContext` lo reinyecta como `Asistente:`).
+- **El fake de Redis del spec mentía**: `set` devolvía siempre `'OK'`, así que
+  cualquier throttle o contador basado en `SET NX` era inobservable — el primer
+  intento y el quinto daban lo mismo. Ahora honra NX.
+- Tres tests pasaban por el motivo equivocado y están arreglados; el del
+  cableado (`handleIncoming` recibe `inputKind`) faltaba por completo: sin él se
+  podía borrar el cable y los doce tests del guard seguían verdes con el guard
+  muerto.
+- `pnpm --filter @showly/backend test` en verde: 68 suites, 1487 tests.
 ## 2026-09-12 — S44: el tono LATAM neutro, migrado de verdad y verificado (rama `fix/voseo-es-json`)
 - La nota `2026-09-10-tono-espanol-neutro` daba la migración por hecha y no lo
   estaba: quedaban **55 cadenas en voseo** en `apps/web/messages/es.json`,
