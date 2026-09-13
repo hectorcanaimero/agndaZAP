@@ -91,6 +91,19 @@ describe('bot.messages (B7)', () => {
     expect(botCopy('es').reminder('', 'x', 'y', 'z')).toContain(
       `*${botCopy('es').wordYes}*`,
     );
+  it('aiDisclosure es texto literal: ni placeholders ni comodines de LIKE (B6)', () => {
+    // `BotService.shouldSendAiDisclosure` busca este texto TAL CUAL dentro del
+    // `body` de los `Message OUT` para no repetir el aviso en 24 h. Dos formas
+    // de romperlo en silencio, ninguna de las cuales falla en ningún otro test:
+    //  - un `{placeholder}`: la consulta casa contra el copy SIN renderizar y
+    //    el body guardado va renderizado, así que no casaría nunca y B6 se
+    //    apagaría solo, volviendo a repetir el aviso en cada saludo;
+    //  - un `%` o un `_`: Prisma no los escapa en `contains`, así que el
+    //    patrón se ensancha y suprimiría avisos de más — la dirección
+    //    contraria al fail-open que elegimos a propósito.
+    for (const locale of ['es', 'pt'] as const) {
+      expect(botCopy(locale).aiDisclosure).not.toMatch(/[{}%_]/);
+    }
   });
 
   it('voiceNoteFirstTime (M10) dice que se transcribe con IA y que el audio no se guarda', () => {
