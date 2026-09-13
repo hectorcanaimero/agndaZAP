@@ -86,6 +86,15 @@ export async function recordBotStats(
       if (f) fields.push(f, '1');
     }
     if (event.handoff) fields.push('handoff', '1');
+    // El motivo también se cuenta, no sólo se loguea. Sin esto, "se agotó la
+    // cota de transcripción" y "llegó una foto" son el mismo `outcome:
+    // unsupported` en el hash del día, y la única forma de distinguirlos es
+    // greppear Axiom. El conjunto de motivos es cerrado (`BotTurnReason`), así
+    // que la cardinalidad está acotada.
+    if (event.reasonCode) {
+      const f = safeField('reason', event.reasonCode);
+      if (f) fields.push(f, '1');
+    }
     // Sólo el audio: el texto es el caso normal y `turns` ya lo cuenta.
     if (event.inputKind === 'audio') fields.push('audio', '1');
     if (event.rag) {
@@ -142,6 +151,12 @@ export interface BotStatsWindow {
   outcomes: Partial<Record<BotTurnOutcome, number>>;
   /** Por intención. Vacío mientras el bot no cablee `recordBotTurn`. */
   intents: Record<string, number>;
+  /**
+   * Por motivo de descarte (`rate-limit`, `stt-sin-presupuesto`…). Sin esto,
+   * "se agotó la cota de transcripción" y "llegó una foto" son el mismo
+   * `outcome: unsupported` y la caída de transcripciones no tiene explicación.
+   */
+  reasons: Record<string, number>;
   /** `null` = el bot todavía no anota derivaciones. */
   handoff: number | null;
   /** `null` = no hubo ni una consulta al RAG en el periodo. */
@@ -185,6 +200,7 @@ export async function readBotStats(
     turns: 0,
     outcomes: {},
     intents: {},
+    reasons: {},
     handoff: null,
     rag: null,
     ragMatched: null,
@@ -222,6 +238,9 @@ export async function readBotStats(
       } else if (field.startsWith('intent:')) {
         const key = field.slice('intent:'.length);
         acc.intents[key] = (acc.intents[key] ?? 0) + n;
+      } else if (field.startsWith('reason:')) {
+        const key = field.slice('reason:'.length);
+        acc.reasons[key] = (acc.reasons[key] ?? 0) + n;
       }
       // `source:*` se ignora a propósito: el panel no muestra si respondió una
       // regla o el LLM, es una métrica nuestra, no de la clínica.

@@ -26,7 +26,9 @@ describe('WebhookController', () => {
     message: { create: jest.Mock };
   };
   let inbound: { add: jest.Mock };
-  let redis: jest.Mocked<Pick<Redis, 'set' | 'del' | 'incr' | 'expire' | 'pipeline'>>;
+  let redis: jest.Mocked<
+    Pick<Redis, 'set' | 'del' | 'incr' | 'expire' | 'pipeline' | 'mget'>
+  >;
   let waha: { sendText: jest.Mock };
   let controller: WebhookController;
 
@@ -116,16 +118,21 @@ describe('WebhookController', () => {
       // Rate-limit del ADR 0007: por defecto siempre dentro de la cota.
       incr: jest.fn().mockResolvedValue(1),
       expire: jest.fn().mockResolvedValue(1),
+      // Cota diaria de STT (S38): nada consumido todavía. Sin este `mget` el
+      // estado sale `indeterminado` y NINGUNA nota de voz se transcribe — el
+      // fail-closed funcionando, no un fallo del test.
+      mget: jest.fn().mockResolvedValue([null, null]),
       // Contadores de M9: pipeline encadenable.
       pipeline: jest.fn(() => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const chain: any = { exec: jest.fn().mockResolvedValue([]) };
         chain.hincrby = jest.fn(() => chain);
+        chain.incr = jest.fn(() => chain);
         chain.expire = jest.fn(() => chain);
         return chain;
       }),
     } as unknown as jest.Mocked<
-      Pick<Redis, 'set' | 'del' | 'incr' | 'expire' | 'pipeline'>
+      Pick<Redis, 'set' | 'del' | 'incr' | 'expire' | 'pipeline' | 'mget'>
     >;
     waha = { sendText: jest.fn().mockResolvedValue(undefined) };
     controller = new WebhookController(
@@ -940,7 +947,28 @@ describe('WebhookController', () => {
         }
       });
 
-      it('audio, audio → NEEDS_HUMAN, limpia la FSM y avisa del handoff', async () => {
+      it('con un agendamiento a medias, el handoff NO borra la FSM', async () => {
+        // Le cobraba al paciente el precio más alto por el error más pequeño:
+        // dos notas de voz seguidas le borraban el servicio, el profesional y
+        // el horario que ya había elegido, y al volver del handoff tenía que
+        // empezar de cero. El bot no sigue solo de todas formas — el hilo
+        // queda en NEEDS_HUMAN y `BotService` se calla.
+        prisma.conversation.upsert.mockResolvedValue({
+          id: 'convo-1',
+          state: 'BOT',
+          flowStep: 'CONFIRM',
+        });
+
+        await post(audio('a-1'));
+        await post(audio('a-2'));
+
+        expect(prisma.conversation.update).toHaveBeenCalledWith({
+          where: { id: 'convo-1' },
+          data: { state: 'NEEDS_HUMAN' },
+        });
+      });
+
+      it('sin flujo activo, audio + audio → NEEDS_HUMAN y limpia la FSM', async () => {
         await post(audio('a-1'));
         await post(audio('a-2'));
 
@@ -1094,13 +1122,26 @@ describe('WebhookController', () => {
    * adjunto que se rechaza y pasa a ser un mensaje que se atiende.
    */
   describe('notas de voz (M10)', () => {
-    const audioEvent = (over: Record<string, unknown> = {}) =>
-      mediaEvent({
-        type: 'ptt',
-        hasMedia: true,
-        media: { url: 'https://waha.internal/api/files/a.oga' },
-        ...over,
-      });
+    // Un `spy.mockRestore()` al final del cuerpo del test NO corre si un
+    // `expect` anterior lanza, y `jest.spyOn` sobre un método ya mockeado
+    // devuelve el mismo mock: el espía de `Logger.prototype.log` se quedaba
+    // instalado acumulando llamadas de los tests siguientes, que fallaban con
+    // un mensaje que no tenía nada que ver con ellos.
+    afterEach(() => jest.restoreAllMocks());
+
+    const audioEvent = (
+      over: Record<string, unknown> = {},
+      id: string | undefined = MSG_ID,
+    ) =>
+      mediaEvent(
+        {
+          type: 'ptt',
+          hasMedia: true,
+          media: { url: 'https://waha.internal/api/files/a.oga' },
+          ...over,
+        },
+        id,
+      );
 
     afterEach(() => {
       delete process.env.STT_ENABLED;
@@ -1195,6 +1236,140 @@ describe('WebhookController', () => {
       expect(inbound.add).not.toHaveBeenCalled();
     });
 
+    describe('cota diaria de transcripciones (S38)', () => {
+      afterEach(() => delete process.env.STT_DAILY_LIMIT);
+
+      /** Cota de la clínica agotada. */
+      function cotaAgotada() {
+        process.env.STT_DAILY_LIMIT = '10';
+        redis.mget.mockResolvedValue(['10', '0']);
+      }
+
+      it('agotada, no se encola y se le responde como antes de M10', async () => {
+        // Cae al camino de siempre en vez de derivar de entrada: quien puede
+        // escribir sigue siendo atendido por el bot sin ocupar a nadie.
+        process.env.STT_ENABLED = 'true';
+        cotaAgotada();
+
+        await post(audioEvent());
+
+        expect(inbound.add).not.toHaveBeenCalled();
+        expect(waha.sendText).toHaveBeenCalledWith(
+          'clinic-a',
+          FROM,
+          expect.stringContaining('solo puedo leer'),
+        );
+      });
+
+      it('el evento lo cuenta como audio y con su motivo', async () => {
+        // Las dos cosas. Sin `inputKind`, el contador `audio` del día baja a
+        // cero al agotarse la cota; sin el motivo, la caída no tiene
+        // explicación y es indistinguible de que llegara una foto.
+        process.env.STT_ENABLED = 'true';
+        cotaAgotada();
+        const spy = jest
+          .spyOn(Logger.prototype, 'log')
+          .mockImplementation(() => undefined);
+
+        await post(audioEvent());
+
+        const turno = spy.mock.calls
+          .map((c) => c[0])
+          .filter((a: any) => typeof a === 'object' && a?.event === 'bot.turn')
+          .at(-1);
+        expect(turno).toMatchObject({
+          reasonCode: 'stt-sin-presupuesto',
+          inputKind: 'audio',
+        });
+      });
+
+      it('no se apunta consumo al encolar: se reserva donde se paga', async () => {
+        // La reserva vive en el worker, justo antes de `stt.transcribe`.
+        // Contar aquí cobraba por todo lo que aborta en medio (consent no
+        // enviable, audio caducado, sin clave de OpenAI) y no paraba un
+        // `retry` desde el panel de BullMQ cuando se baja el límite.
+        process.env.STT_ENABLED = 'true';
+
+        await post(audioEvent());
+
+        expect(inbound.add).toHaveBeenCalled();
+        const incrementos = redis.pipeline.mock.results
+          .flatMap((r: any) => r.value.incr?.mock.calls ?? [])
+          .map((c: unknown[]) => String(c[0]));
+        expect(incrementos.some((k) => k.startsWith('stt:quota'))).toBe(false);
+      });
+
+      it('un audio SÍ consulta la cota y una imagen no', async () => {
+        // Las dos mitades en el mismo test: una aserción de ausencia suelta
+        // pasaría igual con el feature entero revertido.
+        process.env.STT_ENABLED = 'true';
+
+        await post(
+          mediaEvent({
+            type: 'image',
+            hasMedia: true,
+            media: { url: 'https://waha.internal/api/files/x.jpg' },
+          }),
+        );
+        expect(redis.mget).not.toHaveBeenCalled();
+
+        await post(audioEvent({}, 'otro-id'));
+        expect(redis.mget).toHaveBeenCalled();
+      });
+
+      it('si Redis no responde no se transcribe, PERO se le contesta igual', async () => {
+        // El fail-closed no puede convertirse en silencio: el throttle del
+        // aviso vive en el mismo Redis que acaba de fallar y es fail-closed,
+        // así que sin forzarlo el paciente se queda sin transcripción Y sin
+        // respuesta — peor que antes de M10, y justo en el escenario para el
+        // que se eligió el fail-closed.
+        process.env.STT_ENABLED = 'true';
+        redis.mget.mockRejectedValue(new Error('redis down'));
+        // Throttle ya consumido: sin `forceNotice` esto sería silencio.
+        redis.set.mockImplementation(async (key: unknown) =>
+          String(key).startsWith('bot:media-notice:') ? null : 'OK',
+        );
+
+        await post(audioEvent());
+
+        expect(inbound.add).not.toHaveBeenCalled();
+        expect(waha.sendText).toHaveBeenCalledWith(
+          'clinic-a',
+          FROM,
+          expect.stringContaining('solo puedo leer'),
+        );
+      });
+
+      it('agotada, el aviso al operador es uno por clínica y día', async () => {
+        // El repo ya decidió esto para el rate-limit: una línea por mensaje
+        // descartado convierte un flood en coste de ingesta, y aquí el flood
+        // lo controla quien escriba al número.
+        process.env.STT_ENABLED = 'true';
+        cotaAgotada();
+        // `SET NX` de verdad: el fake por defecto devuelve siempre 'OK', así
+        // que sin esto el throttle del aviso es inobservable — la primera vez
+        // y la quinta darían lo mismo.
+        const puestas = new Set<string>();
+        redis.set.mockImplementation(async (key: unknown) => {
+          const k = String(key);
+          if (puestas.has(k)) return null;
+          puestas.add(k);
+          return 'OK';
+        });
+        const spy = jest
+          .spyOn(Logger.prototype, 'warn')
+          .mockImplementation(() => undefined);
+
+        await post(audioEvent({}, 'id-1'));
+        await post(audioEvent({}, 'id-2'));
+
+        const avisos = spy.mock.calls.filter((c) =>
+          /cota diaria agotada/.test(String(c[0])),
+        );
+        expect(avisos).toHaveLength(1);
+      });
+    });
+
     it('una url desmedida no se encola ni entra entera en la bandeja', async () => {
       // La URL viene de un tercero: sin tope acaba entera en `Message.body`,
       // en la bandeja del panel y en la ventana de contexto del LLM.
@@ -1255,7 +1430,6 @@ describe('WebhookController', () => {
         .map((c) => c[0])
         .filter((a: any) => typeof a === 'object' && a?.event === 'bot.turn');
       expect(turnos).toHaveLength(0);
-      spy.mockRestore();
     });
   });
 });

@@ -219,4 +219,23 @@ describe('bot-stats', () => {
     expect(dump).not.toContain('584141234567');
     expect(dump).toContain('clinic-A');
   });
+  it('cuenta el motivo del descarte, no sólo el desenlace', async () => {
+    // Sin esto, "se agotó la cota de transcripción" y "llegó una foto" son el
+    // mismo `outcome: unsupported` en el hash del día, y la caída de
+    // transcripciones no tiene ninguna explicación que la clínica pueda ver.
+    await recordBotStats(
+      redis as never,
+      logger,
+      {
+        event: 'bot.turn',
+        clinicId: 'clinic-A',
+        chatHash: 'abc',
+        outcome: 'unsupported',
+        reasonCode: 'stt-sin-presupuesto',
+      } as never,
+      'America/Caracas',
+    );
+
+    expect(fields()).toContain('reason:sttsinpresupuesto');
+  });
 });

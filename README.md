@@ -261,7 +261,9 @@ Ver [`.env.example`](./.env.example) para la lista completa. Las críticas:
 | `RESEND_API_KEY`    | Envío de invitaciones por email                        |
 | `WAHA_BASE_URL` + `WAHA_API_KEY` | Cliente WAHA para enviar mensajes         |
 | `DEEPSEEK_API_KEY` + `GEMINI_API_KEY` | LLM router (primario + fallback) |
-| `OPENAI_API_KEY`    | Embeddings de FAQ (opcional; si no está, FAQ funciona sin RAG) |
+| `OPENAI_API_KEY`    | Embeddings de FAQ y transcripción de notas de voz (opcional; sin ella, FAQ funciona sin RAG y las notas de voz no se transcriben) |
+| `STT_ENABLED`       | Transcripción de notas de voz (M10). **Apagado salvo `true` exacto.** Es un gate de cumplimiento: el consent que nombra a OpenAI tiene que estar desplegado antes de encenderlo |
+| `STT_DAILY_LIMIT`   | Transcripciones por clínica y día (default 200). Agotada la cota, la nota de voz recibe el aviso de "solo leo texto" en vez de transcribirse. Un valor inválido avisa y usa el default |
 | `TRUST_PROXY`       | `true` si hay proxy delante (Caddy/nginx/CF)           |
 | `CORS_ORIGINS`      | CSV de orígenes permitidos (obligatorio en prod)       |
 

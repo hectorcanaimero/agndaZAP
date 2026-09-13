@@ -1,5 +1,48 @@
 # Bitácora de sesiones — AgendaZap
 
+## 2026-09-12 — S38 (1/3): cota diaria de transcripciones (rama `feat/presupuesto-stt`)
+- Decisión y porqué en [[adr/0023-cota-de-gasto-en-stt]]; implementación en
+  [[notas/2026-09-12-presupuesto-stt-por-clinica]].
+- El rate-limit del ADR 0007 es **fail-open** a propósito; con audio el signo
+  del error cambia (dinero y grabaciones saliendo del perímetro), así que esta
+  cota es **fail-closed** y su techo de 500 msg/h —12.000 transcripciones/día—
+  no servía de tope.
+- **Tres cosas cambiaron después de auditar la primera versión**, y las tres
+  eran agujeros de verdad:
+  1. Leer con `GET` y apuntar aparte **no era fail-closed**: con Redis
+     aceptando lecturas y rechazando escrituras (disco lleno, el default de
+     `stop-writes-on-bgsave-error`) el contador se congelaba y la cota quedaba
+     desactivada en silencio. Ahora la autoridad es el `INCR`.
+  2. Se comprobaba al encolar, no donde se gasta: no paraba los jobs ya
+     encolados ni un `retry` de BullMQ al bajar el límite, y cobraba por todo
+     lo que aborta en medio. La reserva vive en el worker.
+  3. Sin sub-cota por chat, **un solo número agotaba la cota de la clínica en
+     ~14 minutos**: la clínica paga las transcripciones del atacante y sus
+     pacientes se quedan sin el feature el resto del día.
+- **El día pasa a ser UTC**, contra mi propio razonamiento inicial. La regla de
+  la TZ de la clínica es para fechas que alguien lee; esta la edita el tenant,
+  y con la fecha local dentro de la clave rotar la zona triplicaba la cota. De
+  paso desaparece el caso de la zona inválida, que dejaba una clave que no
+  rotaba nunca.
+- **El fail-closed no puede ser silencio**: con Redis mudo se fuerza el aviso,
+  porque su throttle vive en el mismo Redis que acabó de fallar y es también
+  fail-closed. Sin eso el paciente se quedaba sin transcripción y sin respuesta.
+- Yo había escrito que el motivo "se ve en el panel" y **era falso**:
+  `recordBotStats` no copiaba `reasonCode`. Ahora se cuenta (`reason:*`), y el
+  turno lleva `inputKind: 'audio'` aunque no se transcriba — si no, el contador
+  de audio bajaba a cero justo al agotarse la cota.
+- **De paso**: el handoff por dos adjuntos seguidos ya no resetea la FSM cuando
+  hay un agendamiento a medias. Le cobraba al paciente el precio más alto por el
+  error más pequeño — dos notas de voz le borraban servicio, profesional y
+  horario ya elegidos. El hilo queda en NEEDS_HUMAN igual, así que el bot no
+  sigue solo.
+- **De paso**: el handoff por dos adjuntos seguidos ya no resetea la FSM cuando
+  hay un agendamiento a medias. Le cobraba al paciente el precio más alto por el
+  error más pequeño — dos notas de voz le borraban servicio, profesional y
+  horario ya elegidos, y con cota disponible esos mismos audios se transcribían
+  y la cita salía. El hilo queda en NEEDS_HUMAN igual, así que el bot no sigue
+  solo.
+- 68 suites, 1506 tests (el fallo restante es el flaky del dashboard, #104).
 ## 2026-09-13 — Bot link-first: agendar y reagendar por link (rama `feat/bot-link-first`, [[adr/0024-bot-link-first]])
 - **Por qué**: el owner probó agendar por WhatsApp contra `main` 6bad599 y el bot se perdió en los horarios. Cada tanda mostraba los 6 primeros de la semana (todos del lunes), "ver más" saltaba al lunes siguiente sin pasar por martes-viernes, "tienes para el 15" se leía como la opción 15 y "cualquera" no se entendía. Arreglar la FSM cerraba esos tres casos, no la clase de fallo.
 - **Decisión del owner**: agendar y reagendar pasan siempre por el link. `SÍ` y `CANCELAR` exacto se quedan en el chat: son respuestas cerradas y liberar el turno sin abrir un navegador es lo que evita el no-show.
