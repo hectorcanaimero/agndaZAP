@@ -1274,26 +1274,18 @@
       "languages": "Em español e português"
     },
     "problem": {
-      "eyebrow": "O problema",
-      "headline": "O WhatsApp da sua clínica virou um caos.",
-      "subheadline": "A falta é o imposto invisível da sua clínica. Ninguém mede, mas todo mundo paga: o buraco na agenda, o paciente que não volta e a equipe que já não confia nos lembretes manuais.",
-      "points": {
-        "one": {
-          "title": "A recepção vive respondendo.",
-          "body": "Cem mensagens por dia para agendar, remarcar e confirmar. O turno se perde no chat."
-        },
-        "two": {
-          "title": "Ninguém confirma sistematicamente.",
-          "body": "Os lembretes você manda na mão, quando dá. Metade dos pacientes não responde."
-        },
-        "three": {
-          "title": "O horário se perde.",
-          "body": "Quando alguém não aparece, aquele slot não volta. E você nem sabe quanto custou."
-        }
-      },
-      "callout": {
-        "headline": "3 faltas por semana.",
-        "body": "12 por mês. Um mês inteiro de agenda perdida no ano."
+      "headline": "Cada falta é uma hora que não volta.",
+      "body": "A recepção responde WhatsApp o dia todo, os lembretes saem quando alguém lembra e ninguém mede os buracos que ficam na agenda.",
+      "calc": {
+        "title": "Quanto as faltas custam hoje para você?",
+        "weekly": "Consultas por semana",
+        "rate": "Pacientes que faltam",
+        "value": "Valor médio de uma consulta",
+        "currency": "R$",
+        "lostMonth": "consultas perdidas por mês",
+        "moneyMonth": "que deixam de entrar todo mês",
+        "moneyYear": "por ano",
+        "note": "É uma conta com os seus números, não uma promessa. Mude os valores."
       }
     },
     "howItWorks": {

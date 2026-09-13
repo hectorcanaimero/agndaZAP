@@ -1274,26 +1274,18 @@
       "languages": "En español y português"
     },
     "problem": {
-      "eyebrow": "El problema",
-      "headline": "El WhatsApp de tu clínica se volvió un caos.",
-      "subheadline": "El no-show es el impuesto invisible de tu clínica. Nadie lo mide, pero todos lo pagan: el hueco en la agenda, el paciente que no vuelve y el equipo que ya no confía en los recordatorios manuales.",
-      "points": {
-        "one": {
-          "title": "La recepción vive respondiendo.",
-          "body": "Cien mensajes al día para agendar, mover y confirmar. Se le va el turno en el chat."
-        },
-        "two": {
-          "title": "Nadie confirma sistemáticamente.",
-          "body": "Los recordatorios los mandas tú, cuando puedes. La mitad no responde."
-        },
-        "three": {
-          "title": "El horario se pierde.",
-          "body": "Cuando alguien no aparece, ese slot ya no se recupera. Y no sabes cuánto te costó."
-        }
-      },
-      "callout": {
-        "headline": "3 no-shows por semana.",
-        "body": "12 al mes. Un mes entero de agenda perdida en el año."
+      "headline": "Cada no-show es una hora que no vuelve.",
+      "body": "La recepción responde WhatsApp todo el día, los recordatorios salen cuando alguien se acuerda y nadie mide los huecos que quedan en la agenda.",
+      "calc": {
+        "title": "¿Cuánto te cuestan hoy los no-shows?",
+        "weekly": "Citas por semana",
+        "rate": "Pacientes que no llegan",
+        "value": "Valor promedio de una consulta",
+        "currency": "$",
+        "lostMonth": "citas perdidas al mes",
+        "moneyMonth": "que dejan de entrar cada mes",
+        "moneyYear": "al año",
+        "note": "Es un cálculo con tus números, no una promesa. Cambia los valores."
       }
     },
     "howItWorks": {
