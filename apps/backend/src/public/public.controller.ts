@@ -15,7 +15,10 @@ import {
 } from '@nestjs/common';
 import { DateTime } from 'luxon';
 import { AvailabilityService, Slot } from '../scheduling/availability.service';
-import { SchedulingSessionService } from '../scheduling/scheduling-session.service';
+import {
+  SchedulingSessionData,
+  SchedulingSessionService,
+} from '../scheduling/scheduling-session.service';
 import {
   AppointmentSource,
   SchedulingService,
@@ -303,7 +306,14 @@ export class PublicController {
       throw new NotFoundException('clínica no encontrada');
     }
 
-    // 3) Si vino token, lo consumimos AHORA (single-use). Antes de crear la
+    // 3) Normalizamos phone a E.164 con `+` (helper único, ver phone.util).
+    // Antes de tocar el token: un teléfono inválido no debe quemarlo.
+    const normalizedPhone = normalizeE164(dto.phone);
+    if (!normalizedPhone) {
+      throw new BadRequestException('phone inválido');
+    }
+
+    // 4) Si vino token, lo consumimos AHORA (single-use). Antes de crear la
     // cita — así una race condition (doble click) no crea dos citas atadas al
     // mismo token: la segunda invocación recibe token null y sigue como
     // `PUBLIC`, y el `@@unique` del horario la rechaza con 409.
@@ -319,6 +329,7 @@ export class PublicController {
     // corta cualquier intento de reusar un token en el slug equivocado.
     let source: AppointmentSource = 'PUBLIC';
     let conversationId: string | undefined;
+    let consumedSession: SchedulingSessionData | null = null;
     if (dto.token) {
       const session = await this.sessions.consume(dto.token);
       if (!session) {
@@ -332,13 +343,8 @@ export class PublicController {
       } else {
         source = 'BOT_WEB';
         conversationId = session.conversationId;
+        consumedSession = session;
       }
-    }
-
-    // 4) Normalizamos phone a E.164 con `+` (helper único, ver phone.util).
-    const normalizedPhone = normalizeE164(dto.phone);
-    if (!normalizedPhone) {
-      throw new BadRequestException('phone inválido');
     }
 
     // La guarda de PERSONA —si este chat tiene derecho a esta cita— vive en
@@ -369,6 +375,11 @@ export class PublicController {
         conversationId,
       }));
     } catch (e) {
+      // La cita no se creó: el token vuelve a Redis con el TTL que le quedaba,
+      // para que el reintento siga atado a la conversación (ADR 0023).
+      if (consumedSession && dto.token) {
+        await this.sessions.restore(dto.token, consumedSession);
+      }
       if (e instanceof ConflictException) {
         // Mensaje orientado al usuario final del form público. Se re-emite como
         // `SlotTakenException` para que el cuerpo lleve el `code` y la web no

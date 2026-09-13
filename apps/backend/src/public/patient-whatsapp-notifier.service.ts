@@ -1,7 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import Redis from 'ioredis';
 import { DateTime } from 'luxon';
 import { botCopy, fillConfirmAppointment } from '../bot/bot.messages';
 import { PrismaService } from '../prisma/prisma.service';
+import { REDIS_CLIENT } from './rate-limit.guard';
 import { WahaService } from '../whatsapp/waha.service';
 
 export type PatientNoticeKind = 'created' | 'rescheduled' | 'canceled';
@@ -18,6 +20,16 @@ export type PatientNoticeKind = 'created' | 'rescheduled' | 'canceled';
  *    nuevo desde un formulario público: cualquiera puede escribir el teléfono de
  *    otro, y convertir el número de la clínica en un emisor de mensajes no
  *    pedidos es la vía rápida a un baneo de WAHA.
+ *  - **Sin prueba de que el chat es suyo, solo si escribió hace poco.** Si la
+ *    conversación sale de la cita (`conversationId`, token válido y guarda de
+ *    persona superada) se avisa siempre. Si sale de buscar por `patientId` o
+ *    teléfono —que pudo escribir un tercero en el formulario—, solo con un
+ *    mensaje entrante en las últimas 24 h. Sin esto, crear y cancelar desde la
+ *    web en bucle con el teléfono de un paciente le mandaba dos WhatsApp por
+ *    vuelta desde el número de la clínica.
+ *  - **Topes en Redis**: un aviso por cita, tipo y horario (dedupe), y como
+ *    mucho `MAX_PER_CONVERSATION_PER_HOUR` por conversación. Fail-closed: sin
+ *    Redis no se avisa. Callar cuesta un "listo"; avisar sin tope, el número.
  *  - Se manda al `chatId` de esa conversación, no al teléfono del formulario:
  *    es el que verificó WhatsApp, y el único que existe en un chat `@lid`.
  *  - Se manda aunque la conversación esté con una persona (`HUMAN` o
@@ -31,9 +43,15 @@ export type PatientNoticeKind = 'created' | 'rescheduled' | 'canceled';
 export class PatientWhatsappNotifier {
   private readonly logger = new Logger(PatientWhatsappNotifier.name);
 
+  /** Crear, mover dos veces y cancelar en la misma hora es un paciente real. */
+  static readonly MAX_PER_CONVERSATION_PER_HOUR = 4;
+  /** Ventana de "escribió hace poco", la misma que la sesión de WhatsApp. */
+  static readonly RECENT_INBOUND_HOURS = 24;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly waha: WahaService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
   /** @returns `true` si el aviso salió; `false` si no había a quién o falló. */
@@ -83,6 +101,26 @@ export class PatientWhatsappNotifier {
       });
       if (!conversation) return false;
 
+      if (!appt.conversationId) {
+        const recentInbound = await this.prisma.message.findFirst({
+          where: {
+            conversationId: conversation.id,
+            direction: 'IN',
+            createdAt: {
+              gte: DateTime.now()
+                .minus({ hours: PatientWhatsappNotifier.RECENT_INBOUND_HOURS })
+                .toJSDate(),
+            },
+          },
+          select: { id: true },
+        });
+        if (!recentInbound) return false;
+      }
+
+      if (!(await this.claimQuota(clinicId, appointmentId, kind, appt.startAt, conversation.id))) {
+        return false;
+      }
+
       const text = this.render(appt, kind, input.manageUrl ?? null);
       await this.waha.sendText(appt.clinic.wahaSession, conversation.chatId, text);
       await this.prisma.message.create({
@@ -90,12 +128,47 @@ export class PatientWhatsappNotifier {
       });
       return true;
     } catch (e) {
-      // Sin teléfono, chatId ni texto: son PHI.
+      // Solo el tipo de error, nunca `message`: el de Prisma incluye los
+      // argumentos de la llamada, o sea el texto con el link de gestión.
+      const code = (e as { code?: unknown }).code;
       this.logger.warn(
-        `no se pudo avisar al paciente por WhatsApp clinicId=${clinicId} apptId=${appointmentId} kind=${kind}: ${(e as Error).message}`,
+        `no se pudo avisar al paciente por WhatsApp clinicId=${clinicId} apptId=${appointmentId} kind=${kind} err=${(e as Error).name}${typeof code === 'string' ? ` code=${code}` : ''}`,
       );
       return false;
     }
+  }
+
+  /**
+   * Dedupe por cita+tipo+horario (dos cancelaciones simultáneas con el mismo
+   * token avisan una vez; dos cambios de horario legítimos, dos) y tope por
+   * conversación. Lanza si Redis falla, y el `catch` de `notify` no envía.
+   */
+  private async claimQuota(
+    clinicId: string,
+    appointmentId: string,
+    kind: PatientNoticeKind,
+    startAt: Date,
+    conversationId: string,
+  ): Promise<boolean> {
+    const dedupe = await this.redis.set(
+      `notice:dedupe:${clinicId}:${appointmentId}:${kind}:${startAt.getTime()}`,
+      '1',
+      'EX',
+      24 * 60 * 60,
+      'NX',
+    );
+    if (dedupe === null) return false;
+
+    const countKey = `notice:conv:${clinicId}:${conversationId}`;
+    const count = await this.redis.incr(countKey);
+    if (count === 1) await this.redis.expire(countKey, 60 * 60);
+    if (count > PatientWhatsappNotifier.MAX_PER_CONVERSATION_PER_HOUR) {
+      this.logger.warn(
+        `tope de avisos por conversación alcanzado clinicId=${clinicId} apptId=${appointmentId} kind=${kind}`,
+      );
+      return false;
+    }
+    return true;
   }
 
   private render(

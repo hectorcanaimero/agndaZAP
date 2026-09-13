@@ -45,6 +45,20 @@ describe('WahaService (primitives)', () => {
   // ─────────────────────────── sendText ───────────────────────────
 
   describe('sendText', () => {
+    it('corta a los 10 s: una sesión de WAHA colgada no retiene la petición (ADR 0023)', async () => {
+      const timeoutSpy = jest.spyOn(AbortSignal, 'timeout');
+      global.fetch = jest
+        .fn()
+        .mockResolvedValue({ ok: true, text: async () => '' }) as unknown as typeof fetch;
+
+      await svc.sendText('s', '+584141234567', 'hola');
+
+      expect(timeoutSpy).toHaveBeenCalledWith(10_000);
+      const init = (global.fetch as jest.Mock).mock.calls[0][1];
+      expect(init.signal).toBeInstanceOf(AbortSignal);
+      timeoutSpy.mockRestore();
+    });
+
     it('non-ok: no loguea el body de la respuesta ni el texto enviado (PHI)', async () => {
       const phone = '+584141234567';
       const text = 'Hola Ana, tu cita de ginecología es mañana 10:00';

@@ -144,6 +144,53 @@ describe('SchedulingSessionService', () => {
     });
   });
 
+  describe('restore (ADR 0023)', () => {
+    it('devuelve el token consumido para que el reintento siga atado al chat', async () => {
+      const { token } = await service.create(baseInput());
+      const consumed = await service.consume(token);
+
+      await service.restore(token, consumed!);
+
+      expect((await service.resolve(token))?.conversationId).toBe('conv-1');
+    });
+
+    it('con el TTL que le quedaba y NX: no le alarga la vida ni pisa nada', async () => {
+      const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      const data = { ...baseInput(), createdAtISO: tenMinAgo } as SchedulingSessionData;
+
+      await service.restore('a'.repeat(32), data);
+
+      const args = redis.set.mock.calls.at(-1)! as unknown[];
+      expect(args[2]).toBe('EX');
+      expect(args[3] as number).toBeGreaterThan(19 * 60);
+      expect(args[3] as number).toBeLessThanOrEqual(20 * 60);
+      expect(args[4]).toBe('NX');
+    });
+
+    it('si ya habría caducado, no lo restaura', async () => {
+      const longAgo = new Date(Date.now() - 31 * 60 * 1000).toISOString();
+      redis.set.mockClear();
+
+      await service.restore('a'.repeat(32), {
+        ...baseInput(),
+        createdAtISO: longAgo,
+      } as SchedulingSessionData);
+
+      expect(redis.set).not.toHaveBeenCalled();
+    });
+
+    it('Redis caído: no lanza', async () => {
+      redis.set.mockRejectedValueOnce(new Error('down'));
+
+      await expect(
+        service.restore('a'.repeat(32), {
+          ...baseInput(),
+          createdAtISO: new Date().toISOString(),
+        } as SchedulingSessionData),
+      ).resolves.toBeUndefined();
+    });
+  });
+
   describe('consume', () => {
     it('devuelve el payload y borra el token', async () => {
       const { token } = await service.create(baseInput());

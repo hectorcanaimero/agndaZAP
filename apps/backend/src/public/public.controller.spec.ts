@@ -192,6 +192,7 @@ describe('PublicController', () => {
       // Por defecto: sin token, cero interacciones. Tests que ejercitan el
       // flujo `?t=` sobrescriben esta implementación.
       consume: jest.fn().mockResolvedValue(null),
+      restore: jest.fn().mockResolvedValue(undefined),
       resolve: jest.fn().mockResolvedValue(null),
       create: jest.fn(),
       createManage: jest
@@ -596,6 +597,31 @@ describe('PublicController', () => {
         );
       });
 
+      it('si la cita no se crea (horario ocupado), el token vuelve a Redis (auditoría M2)', async () => {
+        withSession();
+        scheduling.createAppointment.mockRejectedValueOnce(new ConflictException());
+
+        await expect(
+          controller.createAppointment('clinica-a', { ...dto, token: validToken }),
+        ).rejects.toThrow();
+
+        expect(sessions.restore).toHaveBeenCalledWith(
+          validToken,
+          expect.objectContaining({ conversationId: 'conv-1', clinicSlug: 'clinica-a' }),
+        );
+      });
+
+      it('teléfono inválido: 400 sin quemar el token', async () => {
+        await expect(
+          controller.createAppointment('clinica-a', {
+            ...dto,
+            phone: 'no-es-un-telefono',
+            token: validToken,
+          }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(sessions.consume).not.toHaveBeenCalled();
+      });
+
       it('token de otra clínica → 400 (multi-tenant guard)', async () => {
         sessions.consume.mockResolvedValueOnce({
           conversationId: 'conv-1',
@@ -613,6 +639,8 @@ describe('PublicController', () => {
           }),
         ).rejects.toBeInstanceOf(BadRequestException);
         expect(scheduling.createAppointment).not.toHaveBeenCalled();
+        // Un token de otra clínica no se devuelve: no es un fallo del paciente.
+        expect(sessions.restore).not.toHaveBeenCalled();
       });
 
       it('sin token: mantiene source=PUBLIC y no toca sessions', async () => {

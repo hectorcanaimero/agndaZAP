@@ -171,6 +171,38 @@ export class SchedulingSessionService {
     }
   }
 
+  /**
+   * Devuelve a Redis un token consumido cuando la cita NO llegó a crearse
+   * (horario ocupado, datos inválidos). Sin esto el reintento del paciente
+   * sale como `PUBLIC`, sin conversación, y en un chat `@lid` se queda sin el
+   * aviso por WhatsApp que el bot le prometió (ADR 0023).
+   *
+   * Con el TTL que le quedaba, contado desde `createdAtISO`: restaurar no puede
+   * alargarle la vida. `NX` para no pisar nada si otra petición ya lo recreó.
+   * Nunca lanza: es un mejor esfuerzo sobre una petición que ya falló.
+   */
+  async restore(token: string, data: SchedulingSessionData): Promise<void> {
+    if (!isPlausibleToken(token)) return;
+    const elapsedSec = Math.floor(
+      (Date.now() - new Date(data.createdAtISO).getTime()) / 1000,
+    );
+    const remaining = DEFAULT_TTL_SECONDS - elapsedSec;
+    if (!Number.isFinite(remaining) || remaining <= 0) return;
+    try {
+      await this.redis.set(
+        SESSION_KEY_PREFIX + token,
+        JSON.stringify(data),
+        'EX',
+        remaining,
+        'NX',
+      );
+    } catch (e) {
+      this.logger.warn(
+        `session restore failed token=${token.slice(0, 6)}… err=${(e as Error).name}`,
+      );
+    }
+  }
+
   // ───────────────────────── Tokens de gestión (ADR 0020) ─────────────────────
 
   /**

@@ -5,6 +5,9 @@ import { PatientWhatsappNotifier } from './patient-whatsapp-notifier.service';
 describe('PatientWhatsappNotifier (ADR 0023)', () => {
   let prisma: any;
   let waha: { sendText: jest.Mock };
+  /** Redis en memoria: `SET NX` e `INCR` de verdad, para que dedupe y tope se prueben. */
+  let redisStore: Map<string, string>;
+  let redis: { set: jest.Mock; incr: jest.Mock; expire: jest.Mock };
   let notifier: PatientWhatsappNotifier;
 
   const appt = (overrides: Record<string, unknown> = {}) => ({
@@ -36,12 +39,31 @@ describe('PatientWhatsappNotifier (ADR 0023)', () => {
           .fn()
           .mockResolvedValue({ id: 'convo-1', chatId: '584141234567@c.us' }),
       },
-      message: { create: jest.fn().mockResolvedValue({}) },
+      message: {
+        create: jest.fn().mockResolvedValue({}),
+        // Mensaje entrante reciente: el paciente escribió hoy.
+        findFirst: jest.fn().mockResolvedValue({ id: 'msg-in' }),
+      },
     };
     waha = { sendText: jest.fn().mockResolvedValue(undefined) };
+    redisStore = new Map();
+    redis = {
+      set: jest.fn(async (key: string, value: string, ...args: unknown[]) => {
+        if (args.includes('NX') && redisStore.has(key)) return null;
+        redisStore.set(key, value);
+        return 'OK';
+      }),
+      incr: jest.fn(async (key: string) => {
+        const next = Number(redisStore.get(key) ?? 0) + 1;
+        redisStore.set(key, String(next));
+        return next;
+      }),
+      expire: jest.fn().mockResolvedValue(1),
+    };
     notifier = new PatientWhatsappNotifier(
       prisma as unknown as PrismaService,
       waha as unknown as WahaService,
+      redis as any,
     );
   });
 
@@ -138,6 +160,85 @@ describe('PatientWhatsappNotifier (ADR 0023)', () => {
     await notify('canceled');
 
     expect(waha.sendText.mock.calls[0][2]).toContain('Sua consulta foi cancelada');
+  });
+
+  describe('anti-spam (auditoría A1)', () => {
+    it('conversación hallada por teléfono y sin mensajes en 24 h: no avisa', async () => {
+      // El teléfono lo pudo escribir un tercero en el formulario público.
+      prisma.message.findFirst.mockResolvedValue(null);
+
+      expect(await notify('created', MANAGE)).toBe(false);
+      expect(waha.sendText).not.toHaveBeenCalled();
+      const where = prisma.message.findFirst.mock.calls[0][0].where;
+      expect(where.conversationId).toBe('convo-1');
+      expect(where.direction).toBe('IN');
+      const hours = (Date.now() - where.createdAt.gte.getTime()) / 3_600_000;
+      expect(hours).toBeCloseTo(24, 1);
+    });
+
+    it('conversación de la cita (token verificado): avisa sin exigir mensajes recientes', async () => {
+      prisma.appointment.findFirst.mockResolvedValue(appt({ conversationId: 'convo-1' }));
+      prisma.message.findFirst.mockResolvedValue(null);
+
+      expect(await notify('created', MANAGE)).toBe(true);
+      expect(prisma.message.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('el mismo aviso dos veces (cancelaciones simultáneas) sale una vez', async () => {
+      expect(await notify('canceled')).toBe(true);
+      expect(await notify('canceled')).toBe(false);
+      expect(waha.sendText).toHaveBeenCalledTimes(1);
+    });
+
+    it('dos cambios de horario legítimos avisan dos veces', async () => {
+      await notify('rescheduled', MANAGE);
+      prisma.appointment.findFirst.mockResolvedValue(
+        appt({ startAt: new Date('2030-06-04T14:00:00Z') }),
+      );
+      await notify('rescheduled', MANAGE);
+
+      expect(waha.sendText).toHaveBeenCalledTimes(2);
+    });
+
+    it(`como mucho ${PatientWhatsappNotifier.MAX_PER_CONVERSATION_PER_HOUR} avisos por hora a la misma conversación`, async () => {
+      jest.spyOn((notifier as any).logger, 'warn').mockImplementation(() => undefined);
+      const sent: boolean[] = [];
+      for (let i = 0; i < 6; i++) {
+        prisma.appointment.findFirst.mockResolvedValue(
+          appt({ startAt: new Date(Date.UTC(2030, 5, 3, 14 + i)) }),
+        );
+        sent.push(await notify('created', MANAGE));
+      }
+
+      expect(sent).toEqual([true, true, true, true, false, false]);
+      expect(redis.expire).toHaveBeenCalledWith('notice:conv:clinic-A:convo-1', 3600);
+    });
+
+    it('Redis caído: no avisa (fail-closed)', async () => {
+      redis.set.mockRejectedValue(new Error('redis down'));
+      jest.spyOn((notifier as any).logger, 'warn').mockImplementation(() => undefined);
+
+      expect(await notify('created', MANAGE)).toBe(false);
+      expect(waha.sendText).not.toHaveBeenCalled();
+    });
+  });
+
+  it('error de Prisma con el texto dentro: el log no lleva el mensaje (B1)', async () => {
+    const leaky = Object.assign(
+      new Error(`Invalid prisma.message.create() body: "cita ... ${MANAGE}" 584141234567`),
+      { name: 'PrismaClientValidationError' },
+    );
+    prisma.message.create.mockRejectedValue(leaky);
+    const warn = jest
+      .spyOn((notifier as any).logger, 'warn')
+      .mockImplementation(() => undefined);
+
+    await notify('created', MANAGE);
+
+    const logged = warn.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(logged).toContain('err=PrismaClientValidationError');
+    expect(logged).not.toContain('mtok');
+    expect(logged).not.toContain('584141234567');
   });
 
   it('WAHA caído: no lanza, no persiste un OUT que nunca salió y no filtra PII al log', async () => {
